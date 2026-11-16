@@ -1,0 +1,976 @@
+{
+  "name": "kaldrax_public_repository_engineering_v1",
+  "provenance": "public_repository_snapshot",
+  "source_repository": "https://github.com/KUNDURUHIMANEESHREDDY/kaldrax",
+  "source_revision": "1b50f309c7cd2f9a0dc7ec444f12fc57c25cc7d9",
+  "privacy_screening": {
+    "scope": "Public main-branch files only; no local SQLite databases, .kaldrax runtime reports, secrets, environment values, private conversation content, or private repositories were read.",
+    "status": "pending_operator_signoff",
+    "note": "This is a source-scope screen, not a human privacy approval. Review every source path and content before treating the corpus as approved."
+  },
+  "annotation_status": "assistant_proposed_pending_human_review",
+  "annotation_rubric": "Each query has an assistant-proposed relevant-memory set and rationale. A human reviewer must confirm, amend, or reject every set before reporting these scores as human-labeled results.",
+  "reviewer": null,
+  "memories": [
+    {
+      "id": "local-first-control-plane",
+      "category": "Architecture",
+      "content": "KALDRAX is a local-first Python engineering application: the local control plane owns orchestration, policy, persistent memory, and run reports, while model providers are adapters.",
+      "summary": "Local Python control plane owns orchestration and memory.",
+      "tags": [
+        "local-first",
+        "architecture",
+        "control-plane"
+      ],
+      "source": {
+        "path": "README.md",
+        "anchor": "Core capabilities and local-first boundary"
+      }
+    },
+    {
+      "id": "sqlite-memory-location",
+      "category": "Persistence",
+      "content": "Persistent project memory is stored in the local SQLite database at .kaldrax/memory.sqlite3 by default.",
+      "summary": "Default durable memory database is local SQLite.",
+      "tags": [
+        "sqlite",
+        "persistence",
+        "database"
+      ],
+      "source": {
+        "path": "README.md",
+        "anchor": "Quick start; Memory persistence and schema evolution"
+      }
+    },
+    {
+      "id": "memory-project-agent-scope",
+      "category": "Persistence",
+      "content": "Memory reads are scoped by project ID; an agent sees its own private records plus project-shared records, not another agent's private memories.",
+      "summary": "Project scope and agent-private visibility rules.",
+      "tags": [
+        "project-scope",
+        "agent-private",
+        "authorization"
+      ],
+      "source": {
+        "path": "docs/ARCHITECTURE.md",
+        "anchor": "Memory persistence and schema evolution"
+      }
+    },
+    {
+      "id": "evaluator-memory-isolation",
+      "category": "Trust",
+      "content": "The acceptance evaluator receives the original task contract and candidate artifact, but it does not receive retrieved memory context; memory cannot alter evaluator policy or acceptance criteria.",
+      "summary": "Evaluator is isolated from historical memory.",
+      "tags": [
+        "evaluator",
+        "trust-boundary",
+        "memory-isolation"
+      ],
+      "source": {
+        "path": "docs/ARCHITECTURE.md",
+        "anchor": "Execution with memory; Trust, privacy and local-first constraints"
+      }
+    },
+    {
+      "id": "ollama-loopback-only",
+      "category": "Privacy",
+      "content": "The Ollama embedding adapter accepts only localhost or loopback IP endpoints so project-memory text is not silently sent to a remote embedding service.",
+      "summary": "Embedding endpoint is restricted to loopback.",
+      "tags": [
+        "ollama",
+        "privacy",
+        "loopback"
+      ],
+      "source": {
+        "path": "src/kaldrax/embeddings.py",
+        "anchor": "OllamaEmbeddingProvider.__init__"
+      }
+    },
+    {
+      "id": "embedding-model-identity",
+      "category": "Retrieval",
+      "content": "KALDRAX compares a stored memory vector with a query vector only when their embedding model identifiers match; changing models requires explicit reindexing.",
+      "summary": "Vectors must use the same embedding model identity.",
+      "tags": [
+        "embeddings",
+        "model-version",
+        "reindex"
+      ],
+      "source": {
+        "path": "docs/ARCHITECTURE.md",
+        "anchor": "Hybrid retrieval"
+      }
+    },
+    {
+      "id": "hybrid-retrieval-ranking",
+      "category": "Retrieval",
+      "content": "Hybrid memory retrieval combines lexical token overlap and embedding cosine similarity, then adjusts relevance using memory confidence and age-based freshness.",
+      "summary": "Ranking mixes lexical, semantic, confidence, and freshness signals.",
+      "tags": [
+        "hybrid-search",
+        "ranking",
+        "freshness"
+      ],
+      "source": {
+        "path": "docs/ARCHITECTURE.md",
+        "anchor": "Hybrid retrieval"
+      }
+    },
+    {
+      "id": "pending-memory-approval",
+      "category": "Governance",
+      "content": "LLM-extracted semantic memories are stored as pending proposals and are excluded from normal retrieval until a human reviewer approves them.",
+      "summary": "Extracted knowledge requires human approval.",
+      "tags": [
+        "approval",
+        "pending",
+        "governance"
+      ],
+      "source": {
+        "path": "README.md",
+        "anchor": "Memory model and guarantees"
+      }
+    },
+    {
+      "id": "extraction-evidence-quotes",
+      "category": "Extraction",
+      "content": "Each LLM-extracted memory must include an exact substring from the candidate artifact, at least 12 characters long and containing at least three meaningful tokens.",
+      "summary": "Evidence quotes must be exact, substantive candidate substrings.",
+      "tags": [
+        "extraction",
+        "evidence",
+        "provenance"
+      ],
+      "source": {
+        "path": "docs/ARCHITECTURE.md",
+        "anchor": "Knowledge extraction"
+      }
+    },
+    {
+      "id": "extraction-confidence-semantics",
+      "category": "Extraction",
+      "content": "Extractor confidence is defined as the model's conservative estimated probability that the whole claim is accurate, candidate-supported, and durable; the model-reported value is retained for evaluation.",
+      "summary": "Confidence meaning is defined and original score preserved.",
+      "tags": [
+        "confidence",
+        "calibration",
+        "extraction"
+      ],
+      "source": {
+        "path": "docs/adr/0006-memory-quality-evaluation.md",
+        "anchor": "Extraction and confidence evaluation"
+      }
+    },
+    {
+      "id": "memory-retention-periods",
+      "category": "Operations",
+      "content": "Default retention is 365 days for episodic memories and 180 days for semantic memories.",
+      "summary": "Memory lifetimes vary by memory type.",
+      "tags": [
+        "retention",
+        "ttl",
+        "episodes",
+        "semantic"
+      ],
+      "source": {
+        "path": "README.md",
+        "anchor": "Memory model and guarantees"
+      }
+    },
+    {
+      "id": "expired-memory-exclusion",
+      "category": "Operations",
+      "content": "Search excludes records whose expiry deadline has passed even before the maintenance command marks their persisted status as expired.",
+      "summary": "Expiry deadline is enforced at retrieval time.",
+      "tags": [
+        "expiry",
+        "retention",
+        "search"
+      ],
+      "source": {
+        "path": "docs/ARCHITECTURE.md",
+        "anchor": "Confidence, freshness, and approval"
+      }
+    },
+    {
+      "id": "contradiction-opposition-dimensions",
+      "category": "Conflict Detection",
+      "content": "Contradiction candidates cover 13 opposition dimensions including allow/deny, public/private, local/cloud, online/offline, sync/async, mutable/immutable, retain/delete, include/exclude, required/optional, accept/reject, automatic/manual, encrypted/plaintext, and strict/fail-open.",
+      "summary": "Conflict detector covers 13 opposing policy dimensions.",
+      "tags": [
+        "contradictions",
+        "policy",
+        "opposition"
+      ],
+      "source": {
+        "path": "docs/adr/0006-memory-quality-evaluation.md",
+        "anchor": "Contradiction candidate detection"
+      }
+    },
+    {
+      "id": "contradiction-similarity-thresholds",
+      "category": "Conflict Detection",
+      "content": "A contradiction candidate requires an opposing cue plus subject Jaccard similarity of at least 0.42, or optional local-embedding cosine similarity of at least 0.84 for paraphrases.",
+      "summary": "Conflict detector uses explicit opposition and similarity thresholds.",
+      "tags": [
+        "contradictions",
+        "similarity",
+        "threshold"
+      ],
+      "source": {
+        "path": "docs/ARCHITECTURE.md",
+        "anchor": "Contradiction detection and resolution"
+      }
+    },
+    {
+      "id": "contradiction-environment-scope",
+      "category": "Conflict Detection",
+      "content": "Conflict analysis treats explicit environment scopes such as production and staging as boundaries and filters pairs that refer to different environments.",
+      "summary": "Different explicit deployment environments are not conflicting by default.",
+      "tags": [
+        "contradictions",
+        "environment",
+        "scope"
+      ],
+      "source": {
+        "path": "src/kaldrax/memory_contradictions.py",
+        "anchor": "Environment scope normalization and filtering"
+      }
+    },
+    {
+      "id": "contradiction-agent-isolation",
+      "category": "Conflict Detection",
+      "content": "The contradiction detector does not compare agent-private memories owned by different agents.",
+      "summary": "Private memories from different agents are isolated during conflict analysis.",
+      "tags": [
+        "contradictions",
+        "agent-private",
+        "isolation"
+      ],
+      "source": {
+        "path": "docs/adr/0006-memory-quality-evaluation.md",
+        "anchor": "Contradiction candidate detection"
+      }
+    },
+    {
+      "id": "human-conflict-resolution",
+      "category": "Governance",
+      "content": "Detected memory contradictions are review candidates only; KALDRAX never activates, supersedes, or resolves either side automatically, and a human must choose the outcome.",
+      "summary": "A person resolves every detected conflict.",
+      "tags": [
+        "contradictions",
+        "human-review",
+        "governance"
+      ],
+      "source": {
+        "path": "README.md",
+        "anchor": "Memory model and guarantees"
+      }
+    },
+    {
+      "id": "retrieval-benchmark-isolation",
+      "category": "Evaluation",
+      "content": "Retrieval benchmark execution creates a temporary SQLite database and does not seed, read, or mutate the operator's project memory database.",
+      "summary": "Benchmarks run against an isolated temporary store.",
+      "tags": [
+        "benchmark",
+        "sqlite",
+        "isolation"
+      ],
+      "source": {
+        "path": "src/kaldrax/memory_benchmarks.py",
+        "anchor": "run_retrieval_benchmark"
+      }
+    },
+    {
+      "id": "retrieval-benchmark-metrics",
+      "category": "Evaluation",
+      "content": "The retrieval report includes Recall@k, Precision@k, NDCG@k, mean reciprocal rank, top-1 accuracy, and per-category aggregates.",
+      "summary": "Retrieval quality is reported with ranking and category metrics.",
+      "tags": [
+        "benchmark",
+        "recall",
+        "ndcg",
+        "mrr"
+      ],
+      "source": {
+        "path": "README.md",
+        "anchor": "Run the bundled retrieval benchmark"
+      }
+    },
+    {
+      "id": "synthetic-retrieval-corpus-limits",
+      "category": "Evaluation",
+      "content": "The bundled engineering retrieval fixture contains 40 synthetic-curated memories and 42 queries across 15 categories; it is a regression fixture, not production workload evidence.",
+      "summary": "Current broad retrieval corpus is synthetic and limited.",
+      "tags": [
+        "benchmark",
+        "synthetic-data",
+        "limitations"
+      ],
+      "source": {
+        "path": "docs/adr/0006-memory-quality-evaluation.md",
+        "anchor": "Retrieval evaluation"
+      }
+    },
+    {
+      "id": "extraction-benchmark-scope",
+      "category": "Evaluation",
+      "content": "The bundled extraction evaluation corpus contains 10 annotated scenarios and 30 expected claims; the live benchmark makes one model extraction request per case.",
+      "summary": "Extraction benchmark size and request count.",
+      "tags": [
+        "extraction",
+        "benchmark",
+        "llm"
+      ],
+      "source": {
+        "path": "README.md",
+        "anchor": "Evaluate LLM memory extraction"
+      }
+    },
+    {
+      "id": "extraction-calibration-metrics",
+      "category": "Evaluation",
+      "content": "Extraction evaluation reports precision, recall, F1, exact-evidence quote validity, Brier score, and five-bin expected calibration error with reliability-bin accuracy.",
+      "summary": "Extractor quality and confidence calibration metrics.",
+      "tags": [
+        "brier",
+        "ece",
+        "calibration",
+        "precision"
+      ],
+      "source": {
+        "path": "docs/adr/0006-memory-quality-evaluation.md",
+        "anchor": "Extraction and confidence evaluation"
+      }
+    },
+    {
+      "id": "calibration-small-sample-warning",
+      "category": "Evaluation",
+      "content": "Brier score and expected calibration error over the 30-claim synthetic extraction dataset are descriptive sample diagnostics and do not establish production or population-wide calibration.",
+      "summary": "Calibration metrics are limited by the small synthetic sample.",
+      "tags": [
+        "calibration",
+        "sample-size",
+        "limitations"
+      ],
+      "source": {
+        "path": "docs/adr/0006-memory-quality-evaluation.md",
+        "anchor": "Consequences"
+      }
+    },
+    {
+      "id": "shared-provider-run-budget",
+      "category": "Reliability",
+      "content": "All provider roles in one KALDRAX task or team run share a single thread-safe RunBudget for provider calls, input tokens, output tokens, total tokens, and wall-clock duration.",
+      "summary": "One budget is shared across every model role in a run.",
+      "tags": [
+        "budget",
+        "provider",
+        "reliability"
+      ],
+      "source": {
+        "path": "README.md",
+        "anchor": "Shared run budgets"
+      }
+    },
+    {
+      "id": "default-run-budget-limits",
+      "category": "Reliability",
+      "content": "Default run limits are 20 provider calls, 60,000 estimated input tokens, 12,000 completion tokens, 72,000 total tokens, and 600 seconds of wall-clock time.",
+      "summary": "Default shared call, token, and duration ceilings.",
+      "tags": [
+        "budget",
+        "limits",
+        "tokens",
+        "timeout"
+      ],
+      "source": {
+        "path": "README.md",
+        "anchor": "Shared run budgets"
+      }
+    },
+    {
+      "id": "usage-byte-estimation",
+      "category": "Reliability",
+      "content": "When a provider omits token-usage metadata, KALDRAX estimates token usage from UTF-8 prompt and output byte counts; those values are explicitly estimates rather than exact tokenization.",
+      "summary": "Missing provider usage falls back to byte-based estimates.",
+      "tags": [
+        "tokens",
+        "usage",
+        "estimation"
+      ],
+      "source": {
+        "path": "docs/adr/0005-budgeted-sandbox-agent-runtime.md",
+        "anchor": "Decisions"
+      }
+    },
+    {
+      "id": "optional-run-cost-ceiling",
+      "category": "Cost Controls",
+      "content": "Estimated monetary ceilings are optional and require operator-supplied input and output token prices per million; the estimate is not an invoice or guarantee of provider billing.",
+      "summary": "Cost accounting uses operator-provided rates and is approximate.",
+      "tags": [
+        "cost",
+        "budget",
+        "pricing"
+      ],
+      "source": {
+        "path": "README.md",
+        "anchor": "Shared run budgets"
+      }
+    },
+    {
+      "id": "docker-sandbox-hardening",
+      "category": "Sandbox",
+      "content": "The Python sandbox uses a disposable workspace, disabled container networking, read-only root filesystem, dropped capabilities, no-new-privileges, an unprivileged UID, and CPU, memory, PID, time, and output limits.",
+      "summary": "Sandbox restricts networking, privileges, and resources.",
+      "tags": [
+        "docker",
+        "sandbox",
+        "isolation"
+      ],
+      "source": {
+        "path": "README.md",
+        "anchor": "Docker sandbox for Python candidates"
+      }
+    },
+    {
+      "id": "docker-image-pull-policy",
+      "category": "Sandbox",
+      "content": "The sandbox expects an operator-prepulled python:3.13-slim image and invokes Docker with pull disabled, so it does not fetch an image during execution.",
+      "summary": "Sandbox uses a pre-pulled fixed image and --pull=never.",
+      "tags": [
+        "docker",
+        "image",
+        "supply-chain"
+      ],
+      "source": {
+        "path": "README.md",
+        "anchor": "Docker sandbox for Python candidates"
+      }
+    },
+    {
+      "id": "team-workflow-sequence",
+      "category": "Multi-agent",
+      "content": "The bounded coordinator runs sequentially in planner, builder, reviewer, then independent evaluator order; it is not a distributed scheduler.",
+      "summary": "Team roles execute in a fixed sequential graph.",
+      "tags": [
+        "planner",
+        "builder",
+        "reviewer",
+        "evaluator"
+      ],
+      "source": {
+        "path": "README.md",
+        "anchor": "Bounded planner-builder-reviewer workflow"
+      }
+    },
+    {
+      "id": "team-role-model-separation",
+      "category": "Multi-agent",
+      "content": "Planner, builder, reviewer, and evaluator require four distinct configured model identifiers, and all role clients share the same run budget.",
+      "summary": "Four distinct model IDs are required for team orchestration.",
+      "tags": [
+        "multi-agent",
+        "models",
+        "budget"
+      ],
+      "source": {
+        "path": "src/kaldrax/cli.py",
+        "anchor": "_team"
+      }
+    },
+    {
+      "id": "team-evaluator-final-authority",
+      "category": "Multi-agent",
+      "content": "Reviewer approval is necessary but cannot override the independent evaluator, which judges the original task contract and immutable acceptance criteria.",
+      "summary": "Final acceptance authority remains with the independent evaluator.",
+      "tags": [
+        "reviewer",
+        "evaluator",
+        "acceptance"
+      ],
+      "source": {
+        "path": "docs/adr/0005-budgeted-sandbox-agent-runtime.md",
+        "anchor": "Decisions"
+      }
+    },
+    {
+      "id": "team-does-not-patch-repository",
+      "category": "Limitations",
+      "content": "The team coordinator currently creates candidate artifacts and role traces but does not apply patches to a repository or automatically invoke Docker sandbox execution.",
+      "summary": "Team workflow does not yet edit the repository or start the sandbox.",
+      "tags": [
+        "limitations",
+        "repository",
+        "sandbox"
+      ],
+      "source": {
+        "path": "README.md",
+        "anchor": "Bounded planner-builder-reviewer workflow"
+      }
+    },
+    {
+      "id": "openai-compatible-transport",
+      "category": "Provider",
+      "content": "KALDRAX uses an OpenAI-compatible chat-completions transport through the Python standard library and does not require a provider-specific SDK.",
+      "summary": "Provider transport is SDK-independent and OpenAI-compatible.",
+      "tags": [
+        "llm",
+        "transport",
+        "standard-library"
+      ],
+      "source": {
+        "path": "docs/DEVELOPMENT_LOG.md",
+        "anchor": "v0.2 LLM executor and evidence evaluator"
+      }
+    },
+    {
+      "id": "manual-live-provider-job",
+      "category": "CI",
+      "content": "The live provider smoke job is manually dispatched and secret-gated; ordinary push and pull-request test jobs do not require provider credentials.",
+      "summary": "Live provider checks are optional and manual.",
+      "tags": [
+        "ci",
+        "secrets",
+        "provider-smoke"
+      ],
+      "source": {
+        "path": ".github/workflows/ci.yml",
+        "anchor": "provider-smoke"
+      }
+    },
+    {
+      "id": "ci-python-matrix",
+      "category": "CI",
+      "content": "The regular GitHub Actions test matrix runs Python 3.11 and Python 3.13, runs the full pytest suite and regression benchmarks, and performs a real Docker smoke run on Python 3.13.",
+      "summary": "CI tests Python 3.11 and 3.13 and includes Docker smoke.",
+      "tags": [
+        "ci",
+        "python",
+        "docker",
+        "tests"
+      ],
+      "source": {
+        "path": ".github/workflows/ci.yml",
+        "anchor": "test job"
+      }
+    },
+    {
+      "id": "deterministic-evaluator-negation-limit",
+      "category": "Evaluation",
+      "content": "The deterministic phrase evaluator regression fixture contains known false positives for negated statements such as saying a test was not run; benchmark success does not establish semantic reliability.",
+      "summary": "Deterministic evaluator has known negation false positives.",
+      "tags": [
+        "evaluator",
+        "negation",
+        "limitations"
+      ],
+      "source": {
+        "path": "README.md",
+        "anchor": "Evaluator acceptance benchmark"
+      }
+    }
+  ],
+  "queries": [
+    {
+      "id": "q-local-architecture",
+      "category": "Architecture",
+      "query": "Which part of KALDRAX owns orchestration, policy and durable engineering memory?",
+      "relevant": [
+        "local-first-control-plane"
+      ],
+      "rationale": "Paraphrase of the documented local control-plane responsibility.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-sqlite-path",
+      "category": "Persistence",
+      "query": "Where does the default project knowledge database live on disk?",
+      "relevant": [
+        "sqlite-memory-location"
+      ],
+      "rationale": "Asks for the documented default SQLite path.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-agent-visibility",
+      "category": "Persistence",
+      "query": "Can one agent retrieve another agent's private run notes?",
+      "relevant": [
+        "memory-project-agent-scope"
+      ],
+      "rationale": "Targets the agent-private versus project-shared visibility contract.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-evaluator-context",
+      "category": "Trust",
+      "query": "Does the final acceptance judge get to read recalled memory lessons?",
+      "relevant": [
+        "evaluator-memory-isolation"
+      ],
+      "rationale": "Targets the evaluator's memory isolation boundary.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-embedding-privacy",
+      "category": "Privacy",
+      "query": "Can the vector adapter send repository memory to a remote embedding host?",
+      "relevant": [
+        "ollama-loopback-only"
+      ],
+      "rationale": "Targets the loopback endpoint restriction.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-model-switch",
+      "category": "Retrieval",
+      "query": "What must be done after changing the local vector model before searching old records?",
+      "relevant": [
+        "embedding-model-identity"
+      ],
+      "rationale": "Targets embedding model identity and explicit reindexing.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-ranking-signals",
+      "category": "Retrieval",
+      "query": "Which signals determine the final ordering of recalled project knowledge?",
+      "relevant": [
+        "hybrid-retrieval-ranking"
+      ],
+      "rationale": "Targets the combined lexical, vector, confidence and freshness scoring.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-pending-retrieval",
+      "category": "Governance",
+      "query": "Can automatically extracted lessons affect the next run before review?",
+      "relevant": [
+        "pending-memory-approval"
+      ],
+      "rationale": "Targets pending state and explicit approval gate.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-quote-validation",
+      "category": "Extraction",
+      "query": "What makes a proposed memory's supporting evidence acceptable?",
+      "relevant": [
+        "extraction-evidence-quotes"
+      ],
+      "rationale": "Targets exact source substring and meaningful quote constraints.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-confidence-definition",
+      "category": "Extraction",
+      "query": "What does an extractor's confidence number claim to estimate?",
+      "relevant": [
+        "extraction-confidence-semantics"
+      ],
+      "rationale": "Targets the defined semantics of the model-reported score.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-retention",
+      "category": "Operations",
+      "query": "How long are episodic and semantic memories retained by default?",
+      "relevant": [
+        "memory-retention-periods"
+      ],
+      "rationale": "Targets memory-type-specific TTL defaults.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-expiry-search",
+      "category": "Operations",
+      "query": "Can an overdue memory still appear in search until a cleanup command runs?",
+      "relevant": [
+        "expired-memory-exclusion"
+      ],
+      "rationale": "Targets expiry enforcement at search time.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-conflict-policy-types",
+      "category": "Conflict Detection",
+      "query": "Which opposing policy types can trigger a memory contradiction candidate?",
+      "relevant": [
+        "contradiction-opposition-dimensions"
+      ],
+      "rationale": "Targets the opposition dimension list.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-conflict-threshold",
+      "category": "Conflict Detection",
+      "query": "How similar do two statements need to be before opposing language is considered a conflict?",
+      "relevant": [
+        "contradiction-similarity-thresholds"
+      ],
+      "rationale": "Targets lexical and optional embedding thresholds.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-conflict-environments",
+      "category": "Conflict Detection",
+      "query": "Should a staging rule that differs from production automatically conflict with it?",
+      "relevant": [
+        "contradiction-environment-scope"
+      ],
+      "rationale": "Targets environment-boundary filtering.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-agent-conflict-scope",
+      "category": "Conflict Detection",
+      "query": "Are private notes owned by two different agents cross-compared for contradictions?",
+      "relevant": [
+        "contradiction-agent-isolation"
+      ],
+      "rationale": "Targets agent-private isolation during conflict analysis.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-human-conflict-review",
+      "category": "Governance",
+      "query": "Does KALDRAX automatically choose which contradictory memory should remain active?",
+      "relevant": [
+        "human-conflict-resolution"
+      ],
+      "rationale": "Targets the human-only conflict resolution safeguard.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-benchmark-isolation",
+      "category": "Evaluation",
+      "query": "Will running the retrieval test add fixtures to my actual project memory database?",
+      "relevant": [
+        "retrieval-benchmark-isolation"
+      ],
+      "rationale": "Targets the temporary benchmark database isolation.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-retrieval-metrics",
+      "category": "Evaluation",
+      "query": "Which ranking quality measures does the memory search benchmark output?",
+      "relevant": [
+        "retrieval-benchmark-metrics"
+      ],
+      "rationale": "Targets the full set of retrieval metrics.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-corpus-limitations",
+      "category": "Evaluation",
+      "query": "How much real-world evidence do the currently bundled engineering search queries provide?",
+      "relevant": [
+        "synthetic-retrieval-corpus-limits"
+      ],
+      "rationale": "Targets synthetic dataset size and its limitations.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-extraction-dataset",
+      "category": "Evaluation",
+      "query": "How many examples and expected facts are in the default knowledge extraction test?",
+      "relevant": [
+        "extraction-benchmark-scope"
+      ],
+      "rationale": "Targets the size and request count of the extraction benchmark.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-calibration-report",
+      "category": "Evaluation",
+      "query": "How does the extractor benchmark check whether confidence scores are calibrated?",
+      "relevant": [
+        "extraction-calibration-metrics",
+        "calibration-small-sample-warning"
+      ],
+      "rationale": "Metrics and sample-size qualification are both relevant.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-shared-run-budget",
+      "category": "Reliability",
+      "query": "Do planner, reviewer and evaluator each receive independent API spending limits?",
+      "relevant": [
+        "shared-provider-run-budget"
+      ],
+      "rationale": "Targets one shared budget across all roles.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-default-limits",
+      "category": "Reliability",
+      "query": "What are the out-of-the-box call, token and duration caps for a run?",
+      "relevant": [
+        "default-run-budget-limits"
+      ],
+      "rationale": "Targets the default RunBudget values.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-missing-token-usage",
+      "category": "Reliability",
+      "query": "What does KALDRAX do if the model API does not return token counts?",
+      "relevant": [
+        "usage-byte-estimation"
+      ],
+      "rationale": "Targets byte-based approximate accounting.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-cost-estimate",
+      "category": "Cost Controls",
+      "query": "Are estimated provider costs an exact invoice from the API company?",
+      "relevant": [
+        "optional-run-cost-ceiling"
+      ],
+      "rationale": "Targets optional cost ceiling and its limitations.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-sandbox-hardening",
+      "category": "Sandbox",
+      "query": "How is candidate Python execution isolated from the host and network?",
+      "relevant": [
+        "docker-sandbox-hardening"
+      ],
+      "rationale": "Targets the container isolation controls.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-sandbox-pull",
+      "category": "Sandbox",
+      "query": "Does running the sandbox automatically download its container image?",
+      "relevant": [
+        "docker-image-pull-policy"
+      ],
+      "rationale": "Targets pre-pull and --pull=never behavior.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-team-order",
+      "category": "Multi-agent",
+      "query": "In what order do the four roles collaborate on a bounded engineering task?",
+      "relevant": [
+        "team-workflow-sequence"
+      ],
+      "rationale": "Targets the sequential planner-builder-reviewer-evaluator graph.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-model-distinct",
+      "category": "Multi-agent",
+      "query": "Can the same model identifier be assigned to planner and reviewer?",
+      "relevant": [
+        "team-role-model-separation"
+      ],
+      "rationale": "Targets distinct role-model configuration.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-review-vs-evaluator",
+      "category": "Multi-agent",
+      "query": "Can a reviewer approve a result that the independent acceptance evaluator rejects?",
+      "relevant": [
+        "team-evaluator-final-authority"
+      ],
+      "rationale": "Targets final evaluator authority.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-team-repo-effects",
+      "category": "Limitations",
+      "query": "Does the multi-role coordinator commit source code changes directly to Git?",
+      "relevant": [
+        "team-does-not-patch-repository"
+      ],
+      "rationale": "Targets the documented deferred repository patch integration.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-provider-sdk",
+      "category": "Provider",
+      "query": "Does the core require the OpenAI Python client package to call chat models?",
+      "relevant": [
+        "openai-compatible-transport"
+      ],
+      "rationale": "Targets provider-neutral standard-library transport.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-live-ci",
+      "category": "CI",
+      "query": "Will every pull request call the configured paid LLM provider during CI?",
+      "relevant": [
+        "manual-live-provider-job"
+      ],
+      "rationale": "Targets secret-gated, manual provider checks.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-python-versions",
+      "category": "CI",
+      "query": "Which Python versions are exercised by the hosted test matrix?",
+      "relevant": [
+        "ci-python-matrix"
+      ],
+      "rationale": "Targets the CI matrix configuration.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    },
+    {
+      "id": "q-negation-false-accept",
+      "category": "Evaluation",
+      "query": "What known weakness remains in the deterministic acceptance checker when text says tests were not run?",
+      "relevant": [
+        "deterministic-evaluator-negation-limit"
+      ],
+      "rationale": "Targets the known negation false-positive limitation.",
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "reviewer": null
+    }
+  ]
+}
