@@ -1,8 +1,8 @@
 {
   "name": "kaldrax-memory-extraction-v1",
-  "version": 1,
+  "version": 2,
   "provenance": "synthetic_curated",
-  "description": "Annotated synthetic engineering candidates. Expected claims have manually authored match_terms used for deterministic one-to-one matching; confidence metrics are descriptive for this sample only.",
+  "description": "Synthetic engineering extraction candidates with proposed expected claims. All claims are assistant-proposed and require independent human review before evaluation or release use.",
   "cases": [
     {
       "id": "persistence-and-migration",
@@ -28,7 +28,10 @@
             "schema"
           ]
         }
-      ]
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "preexisting_synthetic_candidate"
     },
     {
       "id": "api-contracts",
@@ -54,7 +57,10 @@
             "cursors"
           ]
         }
-      ]
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "preexisting_synthetic_candidate"
     },
     {
       "id": "security-controls",
@@ -80,7 +86,10 @@
             "sql"
           ]
         }
-      ]
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "preexisting_synthetic_candidate"
     },
     {
       "id": "asynchronous-processing",
@@ -106,7 +115,10 @@
             "queue"
           ]
         }
-      ]
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "preexisting_synthetic_candidate"
     },
     {
       "id": "observability",
@@ -134,7 +146,10 @@
             "rate"
           ]
         }
-      ]
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "preexisting_synthetic_candidate"
     },
     {
       "id": "release-safety",
@@ -160,7 +175,10 @@
             "lock"
           ]
         }
-      ]
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "preexisting_synthetic_candidate"
     },
     {
       "id": "frontend-accessibility",
@@ -186,7 +204,10 @@
             "color"
           ]
         }
-      ]
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "preexisting_synthetic_candidate"
     },
     {
       "id": "testing-and-quality",
@@ -212,7 +233,10 @@
             "static"
           ]
         }
-      ]
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "preexisting_synthetic_candidate"
     },
     {
       "id": "operations",
@@ -238,7 +262,10 @@
             "non-root"
           ]
         }
-      ]
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "preexisting_synthetic_candidate"
     },
     {
       "id": "architecture-and-config",
@@ -264,7 +291,510 @@
             "startup"
           ]
         }
-      ]
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "preexisting_synthetic_candidate"
+    },
+    {
+      "id": "database-connection-pooling",
+      "category": "persistence",
+      "objective": "Capture database connection limits and checkout behavior",
+      "candidate": "Rule: PostgreSQL connections are pooled with a maximum size of 20. Rule: connection checkout timeout is capped at 2 seconds.",
+      "expected": [
+        {
+          "match_terms": [
+            "postgresql",
+            "pooled"
+          ]
+        },
+        {
+          "match_terms": [
+            "checkout",
+            "timeout"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "transaction-isolation",
+      "category": "persistence",
+      "objective": "Extract transaction isolation and retry policy",
+      "candidate": "Decision: ledger writes use SERIALIZABLE transaction isolation. Rule: serialization failures retry at most three times with randomized backoff.",
+      "expected": [
+        {
+          "match_terms": [
+            "serializable",
+            "isolation"
+          ]
+        },
+        {
+          "match_terms": [
+            "serialization",
+            "backoff"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "backup-integrity",
+      "category": "recovery",
+      "objective": "Record backup encryption and integrity verification",
+      "candidate": "Rule: database backup snapshots are encrypted with the platform key-management service. Rule: restore jobs verify the snapshot SHA-256 checksum before importing data.",
+      "expected": [
+        {
+          "match_terms": [
+            "backup",
+            "encrypted"
+          ]
+        },
+        {
+          "match_terms": [
+            "sha-256",
+            "checksum"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "queue-delivery-guarantees",
+      "category": "async",
+      "objective": "Capture message delivery and consumer idempotency guarantees",
+      "candidate": "Decision: the job queue provides at-least-once message delivery. Rule: every consumer handler uses an idempotency key to prevent duplicate side effects.",
+      "expected": [
+        {
+          "match_terms": [
+            "at-least-once",
+            "delivery"
+          ]
+        },
+        {
+          "match_terms": [
+            "consumer",
+            "idempotency"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "event-envelope-compatibility",
+      "category": "api",
+      "objective": "Extract event envelope versioning and forwarding behavior",
+      "candidate": "Rule: every event envelope contains a schema version and producer identifier. Rule: forwarders preserve unknown optional fields for compatibility with newer producers.",
+      "expected": [
+        {
+          "match_terms": [
+            "schema",
+            "version"
+          ]
+        },
+        {
+          "match_terms": [
+            "unknown",
+            "optional",
+            "fields"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "token-lifecycle",
+      "category": "security",
+      "objective": "Record access-token expiry and refresh-token rotation",
+      "candidate": "Rule: access tokens expire after 15 minutes. Rule: refresh tokens rotate after every successful use and the previous token is revoked.",
+      "expected": [
+        {
+          "match_terms": [
+            "access",
+            "tokens",
+            "15",
+            "minutes"
+          ]
+        },
+        {
+          "match_terms": [
+            "refresh",
+            "tokens",
+            "rotate"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "tenant-query-isolation",
+      "category": "security",
+      "objective": "Capture tenant identity and query scoping rules",
+      "candidate": "Rule: tenant identifiers are derived from the authenticated principal, never from an untrusted request parameter. Rule: every database query includes an explicit tenant-scoping predicate.",
+      "expected": [
+        {
+          "match_terms": [
+            "tenant",
+            "authenticated",
+            "principal"
+          ]
+        },
+        {
+          "match_terms": [
+            "database",
+            "tenant-scoping",
+            "predicate"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "secret-rotation-window",
+      "category": "security",
+      "objective": "Extract credential rotation cadence and overlap window",
+      "candidate": "Policy: API credentials rotate every 90 days. Rule: old and new credentials overlap for no more than 24 hours during planned rotation.",
+      "expected": [
+        {
+          "match_terms": [
+            "credentials",
+            "rotate",
+            "90",
+            "days"
+          ]
+        },
+        {
+          "match_terms": [
+            "overlap",
+            "24",
+            "hours"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "api-rate-limits",
+      "category": "api",
+      "objective": "Capture request throttling algorithm and response metadata",
+      "candidate": "Rule: API throttling uses a token bucket independently for each API key. Rule: rate-limited responses return HTTP 429 with a Retry-After header.",
+      "expected": [
+        {
+          "match_terms": [
+            "token",
+            "bucket",
+            "api",
+            "key"
+          ]
+        },
+        {
+          "match_terms": [
+            "429",
+            "retry-after"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "api-version-deprecation",
+      "category": "api",
+      "objective": "Record public API versioning and deprecation notice",
+      "candidate": "Decision: versioned endpoints use an explicit /v2 path prefix. Policy: deprecated API versions receive at least six months of customer notice.",
+      "expected": [
+        {
+          "match_terms": [
+            "v2",
+            "path",
+            "prefix"
+          ]
+        },
+        {
+          "match_terms": [
+            "six",
+            "months",
+            "notice"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "request-validation",
+      "category": "security",
+      "objective": "Extract request-schema and Unicode normalization rules",
+      "candidate": "Rule: JSON request validators reject unknown fields instead of silently ignoring them. Rule: input strings are normalized to Unicode NFC before validation.",
+      "expected": [
+        {
+          "match_terms": [
+            "reject",
+            "unknown",
+            "fields"
+          ]
+        },
+        {
+          "match_terms": [
+            "unicode",
+            "nfc",
+            "normalized"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "multipart-upload-integrity",
+      "category": "storage",
+      "objective": "Capture upload chunk limits and content integrity checks",
+      "candidate": "Rule: multipart uploads accept chunks no larger than 8 MiB. Rule: the server verifies the complete file SHA-256 digest before persisting the object.",
+      "expected": [
+        {
+          "match_terms": [
+            "multipart",
+            "8",
+            "mib"
+          ]
+        },
+        {
+          "match_terms": [
+            "sha-256",
+            "digest",
+            "persisting"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "stable-search-pagination",
+      "category": "api",
+      "objective": "Record cursor semantics and deterministic ordering",
+      "candidate": "Rule: search pagination uses opaque continuation cursors rather than client-generated offsets. Decision: result ordering includes the record identifier as a deterministic tie-breaker.",
+      "expected": [
+        {
+          "match_terms": [
+            "opaque",
+            "continuation",
+            "cursors"
+          ]
+        },
+        {
+          "match_terms": [
+            "identifier",
+            "tie-breaker"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "cache-control-invalidation",
+      "category": "performance",
+      "objective": "Capture response caching and mutation invalidation behavior",
+      "candidate": "Rule: public catalog responses use Cache-Control max-age=60 seconds. Rule: successful catalog mutations invalidate the affected tenant cache immediately.",
+      "expected": [
+        {
+          "match_terms": [
+            "cache-control",
+            "max-age",
+            "60"
+          ]
+        },
+        {
+          "match_terms": [
+            "mutations",
+            "invalidate",
+            "tenant",
+            "cache"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "telemetry-redaction",
+      "category": "observability",
+      "objective": "Extract sensitive-field redaction and trace propagation",
+      "candidate": "Rule: structured logs redact Authorization headers and session cookies. Rule: background workers propagate the W3C trace context from the initiating request.",
+      "expected": [
+        {
+          "match_terms": [
+            "logs",
+            "redact",
+            "authorization"
+          ]
+        },
+        {
+          "match_terms": [
+            "w3c",
+            "trace",
+            "context"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "error-budget-alerting",
+      "category": "observability",
+      "objective": "Record error-budget paging and lower-priority host alerts",
+      "candidate": "Rule: page the on-call engineer when the service error-budget burn rate crosses the critical threshold. Rule: sustained high CPU utilization creates a non-paging operational alert.",
+      "expected": [
+        {
+          "match_terms": [
+            "error-budget",
+            "burn",
+            "rate"
+          ]
+        },
+        {
+          "match_terms": [
+            "cpu",
+            "non-paging",
+            "alert"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "deployment-readiness-drain",
+      "category": "delivery",
+      "objective": "Capture readiness gating and graceful shutdown behavior",
+      "candidate": "Rule: a new service instance receives production traffic only after its readiness probe succeeds. Rule: shutdown drains active connections for 30 seconds before process exit.",
+      "expected": [
+        {
+          "match_terms": [
+            "readiness",
+            "probe",
+            "traffic"
+          ]
+        },
+        {
+          "match_terms": [
+            "drains",
+            "connections",
+            "30",
+            "seconds"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "startup-configuration-validation",
+      "category": "architecture",
+      "objective": "Extract startup configuration validation and failure behavior",
+      "candidate": "Rule: configuration values are parsed and type-checked during application startup. Rule: a missing required configuration key causes a fail-fast error without printing secret values.",
+      "expected": [
+        {
+          "match_terms": [
+            "type-checked",
+            "startup"
+          ]
+        },
+        {
+          "match_terms": [
+            "missing",
+            "required",
+            "fail-fast"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "frontend-form-accessibility",
+      "category": "frontend",
+      "objective": "Capture semantic form structure and accessible validation errors",
+      "candidate": "Rule: application forms use native semantic HTML controls with programmatic labels. Rule: inline validation messages are associated with inputs through aria-describedby.",
+      "expected": [
+        {
+          "match_terms": [
+            "semantic",
+            "html",
+            "controls"
+          ]
+        },
+        {
+          "match_terms": [
+            "validation",
+            "aria-describedby"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "deterministic-test-controls",
+      "category": "testing",
+      "objective": "Record property-based parser testing and deterministic time control",
+      "candidate": "Pattern: property-based tests generate malformed and valid parser inputs to exercise invariants. Rule: expiration tests inject a fake clock instead of reading wall-clock time.",
+      "expected": [
+        {
+          "match_terms": [
+            "property-based",
+            "parser",
+            "invariants"
+          ]
+        },
+        {
+          "match_terms": [
+            "fake",
+            "clock",
+            "wall-clock"
+          ]
+        }
+      ],
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
     }
-  ]
+  ],
+  "annotation_status": "assistant_proposed_pending_human_review",
+  "candidate_expansion": {
+    "revision": 2,
+    "added_cases": 20,
+    "generator": "assistant_generated_synthetic_candidates",
+    "annotation_status": "assistant_proposed_pending_human_review",
+    "note": "The corpus has 30 cases and 70 proposed expected claims. Case counts and claim coverage do not establish label correctness; review every case and claim before use."
+  }
 }

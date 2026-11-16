@@ -384,3 +384,26 @@ This file records implementation decisions, changes, commands, verification, and
 - Human review is still an operator action; no labels were reviewed or approved during implementation.
 - Reviewed exports are generated only when an operator runs the command and completes every case and dataset approval.
 - Hosted CI is the authoritative verification for this change.
+
+
+## 2026-11-16 — Contradiction and extraction candidate corpus expansion
+
+### Decisions
+- Meet the strict release sample-size floors with a balanced contradiction candidate corpus and a larger extraction candidate corpus.
+- Keep every existing and newly generated label explicitly pending human review. Corpus growth must not create or imply reviewer approval.
+- Treat the generated examples as synthetic candidate data, not production observations or independent evaluation evidence.
+- Increase only the explicitly invoked provider-smoke and strict release budgets to accommodate 30 extraction cases at the existing 1,024-token per-completion cap.
+
+### Changes
+- Expanded contradiction candidates from 8 to 50 pairs, balanced at 25 proposed conflicts and 25 proposed non-conflicts. Added 42 assistant-generated synthetic pairs with distinct case IDs and case-level pending-review metadata.
+- Expanded extraction candidates from 10 to 30 cases and from 30 to 70 proposed expected claims. Added 20 assistant-generated synthetic candidates, each with two source-grounded proposed claims.
+- Added dataset-level expansion provenance and explicit pending status to every case in both corpora. No reviewer identity, timestamp, dataset approval, or human-reviewed status was added.
+- Added corpus regression tests for sample counts, contradiction class balance, unique IDs, pending-review provenance, and extraction-label term grounding.
+- Raised the manually dispatched provider-smoke and tag-only release budgets to 40 provider calls, 36,000 completion tokens, and 100,000 total tokens so the 30-case extraction benchmark can run without silently exceeding its bounded budget.
+
+### Verification and limitations
+- GitHub Actions run [43869970403](https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/actions/runs/43869970403) passed for commit [e829858](https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/commit/e829858e6fe3e9a92af65925673671eb60f82d19).
+- Python 3.11 and 3.13 each completed the full suite with 180 passed and 1 skipped. The Python 3.13 job also passed the Docker sandbox smoke, repository patch integration, compilation, and CI-profile memory quality report.
+- Every sample-size check passed: 50 contradiction pairs (25 positive, 25 negative), 30 extraction cases, and 70 expected claims. The unreviewed contradiction benchmark reported 23 true positives, 0 false positives, and 2 false negatives (precision 1.0, recall 0.92, F1 0.9583); the two missed candidates are search-index-execution and customer-session-retention. This remains exploratory-only because labels are pending human review.
+- The overall CI-profile report passed, while release readiness remained false. Human retrieval/privacy approval, contradiction/extraction label review, hybrid retrieval evidence, live extraction, and 30 confidence observations remain outstanding.
+- The optional live-provider smoke and tag-only release gate were skipped; no live provider requests, Ollama measurements, extraction metrics, or confidence-calibration measurements were performed by this change.

@@ -1,65 +1,516 @@
 {
   "name": "kaldrax-contradiction-v1",
-  "version": 1,
+  "version": 2,
   "provenance": "synthetic_curated",
   "annotation_status": "assistant_proposed_pending_human_review",
-  "description": "Synthetic engineering policy pairs. Proposed labels require independent human review.",
+  "description": "Synthetic engineering policy pairs. The expanded candidate labels are assistant proposals and require independent human review before evaluation or release use.",
   "cases": [
     {
       "id": "availability-allow-deny",
       "category": "availability",
       "left": "Rule: allow worker agents to access shared project artifacts",
       "right": "Rule: deny worker agents access to shared project artifacts",
-      "expected_conflict": true
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "preexisting_synthetic_candidate"
     },
     {
       "id": "visibility-public-private",
       "category": "visibility",
       "left": "Rule: expose the tenant record endpoint to the public",
       "right": "Rule: keep the tenant record endpoint behind an internal route",
-      "expected_conflict": true
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "preexisting_synthetic_candidate"
     },
     {
       "id": "location-local-cloud",
       "category": "location",
       "left": "Decision: store project credentials in local encrypted memory",
       "right": "Decision: store project credentials in cloud encrypted memory",
-      "expected_conflict": true
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "preexisting_synthetic_candidate"
     },
     {
       "id": "execution-sync-async",
       "category": "execution",
       "left": "Rule: worker task processing must remain synchronous",
       "right": "Rule: worker task processing must remain asynchronous",
-      "expected_conflict": true
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "preexisting_synthetic_candidate"
     },
     {
       "id": "environment-prod-stage",
       "category": "environment-aware",
       "left": "Rule: expose the public admin endpoint in production",
       "right": "Rule: keep the private admin endpoint in staging",
-      "expected_conflict": false
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "preexisting_synthetic_candidate"
     },
     {
       "id": "unrelated-cache-email",
       "category": "unrelated",
       "left": "Rule: enable local cache invalidation for user profiles",
       "right": "Rule: disable remote email delivery for notifications",
-      "expected_conflict": false
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "preexisting_synthetic_candidate"
     },
     {
       "id": "unrelated-retention-security",
       "category": "unrelated",
       "left": "Rule: retain audit events for one year",
       "right": "Rule: encrypt API credentials at rest",
-      "expected_conflict": false
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "preexisting_synthetic_candidate"
     },
     {
       "id": "environment-alias",
       "category": "environment-aware",
       "left": "Rule: expose the public admin endpoint in production",
       "right": "Rule: keep the private admin endpoint in prod",
-      "expected_conflict": true
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "preexisting_synthetic_candidate"
+    },
+    {
+      "id": "feature-flag-checkout-availability",
+      "category": "availability",
+      "left": "Rule: enable the checkout maintenance banner for all customer sessions.",
+      "right": "Rule: disable the checkout maintenance banner for all customer sessions.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "audit-events-retention",
+      "category": "retention",
+      "left": "Rule: retain security audit events for every tenant for 365 days.",
+      "right": "Rule: delete security audit events for every tenant after 30 days.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "privileged-mfa-obligation",
+      "category": "obligation",
+      "left": "Policy: mandatory multi-factor authentication applies to every privileged account.",
+      "right": "Policy: optional multi-factor authentication applies to every privileged account.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "search-index-execution",
+      "category": "execution",
+      "left": "Rule: search index updates run synchronously after each catalog write.",
+      "right": "Rule: search index updates run asynchronously after each catalog write.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "service-health-visibility",
+      "category": "visibility",
+      "left": "Rule: expose the service health endpoint as a public route for operators.",
+      "right": "Rule: keep the service health endpoint as an internal route for operators.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "blob-storage-location",
+      "category": "location",
+      "left": "Decision: store customer upload blobs in local encrypted storage.",
+      "right": "Decision: store customer upload blobs in cloud encrypted storage.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "maintenance-mode-connectivity",
+      "category": "connectivity",
+      "left": "Rule: keep the maintenance status endpoint online during planned maintenance.",
+      "right": "Rule: keep the maintenance status endpoint offline during planned maintenance.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "tenant-config-mutability",
+      "category": "mutability",
+      "left": "Rule: tenant policy configuration remains writable after deployment.",
+      "right": "Rule: tenant policy configuration remains immutable after deployment.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "archive-export-membership",
+      "category": "membership",
+      "left": "Rule: include archived invoices in the monthly finance export.",
+      "right": "Rule: exclude archived invoices from the monthly finance export.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "scheduler-automation-mode",
+      "category": "automation",
+      "left": "Decision: run the nightly reconciliation scheduler automatically at midnight.",
+      "right": "Decision: run the nightly reconciliation scheduler manually at midnight.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "tenant-auth-strictness",
+      "category": "strictness",
+      "left": "Policy: use strict authorization checks for every tenant API request.",
+      "right": "Policy: use permissive authorization checks for every tenant API request.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "api-transport-security",
+      "category": "transport_security",
+      "left": "Rule: serve the customer billing API over HTTPS with encrypted transport.",
+      "right": "Rule: serve the customer billing API over HTTP with plaintext transport.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "upload-operation-result",
+      "category": "operation",
+      "left": "Rule: accept CSV uploads for the monthly ledger import endpoint.",
+      "right": "Rule: reject CSV uploads for the monthly ledger import endpoint.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "backup-retention-policy",
+      "category": "retention",
+      "left": "Rule: preserve database backup snapshots for 90 days after creation.",
+      "right": "Rule: delete database backup snapshots after 7 days from creation.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "session-cookie-availability",
+      "category": "availability",
+      "left": "Rule: permit session cookies for authenticated dashboard requests.",
+      "right": "Rule: forbid session cookies for authenticated dashboard requests.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "worker-automation-mode",
+      "category": "automation",
+      "left": "Rule: automatically compact completed job records after the retention window.",
+      "right": "Rule: manually compact completed job records after the retention window.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "queue-execution-mode",
+      "category": "execution",
+      "left": "Decision: process invoice settlement queue messages in blocking mode.",
+      "right": "Decision: process invoice settlement queue messages in nonblocking mode.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "deployment-check-operation",
+      "category": "operation",
+      "left": "Rule: pass the deployment readiness check only after every dependency responds.",
+      "right": "Rule: fail the deployment readiness check whenever any dependency responds.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "customer-session-retention",
+      "category": "retention",
+      "left": "Policy: keep customer authentication sessions until explicit logout.",
+      "right": "Policy: remove customer authentication sessions immediately after each request.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "tenant-feature-availability",
+      "category": "availability",
+      "left": "Rule: make the tenant data export feature available to workspace administrators.",
+      "right": "Rule: make the tenant data export feature unavailable to workspace administrators.",
+      "expected_conflict": true,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "thumbnail-vs-email-toggle",
+      "category": "unrelated",
+      "left": "Rule: enable thumbnail generation for product images.",
+      "right": "Rule: disable email digests for account notifications.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "audit-vs-temp-file-retention",
+      "category": "unrelated",
+      "left": "Rule: retain security audit events for compliance reviews.",
+      "right": "Rule: delete temporary export files after a download completes.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "image-upload-vs-newsletter-permission",
+      "category": "unrelated",
+      "left": "Rule: allow image uploads in the profile editor.",
+      "right": "Rule: deny newsletter subscriptions for unverified addresses.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "production-docs-vs-staging-admin",
+      "category": "environment-aware",
+      "left": "Rule: expose the public API documentation endpoint in production.",
+      "right": "Rule: keep the private billing administration endpoint in staging.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "profile-cache-vs-mail-archive-location",
+      "category": "unrelated",
+      "left": "Decision: keep the local profile cache near the application process.",
+      "right": "Decision: move the cloud email archive to managed object storage.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "payroll-vs-analytics-execution",
+      "category": "unrelated",
+      "left": "Rule: calculate payroll totals synchronously for each pay period.",
+      "right": "Rule: generate analytics exports asynchronously after each import.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "invoice-vs-account-membership",
+      "category": "unrelated",
+      "left": "Rule: include archived invoices in the monthly finance export.",
+      "right": "Rule: exclude suspended accounts from the customer directory.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "mfa-vs-theme-obligation",
+      "category": "unrelated",
+      "left": "Policy: require multi-factor authentication for privileged accounts.",
+      "right": "Policy: make dark mode optional in the user settings panel.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "api-retries-vs-vendor-approvals",
+      "category": "unrelated",
+      "left": "Rule: automatically retry transient API requests with bounded backoff.",
+      "right": "Rule: manually approve every new vendor payment instruction.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "release-notes-vs-audit-archive-mutability",
+      "category": "unrelated",
+      "left": "Rule: keep release note drafts writable during review.",
+      "right": "Rule: store the signed audit archive as immutable evidence.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "payment-vs-diagnostics-connectivity",
+      "category": "unrelated",
+      "left": "Rule: keep the payment gateway connected during business hours.",
+      "right": "Rule: leave the device diagnostics collector disconnected during maintenance.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "pdf-acceptance-vs-executable-rejection",
+      "category": "unrelated",
+      "left": "Rule: accept PDF attachments on support tickets.",
+      "right": "Rule: reject executable uploads from untrusted senders.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "api-tls-vs-test-fixture-plaintext",
+      "category": "unrelated",
+      "left": "Rule: require TLS for the public customer API.",
+      "right": "Rule: permit plaintext fixtures inside isolated local unit tests.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "prod-onboarding-vs-dev-sandbox-strictness",
+      "category": "environment-aware",
+      "left": "Policy: use strict identity verification for customer onboarding in production.",
+      "right": "Policy: use permissive authorization for mock users in development.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "image-success-vs-billing-failure",
+      "category": "unrelated",
+      "left": "Rule: pass image resizing jobs when the source dimensions are valid.",
+      "right": "Rule: fail billing reconciliation when the ledger totals do not match.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "audit-vs-build-artifact-retention",
+      "category": "unrelated",
+      "left": "Rule: retain application audit logs for incident investigation.",
+      "right": "Rule: delete temporary build artifacts after a successful release.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "prod-status-vs-staging-console-visibility",
+      "category": "environment-aware",
+      "left": "Rule: publish the public service status page in production.",
+      "right": "Rule: restrict the private operations console to staging.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "developer-cache-vs-cloud-archive-location",
+      "category": "unrelated",
+      "left": "Decision: use local cache files for developer previews.",
+      "right": "Decision: store cloud archive objects for customer exports.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "webhook-vs-password-reset-permission",
+      "category": "unrelated",
+      "left": "Rule: allow webhook delivery to registered partner endpoints.",
+      "right": "Rule: deny password reset emails when the account is suspended.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "audit-export-vs-search-reindex-execution",
+      "category": "unrelated",
+      "left": "Rule: create synchronous audit exports for compliance requests.",
+      "right": "Rule: run asynchronous search reindexing after catalog updates.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "database-backup-vs-release-approval-automation",
+      "category": "unrelated",
+      "left": "Rule: create database backups automatically before schema migrations.",
+      "right": "Rule: review release approvals manually before production deployment.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
+    },
+    {
+      "id": "health-events-vs-user-profile-membership",
+      "category": "unrelated",
+      "left": "Rule: include system health events in the operations dashboard.",
+      "right": "Rule: exclude deleted user profiles from the customer directory.",
+      "expected_conflict": false,
+      "annotation_status": "assistant_proposed_pending_human_review",
+      "review_status": "pending",
+      "candidate_origin": "assistant_generated_candidate"
     }
-  ]
+  ],
+  "candidate_expansion": {
+    "revision": 2,
+    "added_cases": 42,
+    "generator": "assistant_generated_synthetic_candidates",
+    "annotation_status": "assistant_proposed_pending_human_review",
+    "note": "The 50-case class balance is a sampling target, not evidence that labels are correct. Review every pair and label before use."
+  }
 }
