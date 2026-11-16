@@ -160,3 +160,13 @@ This file records implementation decisions, changes, commands, verification, and
 - Failed/uncertain provider calls now consume the full reserved completion allowance as well as the reserved input estimate, avoiding free retries after a timeout that may follow provider-side generation.
 - Added regression tests for wall-clock enforcement, conservative failed-call accounting, and request-timeout capping.
 - Hosted CI after these fixes is pending; v0.5 must not be marked verified until both Python matrix jobs pass.
+
+
+### v0.5 hosted verification result — 2026-11-16
+
+- Verified engineering-runtime checkpoint: [891f84c9](https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/commit/891f84c9a021d1c2b0cd3b6077fbb5e9fecb6f83).
+- GitHub Actions run [43828149727](https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/actions/runs/43828149727) passed: Python 3.11 and 3.13 each ran 104 passing tests, the memory retrieval benchmark, evaluator acceptance benchmark, and compilation. The Python 3.13 job also ran a real Docker sandbox smoke and printed `KALDRAX_SANDBOX_SMOKE_OK`.
+- Later main-branch memory quality follow-ups passed both Python matrix jobs and the Docker smoke in run [43828388469](https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/actions/runs/43828388469).
+- The optional live-provider job was skipped because repository credentials/model variables were not configured; live provider behavior remains unverified.
+- The deterministic evaluator regression fixture reported 0.80 accuracy, 0.714 precision, and 1.0 recall. Known false accepts remain; this is a small regression fixture, not proof of semantic reliability.
+- Cost guardrails use operator-supplied estimates. Docker trusts the host daemon/kernel. Multi-agent orchestration is sequential and does not yet apply repository patches or invoke sandbox execution automatically.
