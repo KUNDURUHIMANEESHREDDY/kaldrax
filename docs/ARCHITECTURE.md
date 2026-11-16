@@ -84,3 +84,26 @@ Memory content and retrieved prompts are untrusted historical data. The executor
 - Automatic extraction can still propose inaccurate claims; evidence quotes improve traceability but do not prove meaning.
 - The bundled benchmark is a regression fixture, not a representative measure of all engineering-memory workloads.
 - Generated code is not executed; sandboxing and command policy are separate work.
+
+
+## v0.5 execution runtime and coordination
+
+### Shared budgets and provider transport
+
+A thread-safe `RunBudget` is shared by every LLM client belonging to one task/team operation. Before a request is sent, the client reserves the provider-call count, UTF-8 prompt-byte estimate, and requested completion ceiling. When the response includes usage metadata, those actual counts settle the reservation; otherwise UTF-8 byte estimates are retained. The optional cost ceiling uses operator-provided per-million rates. This estimate is applied to every role model, so configure rates conservatively for the highest-cost role. Budget checks stop future calls; they cannot prevent charges for provider usage reported only after a request.
+
+### Evaluator benchmark
+
+The candidate-evaluator benchmark fixture is separate from the existing memory-retrieval benchmark. It measures binary acceptance decisions using accuracy, precision, recall, F1, true/false positives/negatives, and error counts. The fixture includes negation traps to expose the deterministic phrase evaluator's known limitation. LLM mode uses the configured evaluator model and the same shared budget. A small fixture score is a regression indicator, not a guarantee of semantic correctness.
+
+### Docker execution boundary
+
+The Python sandbox runs one source file in a disposable Docker container. It disables container networking, mounts only a temporary workspace, uses a read-only root filesystem, drops capabilities, sets no-new-privileges, runs as an unprivileged UID, and limits tmpfs, memory, CPU, PIDs, wall time, and captured output. The image must be pre-pulled by the operator; runtime uses `--pull=never`. Docker daemon/kernel/image provenance remain in the trusted computing base. No host repository checkout, arbitrary shell, privileged container, or package installation is exposed by this command.
+
+### Multi-role orchestration
+
+The team coordinator runs a bounded sequential graph: planner → builder → reviewer → independent evaluator. All role clients share one budget. Planner, builder, and reviewer traces are stored as agent-private episodic records under the selected project namespace. Reviewer JSON is schema- and size-validated. A reviewer approval cannot bypass the independent evaluator, which assesses the original task and acceptance criteria. Failed findings/missing criteria are fed into the next builder cycle. The current coordinator does not yet apply changes to a local Git repository or automatically invoke the sandbox.
+
+### Live-provider verification
+
+The provider smoke command executes a simple completion against the executor model and an evidence-backed evaluation against a distinct evaluator model. Regular CI is credential-free. A separate manual workflow dispatch can invoke live smoke only when the API key secret and model repository variables are configured.

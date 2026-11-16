@@ -138,6 +138,87 @@ python -m pytest -q
 python -m compileall -q src tests
 \`\`\`
 
+
+
+## v0.5 engineering runtime
+
+### Shared run budgets
+
+All provider calls in one run share a single thread-safe budget, including the executor, evaluator, optional memory extractor, planner, builder, and reviewer.
+
+Default limits are 20 calls, 60,000 estimated input tokens, 12,000 completion tokens, and 72,000 total tokens. Override them using:
+
+- `KALDRAX_MAX_PROVIDER_CALLS`
+- `KALDRAX_MAX_RUN_INPUT_TOKENS`
+- `KALDRAX_MAX_RUN_OUTPUT_TOKENS`
+- `KALDRAX_MAX_RUN_TOTAL_TOKENS`
+
+An optional estimated spending ceiling requires all three variables:
+
+- `KALDRAX_MAX_RUN_COST_USD`
+- `KALDRAX_INPUT_COST_PER_MILLION_USD`
+- `KALDRAX_OUTPUT_COST_PER_MILLION_USD`
+
+Use conservative rates that cover the most expensive model in the run. When the provider returns usage metadata, KALDRAX records those token counts. Otherwise it uses UTF-8 prompt/output byte counts as a conservative approximation. Cost is an estimate, not an invoice or a guarantee of provider billing. A provider can report usage above a reservation after its request has already been billed; KALDRAX stops subsequent calls and reports the breach.
+
+### Evaluator acceptance benchmark
+
+Run the deterministic phrase evaluator against a small, versioned fixture containing exact matches, missing requirements, token-boundary examples, and negation cases:
+
+```powershell
+kaldrax benchmark-evaluator --mode deterministic --min-accuracy 0.80
+```
+
+Run the same fixture against the configured LLM evaluator:
+
+```powershell
+kaldrax benchmark-evaluator --mode llm --min-accuracy 0.80
+```
+
+The report includes accuracy, precision, recall, F1, confusion counts, and evaluator errors. The bundled set intentionally exposes false positives for statements such as "we did not run unit tests". Passing this small fixture is a regression check, not proof of semantic reliability. Add project-specific adversarial cases before depending on the evaluator for high-impact work.
+
+### Live provider validation
+
+Configure `KALDRAX_API_KEY`, `KALDRAX_MODEL`, and a distinct `KALDRAX_EVALUATOR_MODEL`, then run:
+
+```powershell
+kaldrax provider-check
+```
+
+This performs one completion against the executor endpoint and one evidence-backed evaluation against the evaluator endpoint. It consumes the configured shared budget. GitHub Actions exposes a separate manual provider-smoke job, enabled only when `KALDRAX_API_KEY` and the model repository variables are configured. Ordinary pushes and pull requests never require provider credentials.
+
+### Docker sandbox for Python candidates
+
+Install and start Docker Engine, then pre-pull the fixed image:
+
+```powershell
+docker pull python:3.13-slim
+kaldrax sandbox run-python .\candidate.py --timeout 15 --memory-mb 256 --cpu-count 1
+```
+
+The runner uses a disposable temporary workspace, no container network, read-only root filesystem, dropped Linux capabilities, no-new-privileges, an unprivileged UID, bounded CPU/memory/PIDs, wall-clock timeout, and capped output. It uses `--pull=never`; image download is an explicit operator action. The tag is not a digest pin, so operators should verify image provenance and pin a digest for stricter supply-chain controls. The Docker daemon and host kernel remain trusted parts of the isolation boundary. This adapter runs a single Python file; it does not yet provision a repository checkout, install arbitrary dependencies, or automatically run a full project test suite.
+
+### Bounded planner-builder-reviewer workflow
+
+Configure four distinct model IDs:
+
+```powershell
+$env:KALDRAX_PLANNER_MODEL = "planner-model"
+$env:KALDRAX_MODEL = "builder-model"
+$env:KALDRAX_REVIEWER_MODEL = "reviewer-model"
+$env:KALDRAX_EVALUATOR_MODEL = "independent-evaluator-model"
+
+kaldrax team --project kaldrax-core --objective "Design a CSV import utility" --criterion "streaming rows are supported" --criterion "invalid input is rejected" --max-cycles 2
+```
+
+The coordinator runs sequentially: planner → builder → reviewer → independent evaluator. Failed reviewer findings and unmet acceptance criteria feed the next builder cycle. A run passes only when the reviewer approves and the separate evaluator passes the original immutable criteria. Role traces are stored in project-scoped, agent-specific memory, and every role shares the same run budget.
+
+This is a bounded local workflow, not a distributed scheduler. The team coordinator currently produces candidate artifacts; it does not apply patches to a repository or automatically invoke the Docker sandbox. Those should be connected through an explicit, permissioned tool contract in the next iteration.
+
+### CI coverage
+
+The GitHub Actions matrix runs on Python 3.11 and 3.13, executes the full test suite, runs both memory-retrieval and evaluator regression benchmarks, compiles source/tests, and performs an actual Docker sandbox smoke run on the Python 3.13 job. A manual, secret-gated job is available for live provider validation.
+
 ## Documentation
 
 - [Product Requirements](docs/PRD.md)
@@ -147,4 +228,5 @@ python -m compileall -q src tests
 - [ADR 0002: LLM execution and evidence evaluator](docs/adr/0002-llm-executor-and-evidence-evaluator.md)
 - [ADR 0003: Persistent project memory](docs/adr/0003-persistent-project-memory.md)
 - [ADR 0004: Memory intelligence](docs/adr/0004-memory-intelligence.md)
+- [ADR 0005: Budgeted sandbox and agent runtime](docs/adr/0005-budgeted-sandbox-agent-runtime.md)
 - [Repository structure](docs/REPOSITORY_STRUCTURE.md)

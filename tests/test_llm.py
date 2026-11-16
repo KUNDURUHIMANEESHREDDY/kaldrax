@@ -131,3 +131,51 @@ def test_client_supports_legacy_token_parameter_for_compatible_endpoints():
     assert client.complete(system_prompt="s", user_prompt="u") == "ok"
     assert seen["max_tokens"] == 2048
     assert "max_completion_tokens" not in seen
+
+
+def test_client_shares_a_run_budget_and_uses_remaining_completion_ceiling():
+    from kaldrax.budgets import BudgetExceeded, RunBudget
+
+    calls = []
+    def opener(request, timeout):
+        payload = json.loads(request.data)
+        calls.append(payload)
+        response = {
+            "choices": [{"message": {"content": "ok"}}],
+            "usage": {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5},
+        }
+        return FakeResponse(json.dumps(response).encode())
+
+    budget = RunBudget(
+        max_calls=1, max_input_tokens=1000, max_output_tokens=5, max_total_tokens=1005,
+    )
+    client = OpenAICompatibleClient(
+        api_key="secret", model="model", max_tokens=20, opener=opener, budget=budget,
+    )
+    result = client.complete_with_usage(system_prompt="s", user_prompt="u")
+    assert result.content == "ok"
+    assert result.usage.prompt_tokens == 3
+    assert result.usage.completion_tokens == 2
+    assert calls[0]["max_completion_tokens"] == 5
+    assert budget.snapshot().total_tokens == 5
+    with pytest.raises(BudgetExceeded):
+        client.complete(system_prompt="s", user_prompt="u")
+    assert len(calls) == 1
+
+
+def test_client_reports_estimated_usage_when_provider_omits_usage():
+    from kaldrax.budgets import RunBudget
+
+    body = json.dumps({"choices": [{"message": {"content": "answer"}}]}).encode()
+    budget = RunBudget(
+        max_calls=2, max_input_tokens=1000, max_output_tokens=100, max_total_tokens=1100,
+    )
+    client = OpenAICompatibleClient(
+        api_key="key", model="model",
+        opener=lambda *_args, **_kwargs: FakeResponse(body),
+        budget=budget,
+    )
+    result = client.complete_with_usage(system_prompt="system", user_prompt="user")
+    assert result.usage.estimated
+    assert budget.snapshot().calls == 1
+    assert budget.snapshot().total_tokens >= len("systemuser")

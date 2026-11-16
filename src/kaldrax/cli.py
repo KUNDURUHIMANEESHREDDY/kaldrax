@@ -4,9 +4,14 @@ import json
 import os
 from pathlib import Path
 
+from .agents import MultiAgentCoordinator
+from .benchmark import load_cases, run_benchmark
+from .budgets import RunBudget
+from .sandbox import SandboxRunner
+
 from .embeddings import OllamaEmbeddingProvider
 from .engine import RecursiveEngine
-from .evaluation import LLMEvaluator
+from .evaluation import CriteriaEvaluator, LLMEvaluator
 from .execution import ExampleExecutor, LLMExecutor
 from .llm import OpenAICompatibleClient
 from .memory import MemoryReviewConflict, SQLiteMemoryStore
@@ -34,6 +39,139 @@ def _memory_store(path: Path) -> SQLiteMemoryStore:
     return SQLiteMemoryStore(path, embedder=_embedding_provider())
 
 
+
+
+def _budget_from_env() -> RunBudget:
+    max_cost = os.getenv("KALDRAX_MAX_RUN_COST_USD")
+    input_rate = os.getenv("KALDRAX_INPUT_COST_PER_MILLION_USD")
+    output_rate = os.getenv("KALDRAX_OUTPUT_COST_PER_MILLION_USD")
+    return RunBudget(
+        max_calls=int(os.getenv("KALDRAX_MAX_PROVIDER_CALLS", "20")),
+        max_input_tokens=int(os.getenv("KALDRAX_MAX_RUN_INPUT_TOKENS", "60000")),
+        max_output_tokens=int(os.getenv("KALDRAX_MAX_RUN_OUTPUT_TOKENS", "12000")),
+        max_total_tokens=int(os.getenv("KALDRAX_MAX_RUN_TOTAL_TOKENS", "72000")),
+        max_cost_usd=float(max_cost) if max_cost else None,
+        input_cost_per_million_usd=float(input_rate) if input_rate else None,
+        output_cost_per_million_usd=float(output_rate) if output_rate else None,
+    )
+
+
+def _client(model: str, budget: RunBudget) -> OpenAICompatibleClient:
+    return OpenAICompatibleClient(
+        api_key=os.getenv("KALDRAX_API_KEY", ""),
+        model=model,
+        base_url=os.getenv("KALDRAX_BASE_URL") or "https://api.openai.com/v1",
+        timeout=float(os.getenv("KALDRAX_TIMEOUT_SECONDS", "60")),
+        max_tokens=int(os.getenv("KALDRAX_MAX_TOKENS", "2048")),
+        token_parameter=os.getenv("KALDRAX_TOKEN_PARAMETER", "max_completion_tokens"),
+        budget=budget,
+    )
+
+
+def _require_provider() -> tuple[str, str, str]:
+    api_key = os.getenv("KALDRAX_API_KEY", "")
+    executor_model = os.getenv("KALDRAX_MODEL", "")
+    evaluator_model = os.getenv("KALDRAX_EVALUATOR_MODEL", "")
+    if not api_key:
+        raise ValueError("KALDRAX_API_KEY is required")
+    if not executor_model:
+        raise ValueError("KALDRAX_MODEL is required")
+    if not evaluator_model:
+        raise ValueError("KALDRAX_EVALUATOR_MODEL is required")
+    if executor_model.casefold() == evaluator_model.casefold():
+        raise ValueError("KALDRAX_EVALUATOR_MODEL must differ from KALDRAX_MODEL")
+    return api_key, executor_model, evaluator_model
+
+
+def _provider_check() -> int:
+    _, executor_model, evaluator_model = _require_provider()
+    budget = _budget_from_env()
+    executor = _client(executor_model, budget)
+    evaluator_client = _client(evaluator_model, budget)
+    completion = executor.complete_with_usage(
+        system_prompt="You are performing a provider connectivity smoke test.",
+        user_prompt="Reply with exactly this token and no punctuation: KALDRAX_PROVIDER_OK",
+    )
+    executor_ok = completion.content.strip() == "KALDRAX_PROVIDER_OK"
+    criterion = "The KALDRAX provider health check completed."
+    evaluation = LLMEvaluator(evaluator_client).evaluate(
+        Task("Validate provider evaluator response", (criterion,)),
+        criterion,
+    )
+    payload = {
+        "executor_model": executor_model,
+        "evaluator_model": evaluator_model,
+        "executor_smoke_passed": executor_ok,
+        "evaluator_schema_and_evidence_passed": evaluation.passed,
+        "evaluator_missing": list(evaluation.missing),
+        "executor_usage": {
+            "prompt_tokens": completion.usage.prompt_tokens,
+            "completion_tokens": completion.usage.completion_tokens,
+            "estimated": completion.usage.estimated,
+        },
+        "budget": budget.snapshot().to_dict(),
+    }
+    print(json.dumps(payload, indent=2))
+    return 0 if executor_ok and evaluation.passed else 1
+
+
+def _benchmark_evaluator(args: argparse.Namespace) -> int:
+    cases = load_cases(args.fixture)
+    budget = None
+    if args.mode == "llm":
+        if not os.getenv("KALDRAX_API_KEY", "").strip():
+            raise ValueError("KALDRAX_API_KEY is required for an LLM evaluator benchmark")
+        evaluator_model = os.getenv("KALDRAX_EVALUATOR_MODEL", "").strip()
+        if not evaluator_model:
+            raise ValueError("KALDRAX_EVALUATOR_MODEL is required for an LLM evaluator benchmark")
+        budget = _budget_from_env()
+        evaluator = LLMEvaluator(_client(evaluator_model, budget))
+    else:
+        evaluator = CriteriaEvaluator()
+    report = run_benchmark(evaluator, cases)
+    payload = report.to_dict()
+    payload["evaluator_mode"] = args.mode
+    if budget is not None:
+        payload["budget"] = budget.snapshot().to_dict()
+    print(json.dumps(payload, indent=2))
+    return 0 if report.accuracy >= args.min_accuracy and report.errors == 0 else 1
+
+
+def _team(args: argparse.Namespace) -> int:
+    _, builder_model, evaluator_model = _require_provider()
+    planner_model = os.getenv("KALDRAX_PLANNER_MODEL", "")
+    reviewer_model = os.getenv("KALDRAX_REVIEWER_MODEL", "")
+    models = [planner_model, builder_model, reviewer_model, evaluator_model]
+    if any(not model.strip() for model in models):
+        raise ValueError(
+            "team requires KALDRAX_PLANNER_MODEL, KALDRAX_MODEL, "
+            "KALDRAX_REVIEWER_MODEL, and KALDRAX_EVALUATOR_MODEL"
+        )
+    if len({model.casefold() for model in models}) != 4:
+        raise ValueError("planner, builder, reviewer, and evaluator model identifiers must all differ")
+
+    budget = _budget_from_env()
+    memory = _memory_store(_memory_path(args))
+    try:
+        report = MultiAgentCoordinator(
+            planner=_client(planner_model, budget),
+            builder=_client(builder_model, budget),
+            reviewer=_client(reviewer_model, budget),
+            evaluator=LLMEvaluator(_client(evaluator_model, budget)),
+            max_cycles=args.max_cycles,
+            memory_store=memory,
+            agent_namespace=args.agent_namespace,
+            budget=budget,
+            artifact_dir=args.artifacts,
+        ).run(Task(args.objective, tuple(args.criterion), project_id=args.project))
+    finally:
+        memory.close()
+    payload = report.to_dict()
+    print(json.dumps(payload, indent=2))
+    return 0 if report.status.value == "passed" else 1
+
+
+
 def _run_llm(args: argparse.Namespace) -> int:
     api_key = os.getenv("KALDRAX_API_KEY", "")
     executor_model = os.getenv("KALDRAX_MODEL", "")
@@ -47,18 +185,9 @@ def _run_llm(args: argparse.Namespace) -> int:
     if executor_model.casefold() == evaluator_model.casefold():
         raise ValueError("KALDRAX_EVALUATOR_MODEL must differ from KALDRAX_MODEL")
 
-    base_url = os.getenv("KALDRAX_BASE_URL", "https://api.openai.com/v1")
-    timeout = float(os.getenv("KALDRAX_TIMEOUT_SECONDS", "60"))
-    max_tokens = int(os.getenv("KALDRAX_MAX_TOKENS", "2048"))
-    token_parameter = os.getenv("KALDRAX_TOKEN_PARAMETER", "max_completion_tokens")
-    executor_client = OpenAICompatibleClient(
-        api_key=api_key, model=executor_model, base_url=base_url,
-        timeout=timeout, max_tokens=max_tokens, token_parameter=token_parameter,
-    )
-    evaluator_client = OpenAICompatibleClient(
-        api_key=api_key, model=evaluator_model, base_url=base_url,
-        timeout=timeout, max_tokens=max_tokens, token_parameter=token_parameter,
-    )
+    budget = _budget_from_env()
+    executor_client = _client(executor_model, budget)
+    evaluator_client = _client(evaluator_model, budget)
     task = Task(
         args.objective, tuple(args.criterion), args.max_iterations, project_id=args.project,
     )
@@ -75,7 +204,11 @@ def _run_llm(args: argparse.Namespace) -> int:
         ).run(task)
     finally:
         memory.close()
-    print(json.dumps(report.to_dict(), indent=2))
+    payload = report.to_dict()
+    payload["budget"] = budget.snapshot().to_dict()
+    if args.artifacts is not None:
+        (args.artifacts / f"{report.run_id}.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    print(json.dumps(payload, indent=2))
     return 0 if report.status.value == "passed" else 1
 
 
@@ -141,6 +274,32 @@ def main() -> int:
     benchmark.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_retrieval.json"))
     benchmark.add_argument("--k", type=int, default=3)
 
+
+    provider = commands.add_parser("provider-check", help="smoke-test configured executor and evaluator models")
+    benchmark_eval = commands.add_parser("benchmark-evaluator", help="measure evaluator behavior against a regression fixture")
+    benchmark_eval.add_argument("--mode", choices=("deterministic", "llm"), default="deterministic")
+    benchmark_eval.add_argument("--fixture", type=Path, default=Path(__file__).parent / "data" / "evaluator_cases.json")
+    benchmark_eval.add_argument("--min-accuracy", type=float, default=0.80)
+
+    team = commands.add_parser("team", help="run a bounded planner-builder-reviewer workflow")
+    team.add_argument("--objective", required=True)
+    team.add_argument("--criterion", action="append", required=True)
+    team.add_argument("--project", default="default")
+    team.add_argument("--agent-namespace", default="team")
+    team.add_argument("--max-cycles", type=int, default=2)
+    team.add_argument("--artifacts", type=Path, default=Path(".kaldrax/runs"))
+    team.add_argument("--memory-db", type=Path, default=None)
+
+    sandbox = commands.add_parser("sandbox", help="execute untrusted Python inside a Docker sandbox")
+    sandbox_actions = sandbox.add_subparsers(dest="sandbox_action", required=True)
+    sandbox_run = sandbox_actions.add_parser("run-python", help="run a Python file in a disposable container")
+    sandbox_run.add_argument("file", type=Path)
+    sandbox_run.add_argument("--timeout", type=int, default=15)
+    sandbox_run.add_argument("--memory-mb", type=int, default=256)
+    sandbox_run.add_argument("--cpu-count", type=float, default=1.0)
+    sandbox_run.add_argument("--pids-limit", type=int, default=64)
+    sandbox_run.add_argument("--workspace-root", type=Path, default=Path(".kaldrax/sandbox"))
+
     args = parser.parse_args()
     if args.command == "demo":
         task = Task(
@@ -161,7 +320,44 @@ def main() -> int:
     if args.command == "run":
         try:
             return _run_llm(args)
-        except (ValueError, TypeError) as exc:
+        except (ValueError, TypeError, RuntimeError, OSError) as exc:
+            parser.error(str(exc))
+
+
+    if args.command == "provider-check":
+        try:
+            return _provider_check()
+        except (ValueError, TypeError, RuntimeError, OSError) as exc:
+            parser.error(str(exc))
+
+    if args.command == "benchmark-evaluator":
+        if not 0.0 <= args.min_accuracy <= 1.0:
+            parser.error("--min-accuracy must be between 0 and 1")
+        try:
+            return _benchmark_evaluator(args)
+        except (ValueError, TypeError, RuntimeError, OSError) as exc:
+            parser.error(str(exc))
+
+    if args.command == "team":
+        if not 1 <= args.max_cycles <= 5:
+            parser.error("--max-cycles must be between 1 and 5")
+        try:
+            return _team(args)
+        except (ValueError, TypeError, RuntimeError, OSError) as exc:
+            parser.error(str(exc))
+
+    if args.command == "sandbox" and args.sandbox_action == "run-python":
+        try:
+            if args.file.stat().st_size > SandboxRunner.MAX_SOURCE_BYTES:
+                parser.error("source exceeds the 1 MB sandbox limit")
+            source = args.file.read_text(encoding="utf-8")
+            result = SandboxRunner(workspace_root=args.workspace_root).run_python(
+                source, timeout_seconds=args.timeout, memory_mb=args.memory_mb,
+                cpu_count=args.cpu_count, pids_limit=args.pids_limit,
+            )
+            print(json.dumps(result.to_dict(), indent=2))
+            return 1 if result.timed_out or result.exit_code != 0 else 0
+        except (ValueError, TypeError, RuntimeError, OSError) as exc:
             parser.error(str(exc))
 
     if args.command == "memory":

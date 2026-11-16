@@ -113,3 +113,100 @@ def test_memory_benchmark_cli_runs_without_external_services(monkeypatch, capsys
     result = json.loads(capsys.readouterr().out)
     assert result["retrieval_mode"] == "lexical"
     assert result["query_count"] == 5
+
+
+def test_provider_check_requires_real_credentials(monkeypatch):
+    monkeypatch.delenv("KALDRAX_API_KEY", raising=False)
+    monkeypatch.setattr("sys.argv", ["kaldrax", "provider-check"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+
+
+def test_deterministic_evaluator_benchmark_cli_exposes_negation_false_positives(capsys, monkeypatch):
+    monkeypatch.setattr("sys.argv", [
+        "kaldrax", "benchmark-evaluator", "--mode", "deterministic", "--min-accuracy", "0.80"
+    ])
+    assert main() == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["total"] == 10
+    assert payload["accuracy"] == 0.8
+    assert payload["false_positive"] == 2
+    assert payload["errors"] == 0
+
+
+def test_team_requires_four_distinct_role_models(monkeypatch):
+    monkeypatch.setenv("KALDRAX_API_KEY", "key")
+    monkeypatch.setenv("KALDRAX_MODEL", "same")
+    monkeypatch.setenv("KALDRAX_EVALUATOR_MODEL", "same")
+    monkeypatch.setenv("KALDRAX_PLANNER_MODEL", "planner")
+    monkeypatch.setenv("KALDRAX_REVIEWER_MODEL", "reviewer")
+    monkeypatch.setattr("sys.argv", [
+        "kaldrax", "team", "--objective", "Build a feature", "--criterion", "output is complete"
+    ])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+
+
+def test_sandbox_cli_rejects_invalid_limits_before_docker(tmp_path, monkeypatch):
+    source = tmp_path / "hello.py"
+    source.write_text("print('hello')", encoding="utf-8")
+    monkeypatch.setattr("sys.argv", [
+        "kaldrax", "sandbox", "run-python", str(source), "--timeout", "0"
+    ])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+
+
+def test_provider_check_exercises_both_roles_and_evidence_validation(monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv("KALDRAX_API_KEY", "test-key")
+    monkeypatch.setenv("KALDRAX_MODEL", "executor")
+    monkeypatch.setenv("KALDRAX_EVALUATOR_MODEL", "judge")
+    clients = {}
+
+    class FakeClient:
+        def __init__(self, model):
+            self.model = model
+
+        def complete_with_usage(self, *, system_prompt, user_prompt):
+            return SimpleNamespace(
+                content="KALDRAX_PROVIDER_OK",
+                usage=SimpleNamespace(prompt_tokens=3, completion_tokens=2, estimated=False),
+            )
+
+        def complete(self, *, system_prompt, user_prompt):
+            criterion = "The KALDRAX provider health check completed."
+            return json.dumps({
+                "criteria": [{
+                    "criterion": criterion,
+                    "passed": True,
+                    "evidence": criterion,
+                }]
+            })
+
+    def fake_client(model, budget):
+        clients[model] = budget
+        return FakeClient(model)
+
+    monkeypatch.setattr("kaldrax.cli._client", fake_client)
+    monkeypatch.setattr("sys.argv", ["kaldrax", "provider-check"])
+    assert main() == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["executor_smoke_passed"] is True
+    assert payload["evaluator_schema_and_evidence_passed"] is True
+    assert clients["executor"] is clients["judge"]
+
+
+def test_run_budget_settings_are_shared_in_provider_clients(monkeypatch):
+    monkeypatch.setenv("KALDRAX_API_KEY", "key")
+    monkeypatch.setenv("KALDRAX_MODEL", "builder")
+    monkeypatch.setenv("KALDRAX_EVALUATOR_MODEL", "judge")
+    monkeypatch.setattr("kaldrax.cli._client", lambda model, budget: (model, budget))
+    from kaldrax.cli import _budget_from_env, _client
+    budget = _budget_from_env()
+    assert _client("builder", budget)[1] is budget
+    assert _client("judge", budget)[1] is budget

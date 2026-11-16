@@ -80,3 +80,37 @@ This file records implementation decisions, changes, commands, verification, and
 - Python 3.13: package installation, complete pytest suite, and compileall all passed.
 - Tests use fake local HTTP responses for embedding and LLM adapters; no live Ollama or LLM provider request was needed.
 - The v0.4 test suite was verified by hosted CI; it was not independently run in this network-restricted local container.
+
+
+## 2026-11-16 — v0.5 budgeted engineering runtime
+
+### Decisions
+- Preserve v0.4 hybrid memory, human approval, and memory retrieval benchmarks.
+- Share a single run-wide call/token/cost ledger across all chat model roles and optional memory extraction.
+- Use UTF-8 byte-based prompt estimates when provider token usage is absent; label these as estimates.
+- Keep monetary ceilings optional and operator-configured because model pricing differs by provider and model.
+- Run candidate Python only in a fixed Docker container with network disabled and resource limits.
+- Keep the coordinator sequential and bounded; reviewer approval cannot supersede final independent evaluation.
+- Keep live provider checks manually triggered and secret-gated.
+
+### Changes
+- Added a thread-safe run budget with call, input, output, total-token, and optional estimated monetary limits.
+- Extended the OpenAI-compatible client to reserve/settle budgets and retain provider usage metadata.
+- Added an evaluator regression benchmark corpus and accuracy/precision/recall/F1/confusion/error reporting.
+- Added a Docker-backed Python sandbox with read-only container root, unprivileged execution, no network, temporary workspace, resource/time/output limits, and pre-pulled image policy.
+- Added a sequential planner-builder-reviewer coordinator with a separate final evaluator and agent-scoped role traces.
+- Added provider-check, benchmark-evaluator, team, and sandbox CLI commands.
+- Extended GitHub Actions with evaluator and memory benchmarks, an actual Docker smoke test, and a manual secret-gated live-provider job.
+- Added ADR 0005 and updated setup/architecture/requirements documentation.
+
+### Verification
+- Pending hosted CI for this commit. The local execution environment cannot independently run the complete GitHub repository or Docker daemon.
+- Provider smoke remains unverified until repository secrets/model variables are configured and the manual job is dispatched.
+- Docker sandbox behavior has unit tests using a fake Docker process; hosted CI will exercise a real Docker run.
+
+### Risks / follow-up
+- Provider token byte estimates are approximate; exact model tokenization is not bundled.
+- Monetary rates must be configured using conservative values for the most expensive model in a run.
+- Evaluator benchmark cases are a small regression corpus and expose known negation false positives.
+- Docker tag is mutable and not digest-pinned; operators should verify image provenance or use an immutable digest before high-assurance use.
+- Team agents currently produce candidate artifacts and traces but do not patch repositories or automatically invoke the sandbox.

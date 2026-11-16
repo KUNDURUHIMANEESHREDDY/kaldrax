@@ -1,0 +1,62 @@
+[
+  {
+    "id": "exact-positive",
+    "criterion": "CSV parsing is streaming",
+    "candidate": "CSV parsing is streaming and does not load the whole file.",
+    "expected_pass": true
+  },
+  {
+    "id": "case-insensitive-positive",
+    "criterion": "UNIT TESTS PASS",
+    "candidate": "unit tests pass on the supported runtime.",
+    "expected_pass": true
+  },
+  {
+    "id": "whitespace-positive",
+    "criterion": "automatic retry is bounded",
+    "candidate": "Automatic retry\nis bounded to three attempts.",
+    "expected_pass": true
+  },
+  {
+    "id": "exact-phrase-in-context",
+    "criterion": "project isolation",
+    "candidate": "The memory store enforces project isolation for all searches.",
+    "expected_pass": true
+  },
+  {
+    "id": "missing-criterion",
+    "criterion": "structured JSON report",
+    "candidate": "The command printed a plain text summary.",
+    "expected_pass": false
+  },
+  {
+    "id": "plural-is-not-singular",
+    "criterion": "test",
+    "candidate": "All tests passed.",
+    "expected_pass": false
+  },
+  {
+    "id": "negated-criterion",
+    "criterion": "unit tests",
+    "candidate": "We did not run unit tests for this change.",
+    "expected_pass": false
+  },
+  {
+    "id": "negated-sandbox-claim",
+    "criterion": "sandbox available",
+    "candidate": "No sandbox available on this machine.",
+    "expected_pass": false
+  },
+  {
+    "id": "irrelevant-content",
+    "criterion": "API key is rotated",
+    "candidate": "The Markdown document includes installation instructions.",
+    "expected_pass": false
+  },
+  {
+    "id": "positive-evidence",
+    "criterion": "source run provenance is preserved",
+    "candidate": "The memory store verifies that source run provenance is preserved.",
+    "expected_pass": true
+  }
+]
