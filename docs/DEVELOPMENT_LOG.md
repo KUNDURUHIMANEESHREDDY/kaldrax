@@ -72,3 +72,11 @@ This file records implementation decisions, changes, commands, verification, and
 - The benchmark corpus is a regression fixture, not representative production workload evidence.
 - The LLM extractor makes an additional provider request after a passing run and may add cost.
 - The local database and reports may contain sensitive project data; protect local storage.
+
+
+### v0.4 hosted verification result
+- GitHub Actions run [43823453713](https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/actions/runs/43823453713) completed successfully.
+- Python 3.11: package installation, complete pytest suite, and compileall all passed.
+- Python 3.13: package installation, complete pytest suite, and compileall all passed.
+- Tests use fake local HTTP responses for embedding and LLM adapters; no live Ollama or LLM provider request was needed.
+- The v0.4 test suite was verified by hosted CI; it was not independently run in this network-restricted local container.
