@@ -1,5 +1,3 @@
-from datetime import datetime, timezone
-
 from kaldrax.memory import MemoryRecord, MemoryStatus, MemoryType, SQLiteMemoryStore
 
 
@@ -43,8 +41,8 @@ def test_detects_local_vs_cloud_and_sync_vs_async_conflicts(tmp_path):
 
 def test_does_not_flag_disjoint_environment_scopes(tmp_path):
     store = SQLiteMemoryStore(tmp_path / "memory.sqlite3")
-    store.save(_record("Rule: allow the admin endpoint in production"))
-    store.save(_record("Rule: keep the admin endpoint private in staging"))
+    store.save(_record("Rule: expose the public admin endpoint in production"))
+    store.save(_record("Rule: keep the private admin endpoint in staging"))
 
     assert store.detect_conflicts("project") == []
     store.close()
@@ -67,7 +65,7 @@ def test_embedding_similarity_can_recall_paraphrased_conflict_candidates(tmp_pat
             return [[1.0, 0.0, 0.0] for _ in texts]
 
     store = SQLiteMemoryStore(tmp_path / "memory.sqlite3", embedder=RelatedEmbedder())
-    store.save(_record("Rule: expose the tenant record endpoint publicly"))
+    store.save(_record("Rule: expose the tenant record endpoint to the public"))
     store.save(_record("Rule: keep customer information behind an internal route"))
 
     conflicts = store.detect_conflicts("project")
