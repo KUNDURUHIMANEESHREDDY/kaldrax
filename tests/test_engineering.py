@@ -154,3 +154,17 @@ def test_repository_team_rejects_empty_unittest_discovery(tmp_path):
     assert report.verification["test_count"] == 0
     assert report.applied is False
     assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")
+
+
+def test_planner_is_told_it_only_receives_a_file_manifest(tmp_path):
+    root = tmp_path / "repo"
+    init_csv_repo(root)
+    coordinator, task = make_coordinator(root, SuccessfulSandbox())
+
+    report = coordinator.run(task, apply_changes=False)
+
+    assert report.status is RunStatus.PASSED
+    prompt, payload = coordinator.planner.prompts[0]
+    assert "not source contents" in prompt
+    assert all(set(item) == {"path", "characters"} for item in payload["workspace_manifest"]["files"])
+    assert all("content" not in item for item in payload["workspace_manifest"]["files"])
