@@ -117,10 +117,7 @@ def test_memory_benchmark_cli_runs_without_external_services(monkeypatch, capsys
     assert "by_category" in result
 
 
-def test_memory_extraction_benchmark_cli_uses_injected_extractor(tmp_path, monkeypatch, capsys):
-    import json
-    from kaldrax.memory import MemoryRecord, MemoryType
-
+def test_memory_extraction_benchmark_cli_uses_budgeted_provider_client(tmp_path, monkeypatch, capsys):
     dataset = tmp_path / "extract.json"
     dataset.write_text(json.dumps({
         "name": "cli-test",
@@ -131,17 +128,29 @@ def test_memory_extraction_benchmark_cli_uses_injected_extractor(tmp_path, monke
             "expected": [{"match_terms": ["sqlite", "memory"]}],
         }],
     }), encoding="utf-8")
-    record = MemoryRecord.create(
-        project_id="extraction-benchmark", memory_type=MemoryType.SEMANTIC,
-        content="Decision: SQLite stores memory", confidence=0.9,
-        metadata={"evidence_quote": "SQLite stores local memory"},
-    )
 
-    class FakeExtractor:
-        def extract(self, task, candidate, *, source_run_id, source_event_sequences, agent_id=None):
-            return [record]
+    class FakeClient:
+        def complete(self, *, system_prompt, user_prompt):
+            return json.dumps({
+                "memories": [{
+                    "content": "Decision: SQLite stores memory",
+                    "summary": "SQLite memory storage",
+                    "evidence": "SQLite stores local memory.",
+                    "confidence": 0.9,
+                    "tags": ["storage"],
+                }],
+            })
 
-    monkeypatch.setattr("kaldrax.cli._memory_extractor_from_env", lambda max_memories: FakeExtractor())
+    monkeypatch.setenv("KALDRAX_API_KEY", "test-key")
+    monkeypatch.setenv("KALDRAX_MODEL", "extractor-model")
+    budgets = []
+
+    def fake_client(model, budget):
+        assert model == "extractor-model"
+        budgets.append(budget)
+        return FakeClient()
+
+    monkeypatch.setattr("kaldrax.cli._client", fake_client)
     monkeypatch.setattr("sys.argv", [
         "kaldrax", "memory", "extraction-benchmark", "--dataset", str(dataset),
     ])
@@ -150,7 +159,9 @@ def test_memory_extraction_benchmark_cli_uses_injected_extractor(tmp_path, monke
     assert result["dataset_name"] == "cli-test"
     assert result["precision"] == 1.0
     assert result["confidence_calibration"]["sample_count"] == 1
-
+    assert result["evidence_valid_rate"] == 1.0
+    assert len(budgets) == 1
+    assert result["budget"]["provider_calls"] == 1
 
 def test_provider_check_requires_real_credentials(monkeypatch):
     monkeypatch.delenv("KALDRAX_API_KEY", raising=False)
