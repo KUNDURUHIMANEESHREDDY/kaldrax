@@ -1,0 +1,86 @@
+from datetime import datetime, timezone
+
+from kaldrax.memory import MemoryRecord, MemoryStatus, MemoryType, SQLiteMemoryStore
+
+
+def _record(content, *, agent_id=None):
+    return MemoryRecord.create(
+        project_id="project",
+        memory_type=MemoryType.SEMANTIC,
+        content=content,
+        status=MemoryStatus.ACTIVE,
+        agent_id=agent_id,
+    )
+
+
+def test_detects_opposing_policy_words_beyond_negation(tmp_path):
+    store = SQLiteMemoryStore(tmp_path / "memory.sqlite3")
+    store.save(_record("Rule: allow background workers to access the repository index"))
+    store.save(_record(
+        "Rule: deny background workers access to the repository index",
+        agent_id="agent-a",
+    ))
+
+    conflicts = store.detect_conflicts("project")
+    assert len(conflicts) == 1
+    assert "availability" in conflicts[0].reason
+    assert "subject Jaccard=" in conflicts[0].reason
+    store.close()
+
+
+def test_detects_local_vs_cloud_and_sync_vs_async_conflicts(tmp_path):
+    store = SQLiteMemoryStore(tmp_path / "memory.sqlite3")
+    store.save(_record("Decision: store project credentials in local encrypted memory"))
+    store.save(_record("Decision: store project credentials in cloud encrypted memory"))
+    store.save(_record("Rule: worker task processing must remain asynchronous"))
+    store.save(_record("Rule: worker task processing must remain synchronous"))
+
+    conflicts = store.detect_conflicts("project")
+    assert len(conflicts) == 2
+    assert all("Heuristic candidate only" in item.reason for item in conflicts)
+    store.close()
+
+
+def test_does_not_flag_disjoint_environment_scopes(tmp_path):
+    store = SQLiteMemoryStore(tmp_path / "memory.sqlite3")
+    store.save(_record("Rule: allow the admin endpoint in production"))
+    store.save(_record("Rule: keep the admin endpoint private in staging"))
+
+    assert store.detect_conflicts("project") == []
+    store.close()
+
+
+def test_does_not_flag_unrelated_opposing_words(tmp_path):
+    store = SQLiteMemoryStore(tmp_path / "memory.sqlite3")
+    store.save(_record("Rule: enable local cache invalidation for user profiles"))
+    store.save(_record("Rule: disable remote email delivery for notifications"))
+
+    assert store.detect_conflicts("project") == []
+    store.close()
+
+
+def test_embedding_similarity_can_recall_paraphrased_conflict_candidates(tmp_path):
+    class RelatedEmbedder:
+        model_id = "contradiction-test"
+
+        def embed(self, texts):
+            return [[1.0, 0.0, 0.0] for _ in texts]
+
+    store = SQLiteMemoryStore(tmp_path / "memory.sqlite3", embedder=RelatedEmbedder())
+    store.save(_record("Rule: expose the tenant record endpoint publicly"))
+    store.save(_record("Rule: keep customer information behind an internal route"))
+
+    conflicts = store.detect_conflicts("project")
+    assert len(conflicts) == 1
+    assert "visibility" in conflicts[0].reason
+    assert "semantic similarity=1.00" in conflicts[0].reason
+    store.close()
+
+
+def test_conflicts_remain_project_and_agent_scoped(tmp_path):
+    store = SQLiteMemoryStore(tmp_path / "memory.sqlite3")
+    store.save(_record("Rule: allow scheduled worker access to private artifacts", agent_id="agent-a"))
+    store.save(_record("Rule: deny scheduled worker access to private artifacts", agent_id="agent-b"))
+
+    assert store.detect_conflicts("project") == []
+    store.close()
