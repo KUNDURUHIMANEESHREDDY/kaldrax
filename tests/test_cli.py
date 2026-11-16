@@ -130,7 +130,15 @@ def test_memory_extraction_benchmark_cli_uses_budgeted_provider_client(tmp_path,
     }), encoding="utf-8")
 
     class FakeClient:
+        def __init__(self, budget):
+            self.budget = budget
+
         def complete(self, *, system_prompt, user_prompt):
+            reservation = self.budget.reserve(
+                prompt_bytes=len(system_prompt.encode("utf-8")) + len(user_prompt.encode("utf-8")),
+                requested_output_tokens=32,
+            )
+            self.budget.settle(reservation, prompt_tokens=2, completion_tokens=3)
             return json.dumps({
                 "memories": [{
                     "content": "Decision: SQLite stores memory",
@@ -148,7 +156,7 @@ def test_memory_extraction_benchmark_cli_uses_budgeted_provider_client(tmp_path,
     def fake_client(model, budget):
         assert model == "extractor-model"
         budgets.append(budget)
-        return FakeClient()
+        return FakeClient(budget)
 
     monkeypatch.setattr("kaldrax.cli._client", fake_client)
     monkeypatch.setattr("sys.argv", [
