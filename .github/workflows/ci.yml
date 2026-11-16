@@ -77,6 +77,32 @@ jobs:
           path: artifacts/memory-quality.*
           if-no-files-found: warn
 
+  desktop-check:
+    name: Desktop lint and production build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install desktop dependencies
+        run: npm ci
+
+      - name: Run Oxlint
+        run: npm run lint
+
+      - name: Build desktop frontend
+        run: npm run build
+
   provider-smoke:
     name: Optional live provider smoke test
     if: github.event_name == 'workflow_dispatch'
