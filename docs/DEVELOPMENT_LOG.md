@@ -441,3 +441,9 @@ This file records implementation decisions, changes, commands, verification, and
 ### Verification
 - Added deterministic fake-HTTP tests for authentication headers, request payloads, result ordering, HTTPS enforcement, empty inputs, malformed vectors, response dimensions, duplicate indices, and API-key redaction.
 - Live provider requests and hosted hybrid retrieval measurements remain unperformed until the operator configures credentials and dispatches the provider workflow.
+
+
+### Hosted-only chat transport hardening
+- Restricted the OpenAI-compatible chat client to HTTPS URLs with no embedded credentials, query, or fragment, matching the hosted embeddings adapter.
+- Updated the README to remove local-model endpoint guidance.
+- Added configuration regression coverage for plain HTTP and credential/query/fragment URL rejection.
