@@ -447,3 +447,8 @@ This file records implementation decisions, changes, commands, verification, and
 - Restricted the OpenAI-compatible chat client to HTTPS URLs with no embedded credentials, query, or fragment, matching the hosted embeddings adapter.
 - Updated the README to remove local-model endpoint guidance.
 - Added configuration regression coverage for plain HTTP and credential/query/fragment URL rejection.
+
+
+### Desktop CI regression repair
+- Moved the ProjectDetail page's memoized current-date hook above the missing-project early return. This preserves its value and dependencies while ensuring React hooks execute in the same order on every render.
+- The repair addresses the conditional `useMemo` error reported by Oxlint; no other desktop behavior was changed.
