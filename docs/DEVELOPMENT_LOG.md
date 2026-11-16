@@ -203,3 +203,25 @@ This file records implementation decisions, changes, commands, verification, and
 - Direct repository cloning was unavailable in this execution environment, so a local pytest/compile run could not be performed here.
 - No local Ollama service or user-configured model endpoint was accessed from this session; hybrid scores and live extraction scores remain unmeasured here.
 - The new dataset is public-repository-derived, but its 36 relevance labels are assistant proposals and the privacy scope is pending operator sign-off. These are not yet human-verified data.
+
+
+## 2026-11-16 — Human annotation and immutable benchmark exports
+
+### Decisions
+- Implement the first validation bottleneck as a local-first terminal workflow; keep review state separate from runtime project memory and source benchmark files.
+- Require per-query reviewer identity and UTC timestamp, explicit dataset-level annotation approval, and a separate privacy-scope approval.
+- Export only after all relevance labels are approved or corrected and both dataset and privacy gates pass.
+- Make exports versioned, hash-addressed, integrity-verifiable, and write-once. Keep incomplete sessions resumable under .kaldrax.
+
+### Changes
+- Added query-by-query annotation review with approve, reject, edit, skip, and quit/resume actions.
+- Display proposed relevant memories and a complete candidate-ID index so reviewers can correct labels.
+- Added independent dataset-approval and privacy-screening records.
+- Added immutable versioned exports with source revision, source-file SHA-256, reviewer provenance, and a canonical content-integrity digest.
+- Added benchmark report eligibility metadata; pending or tampered datasets remain exploratory-only.
+- Added unit tests for modified labels, reviewer/timestamp provenance, separate approvals, rejected labels, export integrity, and exploratory-only reporting.
+
+### Verification and limitations
+- The implementation was pushed to main; hosted CI is the authoritative verification because this session cannot clone GitHub in its local execution environment.
+- No query labels or privacy scope were approved by the assistant. The source-backed dataset remains pending until an operator completes the review workflow.
+- Ollama hybrid comparison and live extraction quality remain unmeasured until a configured local embedding model and provider run are available.

@@ -64,3 +64,14 @@ These capabilities need evaluation without introducing hosted vector infrastruct
 - Add paired lexical-versus-hybrid evaluation on the exact same queries. Publish paired deltas only when local embedding indexing and query vectors succeed; a failed or absent provider must never be presented as a hybrid result.
 - Run the repository corpus's lexical baseline in ordinary credential-free CI. Add the 10-case live extraction benchmark to the existing manual secret-gated provider job, with a 1,024-token completion cap and the shared run budget.
 - The live provider job has not been dispatched as part of this decision; provider extraction results remain unmeasured until a configured manual run completes.
+
+
+### Human annotation and dataset approval
+
+- Keep assistant-proposed relevance judgments explicitly unreviewed until a human accepts or corrects every query label.
+- Persist resumable review sessions outside the project-memory database and never mutate the source corpus in place.
+- Record reviewer identity and UTC timestamp per query decision.
+- Track query-label review, dataset-level annotation approval, and privacy-scope approval independently.
+- Refuse immutable export unless every query is accepted or corrected and both dataset annotation and privacy approval are explicit.
+- Include source revision, source-file digest, reviewer provenance, semantic version, and a SHA-256 integrity digest in each write-once export.
+- Benchmark commands may still produce exploratory diagnostics for pending corpora, but must label them `exploratory_only`. Only exports with complete review provenance and a valid integrity digest may be described as validated datasets.

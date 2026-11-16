@@ -10,6 +10,7 @@ from typing import Any
 
 from .embeddings import EmbeddingProvider
 from .memory import MemoryRecord, MemoryType, SQLiteMemoryStore
+from .memory_annotation import assess_dataset_review
 
 
 def _ndcg_at_k(ranked: list[str], relevant: set[str], k: int) -> float:
@@ -164,6 +165,7 @@ def run_retrieval_benchmark(
                     "top1_accuracy": round(top1, 4),
                 })
             count = len(case_results)
+            review_assessment = assess_dataset_review(dataset)
             return {
                 "dataset": str(dataset_path),
                 "dataset_name": str(dataset.get("name", Path(dataset_path).stem)),
@@ -171,6 +173,7 @@ def run_retrieval_benchmark(
                 "source_repository": dataset.get("source_repository"),
                 "source_revision": dataset.get("source_revision"),
                 "annotation_status": str(dataset.get("annotation_status", "unspecified")),
+                "benchmark_validation": review_assessment,
                 "privacy_screening_status": (
                     dataset.get("privacy_screening", {}).get("status")
                     if isinstance(dataset.get("privacy_screening"), dict) else None

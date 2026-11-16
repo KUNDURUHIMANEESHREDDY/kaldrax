@@ -36,6 +36,7 @@ def run_retrieval_comparison(
         "dataset_name": lexical["dataset_name"],
         "dataset_provenance": lexical["dataset_provenance"],
         "annotation_status": lexical.get("annotation_status", "unspecified"),
+        "benchmark_validation": lexical.get("benchmark_validation"),
         "source_revision": lexical.get("source_revision"),
         "privacy_screening_status": lexical.get("privacy_screening_status"),
         "k": k,

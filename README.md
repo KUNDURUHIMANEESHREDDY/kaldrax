@@ -257,3 +257,23 @@ The GitHub Actions matrix runs on Python 3.11 and 3.13, executes the full test s
 - [ADR 0005: Budgeted sandbox and agent runtime](docs/adr/0005-budgeted-sandbox-agent-runtime.md)
 - [ADR 0006: Memory quality and contradiction evaluation](docs/adr/0006-memory-quality-evaluation.md)
 - [Repository structure](docs/REPOSITORY_STRUCTURE.md)
+
+
+## Human-reviewing retrieval benchmark datasets
+
+The source-backed KALDRAX retrieval corpus is an annotation proposal, not a human-labeled benchmark. Its query labels and privacy scope remain pending until an operator reviews them.
+
+Start or resume the local terminal review:
+
+```bash
+kaldrax memory benchmark-annotate \
+  --dataset benchmarks/memory_retrieval_kaldrax_v1.json \
+  --reviewer "<reviewer-id>" \
+  --version 1.0.0
+```
+
+For each query, the workflow displays the query, proposed relevant memories, and the full candidate-memory index. Reviewers can approve the proposed IDs, reject the proposal, replace the relevant-ID set, skip, or stop and resume later. Each decision records the reviewer and UTC timestamp in a resumable session under `.kaldrax/benchmark-reviews/`.
+
+Dataset annotation approval and privacy approval are separate gates. Privacy approval requires an explicit confirmation after the source paths and copied memory content have been displayed. The source dataset is never edited. An export is written under `.kaldrax/benchmark-exports/` only when every query is approved or corrected, dataset annotation approval is granted, and privacy screening is independently approved.
+
+Exports use a numeric MAJOR.MINOR.PATCH version, a SHA-256 content digest, and write-once filenames. Retrieval benchmark reports expose `benchmark_validation.status`; datasets without complete review provenance and a valid integrity digest are labelled `exploratory_only`, not validated. Review sessions and exports are local operator data and are ignored by Git.

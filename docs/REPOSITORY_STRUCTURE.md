@@ -34,6 +34,8 @@ kaldrax/
 │   ├── llm.py
 │   ├── memory.py
 │   ├── memory_benchmarks.py
+│   ├── memory_annotation.py
+│   ├── memory_benchmark_comparison.py
 │   ├── memory_contradictions.py
 │   ├── memory_intelligence.py
 │   ├── memory_quality.py
@@ -50,6 +52,8 @@ kaldrax/
 │   ├── test_llm.py
 │   ├── test_memory.py
 │   ├── test_memory_benchmarks.py
+│   ├── test_memory_annotation.py
+│   ├── test_memory_benchmark_comparison.py
 │   ├── test_memory_contradictions.py
 │   ├── test_memory_intelligence.py
 │   └── test_memory_quality.py
