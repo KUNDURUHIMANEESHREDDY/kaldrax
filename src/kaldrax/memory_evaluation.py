@@ -66,7 +66,7 @@ def _dataset_summary(path: Path, data: dict[str, Any]) -> dict[str, Any]:
         "provenance": data.get("provenance", "unspecified"),
         "annotation_status": data.get("annotation_status", "unspecified"),
         "privacy_status": privacy.get("status") if isinstance(privacy, dict) else None,
-        "dataset_approval_status": approval.get("status) if isinstance(approval, dict) else None,
+        "dataset_approval_status": approval.get("status") if isinstance(approval, dict) else None,
     }
 
 
