@@ -329,3 +329,9 @@ This file records implementation decisions, changes, commands, verification, and
 - Require a timezone-aware review timestamp.
 - Documented that the approved retrieval export and the hash-bound review manifest must be committed to the tagged revision; local-only files cannot satisfy a hosted release check.
 - Documented the need for a runner-reachable Ollama endpoint and a GitHub tag/release ruleset. The GitHub ruleset listing returned no rulesets; branch-protection details were inaccessible to the connected integration, so repository enforcement settings were not changed.
+
+
+### Release sample-size guardrails
+- Added explicit minimum evaluation sample sizes to the strict release profile: retrieval query count, contradiction total and class balance, extraction case/claim count, and confidence observations.
+- The current synthetic contradiction/extraction fixtures intentionally fail these release minimums (8 pairs and 10 extraction cases); expand them with independently reviewed examples before v0.6.
+- Threshold values and minimum sample sizes are initial policy floors, not population-level statistical guarantees; recalibrate them against a larger held-out corpus.

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Deterministic regression floors for regular CI and stricter evidence requirements for v0.6 release candidates.",
+  "description": "Deterministic regression floors for regular CI and stricter evidence requirements for v0.6 release candidates. Minimum sample sizes guard against passing metrics on underpowered fixtures.",
   "ci": {
     "retrieval": {
       "recall_at_k": 0.35,
@@ -37,6 +37,15 @@
     "calibration": {
       "max_brier_score": 0.25,
       "max_expected_calibration_error": 0.2
+    },
+    "minimum_sample_sizes": {
+      "retrieval_queries": 36,
+      "contradiction_cases": 50,
+      "contradiction_positive_cases": 20,
+      "contradiction_negative_cases": 20,
+      "extraction_cases": 30,
+      "extraction_expected_claims": 60,
+      "extraction_confidence_samples": 30
     }
   }
 }

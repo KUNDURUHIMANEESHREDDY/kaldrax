@@ -297,6 +297,7 @@ def _threshold_checks(
     retrieval: dict[str, Any],
     contradiction: dict[str, Any],
     extraction: dict[str, Any],
+    extraction_dataset: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     configured = thresholds.get(profile)
     if not isinstance(configured, dict):
@@ -315,6 +316,43 @@ def _threshold_checks(
         )
 
     if profile == "release":
+        contradiction_cases = contradiction.get("cases", [])
+        contradiction_cases = contradiction_cases if isinstance(contradiction_cases, list) else []
+        extraction_metrics = (
+            extraction.get("metrics") if isinstance(extraction.get("metrics"), dict) else {}
+        )
+        calibration = extraction_metrics.get("confidence_calibration")
+        calibration = calibration if isinstance(calibration, dict) else {}
+        expected_claim_count = sum(
+            len(case.get("expected", []))
+            for case in (extraction_dataset or {}).get("cases", [])
+            if isinstance(case, dict) and isinstance(case.get("expected"), list)
+        )
+        extraction_cases = (extraction_dataset or {}).get("cases", [])
+        extraction_cases = extraction_cases if isinstance(extraction_cases, list) else []
+        sample_sizes = {
+            "retrieval_queries": lexical.get("query_count"),
+            "contradiction_cases": contradiction.get("case_count"),
+            "contradiction_positive_cases": sum(
+                case.get("expected_conflict") is True for case in contradiction_cases
+                if isinstance(case, dict)
+            ),
+            "contradiction_negative_cases": sum(
+                case.get("expected_conflict") is False for case in contradiction_cases
+                if isinstance(case, dict)
+            ),
+            "extraction_cases": len(extraction_cases),
+            "extraction_expected_claims": expected_claim_count,
+            "extraction_confidence_samples": calibration.get("sample_count"),
+        }
+        for sample_name, minimum in configured.get("minimum_sample_sizes", {}).items():
+            _metric_check(
+                checks,
+                name=f"sample_size.{sample_name}",
+                observed=sample_sizes.get(sample_name),
+                threshold=minimum,
+            )
+
         hybrid = retrieval.get("hybrid") if isinstance(retrieval.get("hybrid"), dict) else {}
         for metric, minimum in configured.get("hybrid", {}).items():
             if metric == "minimum_ndcg_delta":
@@ -326,16 +364,11 @@ def _threshold_checks(
                 check_name = f"retrieval.hybrid.{metric}"
             _metric_check(checks, name=check_name, observed=observed, threshold=minimum)
 
-        extraction_metrics = (
-            extraction.get("metrics") if isinstance(extraction.get("metrics"), dict) else {}
-        )
         for metric, minimum in configured.get("extraction", {}).items():
             _metric_check(
                 checks, name=f"extraction.{metric}",
                 observed=extraction_metrics.get(metric), threshold=minimum,
             )
-        calibration = extraction_metrics.get("confidence_calibration")
-        calibration = calibration if isinstance(calibration, dict) else {}
         for metric, maximum in configured.get("calibration", {}).items():
             _metric_check(
                 checks, name=f"extraction.confidence_calibration.{metric}",
@@ -417,6 +450,7 @@ def build_memory_evaluation_report(
     )
     release_checks = _threshold_checks(
         threshold_data, "release", retrieval, contradiction, extraction,
+        extraction_dataset=extraction_data,
     )
     release_blockers.extend(
         f"threshold failed: {check['name']} observed {check['observed']!r} "

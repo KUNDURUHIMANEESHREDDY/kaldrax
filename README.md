@@ -334,7 +334,7 @@ A release candidate must then pass:
 python -m kaldrax.cli memory quality-report --profile release --live-extraction
 ```
 
-The release profile requires a validated retrieval export with privacy sign-off, a real Ollama hybrid run, a live extraction run using the configured provider, a matching human label-review attestation, and every release threshold. A green regular CI run does not mean v0.6 is release-ready.
+The release profile requires a validated retrieval export with privacy sign-off, a real Ollama hybrid run, a live extraction run using the configured provider, a matching human label-review attestation, minimum sample sizes, and every release threshold. Initial minimums are 36 retrieval queries, 50 contradiction pairs (at least 20 positive and 20 negative), 30 extraction cases, 60 expected extraction claims, and 30 confidence observations. The current fixtures (8 contradiction pairs and 10 extraction cases) are intentionally below these release minimums and must be expanded with independently reviewed examples. These are initial policy floors and should be recalibrated as the held-out corpus grows. A green regular CI run does not mean v0.6 is release-ready.
 
 
 **Repository enforcement:** configure a GitHub tag/release ruleset for `v0.6.*` that requires the `v0.6 memory evidence and release thresholds` check. The workflow fails closed, but without a repository ruleset an administrator may still create a tag or release while its check is failing or skipped.

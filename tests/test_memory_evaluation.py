@@ -109,6 +109,10 @@ def test_ci_report_aggregates_benchmark_metrics_and_keeps_review_state_visible(t
     assert report["datasets"]["retrieval"]["sha256"]
     assert report["release_readiness"]["retrieval_review"]["validated"] is False
     assert any("hybrid" in item for item in report["release_readiness"]["blocking_reasons"])
+    assert any(
+        check["name"] == "sample_size.contradiction_cases" and not check["passed"]
+        for check in report["release_checks"]
+    )
 
 
 def test_ci_threshold_failure_blocks_report(tmp_path):
