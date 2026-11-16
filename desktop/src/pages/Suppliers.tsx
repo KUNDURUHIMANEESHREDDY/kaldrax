@@ -26,6 +26,8 @@ import { dateShort, inr, inrCompact, itemStatus, num, pct, relTime } from "../li
 import { canDeleteRecords, canManageInventory } from "../lib/permissions";
 import type { Supplier } from "../lib/types";
 
+const SUPPLIER_SINCE_DATE = new Date(Date.now() - 1000 * 60 * 60 * 24 * 420).toISOString();
+
 type SortKey = "name" | "items" | "value" | "lead" | "onTime" | "rating";
 
 export default function Suppliers() {
@@ -42,11 +44,6 @@ export default function Suppliers() {
   const [editing, setEditing] = useState<Supplier | undefined>();
   const [deleteFor, setDeleteFor] = useState<Supplier | undefined>();
   const [detailId, setDetailId] = useState<string | undefined>();
-  const supplierSinceLabel = useMemo(
-    () => dateShort(new Date(Date.now() - 1000 * 60 * 60 * 24 * 420).toISOString()),
-    []
-  );
-
   const canEdit = canManageInventory(role);
   const canDelete = canDeleteRecords(role);
 
@@ -544,7 +541,7 @@ export default function Suppliers() {
             </div>
 
             <p className="report-note">
-              Supplier since {supplierSinceLabel} · performance
+              Supplier since {dateShort(SUPPLIER_SINCE_DATE)} · performance
               reviewed monthly by the lab administrator.
             </p>
           </div>

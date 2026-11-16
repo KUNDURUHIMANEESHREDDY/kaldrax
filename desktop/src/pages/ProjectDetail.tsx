@@ -36,6 +36,8 @@ import {
 import { canDeleteRecords, canManageInventory, canManageProjects } from "../lib/permissions";
 import type { Item, Project } from "../lib/types";
 
+const PROJECT_DETAIL_REFERENCE_DATE = new Date().toISOString();
+
 const TXN_META: Record<string, { label: string; icon: "arrow-down-left" | "arrow-up-right" | "corner-up-left" | "sliders" }> = {
   in: { label: "Stock in", icon: "arrow-down-left" },
   out: { label: "Issued", icon: "arrow-up-right" },
@@ -189,8 +191,7 @@ export default function ProjectDetail() {
     return Boolean(allocation && allocation.issued > 0);
   }).length;
 
-  const today = useMemo(() => new Date().toISOString(), []);
-  const daysLeft = daysBetween(today, project.endDate);
+  const daysLeft = daysBetween(PROJECT_DETAIL_REFERENCE_DATE, project.endDate);
   const openRequests = requests.filter((r) => r.status === "pending" || r.status === "approved");
 
   const handleDelete = () => {

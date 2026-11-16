@@ -26,6 +26,8 @@ import { ItemFormModal } from "../components/forms";
 import { useToast } from "../components/Toast";
 import { Icon } from "../components/Icons";
 
+const OVERVIEW_REFERENCE_DATE = new Date();
+
 const ACTIVITY_ICON = {
   in: "arrow-down-left",
   out: "arrow-up-right",
@@ -43,7 +45,6 @@ export default function Overview() {
   const navigate = useNavigate();
   const [days, setDays] = useState(30);
   const [addOpen, setAddOpen] = useState(false);
-  const now = useMemo(() => new Date(), []);
 
   const summary = useMemo(() => stockSummary(state), [state]);
   const cats = useMemo(() => categoryStats(state), [state]);
@@ -57,13 +58,13 @@ export default function Overview() {
     .filter((c) => c.count > 0)
     .map((c) => ({ label: c.category.name, value: c.count, color: c.category.color }));
 
-  const dateLabel = now.toLocaleDateString("en-IN", {
+  const dateLabel = OVERVIEW_REFERENCE_DATE.toLocaleDateString("en-IN", {
     weekday: "long",
     day: "numeric",
     month: "long",
   });
 
-  const hour = now.getHours();
+  const hour = OVERVIEW_REFERENCE_DATE.getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   const downloadSnapshot = () => {
