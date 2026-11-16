@@ -16,7 +16,7 @@ KALDRAX is a local-first engineering application. Its local Python control plane
 - Human approval required before extracted semantic memories can influence future runs.
 - Confidence metadata, configurable memory lifetimes, and automatic exclusion of expired records.
 - Explainable contradiction candidates across negation, access policy, visibility, local/cloud, sync/async, retention, and other opposing concepts; optional local embeddings improve paraphrase recall. Human resolution remains mandatory.
-- Annotated engineering retrieval corpus covering 40 memories and 42 queries across 14 workload categories, with Recall@k, Precision@k, NDCG@k, MRR, top-1, and category breakdowns.
+- Annotated engineering retrieval corpus covering 40 memories and 42 queries across 15 workload categories, with Recall@k, Precision@k, NDCG@k, MRR, top-1, and category breakdowns.
 - Extraction evaluation over 10 annotated scenarios and 30 expected claims, reporting precision, recall, F1, evidence-quote validity, Brier score, and expected calibration error.
 - Existing v0.2/v0.3 SQLite databases migrate in place.
 
