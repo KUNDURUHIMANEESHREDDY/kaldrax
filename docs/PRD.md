@@ -171,3 +171,10 @@ KALDRAX is a local-first engineering application that learns from previous proje
 - Contradiction detection remains heuristic. The dimensions are not a natural-language inference model and can miss context, exceptions, temporal changes, or domain-specific definitions.
 - Embedding-based similarity can increase false positives as well as recall. Every pair still requires human inspection.
 - Live extraction benchmarking sends each candidate to the configured LLM provider and incurs provider cost. It is opt-in and separate from CI.
+
+
+## Repository-grounded memory validation follow-up
+
+The memory subsystem must be evaluated against both synthetic regression fixtures and a source-backed KALDRAX repository corpus. The repository corpus carries immutable source revision/path provenance, a privacy-screening status, and per-query annotation review state. Assistant-proposed relevance labels must remain explicitly pending until a human reviewer verifies them.
+
+The comparison command must run lexical retrieval and optional local-hybrid retrieval against the same query set, report aggregate and per-category paired differences, and refuse to label a failed embedding run as hybrid. Ordinary CI runs the lexical baseline without credentials. Live extraction evaluation remains opt-in, manual, secret-gated, and bounded by the shared run budget.
