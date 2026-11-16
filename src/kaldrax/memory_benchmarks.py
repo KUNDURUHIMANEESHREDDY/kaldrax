@@ -91,6 +91,7 @@ def run_retrieval_benchmark(
                         "benchmark_fixture": True,
                         "benchmark_id": identifier,
                         "category": str(item.get("category", "uncategorized")),
+                        "source": item.get("source"),
                     },
                     expires_at=None,
                 )
@@ -152,6 +153,8 @@ def run_retrieval_benchmark(
                     "id": str(case.get("id", f"query-{len(case_results) + 1}")),
                     "category": category,
                     "query": case["query"],
+                    "annotation_status": str(case.get("annotation_status", dataset.get("annotation_status", "unspecified"))),
+                    "annotation_rationale": str(case.get("rationale", "")),
                     "relevant": sorted(relevant),
                     "ranked": ranked,
                     "recall_at_k": round(recall, 4),
@@ -165,6 +168,13 @@ def run_retrieval_benchmark(
                 "dataset": str(dataset_path),
                 "dataset_name": str(dataset.get("name", Path(dataset_path).stem)),
                 "dataset_provenance": str(dataset.get("provenance", "unspecified")),
+                "source_repository": dataset.get("source_repository"),
+                "source_revision": dataset.get("source_revision"),
+                "annotation_status": str(dataset.get("annotation_status", "unspecified")),
+                "privacy_screening_status": (
+                    dataset.get("privacy_screening", {}).get("status")
+                    if isinstance(dataset.get("privacy_screening"), dict) else None
+                ),
                 "memory_count": len(dataset["memories"]),
                 "query_count": count,
                 "categories": sorted(by_category),
