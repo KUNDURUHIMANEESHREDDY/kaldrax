@@ -52,11 +52,11 @@ jobs:
           printf "print('KALDRAX_SANDBOX_SMOKE_OK')\n" > "$RUNNER_TEMP/kaldrax_sandbox_smoke.py"
           python -m kaldrax.cli sandbox run-python "$RUNNER_TEMP/kaldrax_sandbox_smoke.py" --timeout 20
 
-      - name: Verify repository patch, Docker tests, review, and apply integration
+      - name: Verify repository patch and live-validation harness in Docker
         if: matrix.python-version == '3.13'
         env:
           KALDRAX_RUN_DOCKER_INTEGRATION: "1"
-        run: python -m pytest -q tests/test_engineering_integration.py
+        run: python -m pytest -q tests/test_engineering_integration.py tests/test_live_validation.py
 
       - name: Compile source and tests
         run: python -m compileall -q src tests
@@ -142,6 +142,49 @@ jobs:
           KALDRAX_EVALUATOR_MODEL: ${{ vars.KALDRAX_EVALUATOR_MODEL }}
           KALDRAX_BASE_URL: ${{ vars.KALDRAX_BASE_URL }}
         run: python -m kaldrax.cli provider-check
+
+      - name: Check full live Team Run configuration
+        id: full-live-config
+        if: steps.provider-secrets.outputs.configured == 'true'
+        shell: bash
+        env:
+          KALDRAX_PLANNER_MODEL: ${{ vars.KALDRAX_PLANNER_MODEL }}
+          KALDRAX_REVIEWER_MODEL: ${{ vars.KALDRAX_REVIEWER_MODEL }}
+        run: |
+          if [[ -n "$KALDRAX_PLANNER_MODEL" && -n "$KALDRAX_REVIEWER_MODEL" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Full live Team Run skipped: configure KALDRAX_PLANNER_MODEL and KALDRAX_REVIEWER_MODEL."
+          fi
+
+      - name: Pull isolated repository verification image
+        if: steps.full-live-config.outputs.configured == 'true'
+        run: docker pull python:3.13-slim
+
+      - name: Run full live provider, Memory, Team Run and Docker validation
+        if: steps.full-live-config.outputs.configured == 'true'
+        env:
+          KALDRAX_API_KEY: ${{ secrets.KALDRAX_API_KEY }}
+          KALDRAX_BASE_URL: ${{ vars.KALDRAX_BASE_URL }}
+          KALDRAX_PLANNER_MODEL: ${{ vars.KALDRAX_PLANNER_MODEL }}
+          KALDRAX_MODEL: ${{ vars.KALDRAX_MODEL }}
+          KALDRAX_REVIEWER_MODEL: ${{ vars.KALDRAX_REVIEWER_MODEL }}
+          KALDRAX_EVALUATOR_MODEL: ${{ vars.KALDRAX_EVALUATOR_MODEL }}
+          KALDRAX_MAX_PROVIDER_CALLS: "20"
+          KALDRAX_MAX_RUN_INPUT_TOKENS: "60000"
+          KALDRAX_MAX_RUN_OUTPUT_TOKENS: "12000"
+          KALDRAX_MAX_RUN_TOTAL_TOKENS: "72000"
+          KALDRAX_MAX_RUN_DURATION_SECONDS: "600"
+        run: python -m kaldrax.cli validate-live
+
+      - name: Upload live validation evidence
+        if: always() && steps.full-live-config.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kaldrax-live-validation-${{ github.run_id }}
+          path: .kaldrax/validation/*.json
+          if-no-files-found: warn
 
       - name: Run live memory extraction quality benchmark
         if: steps.provider-secrets.outputs.configured == 'true'

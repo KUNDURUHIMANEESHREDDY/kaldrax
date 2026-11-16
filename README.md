@@ -207,13 +207,26 @@ The report includes accuracy, precision, recall, F1, confusion counts, and evalu
 
 ### Live provider validation
 
-Configure `KALDRAX_API_KEY`, `KALDRAX_MODEL`, and a distinct `KALDRAX_EVALUATOR_MODEL`, then run:
+The small provider connectivity check remains available:
 
 ```powershell
 kaldrax provider-check
 ```
 
-This performs one completion against the executor endpoint and one evidence-backed evaluation against the evaluator endpoint. It consumes the configured shared budget. GitHub Actions exposes a separate manual provider-smoke job, enabled only when `KALDRAX_API_KEY` and the model repository variables are configured. Ordinary pushes and pull requests never require provider credentials.
+For the full live engineering acceptance run, configure all four distinct role models and a provider API key:
+
+```powershell
+$env:KALDRAX_API_KEY = "..."
+$env:KALDRAX_PLANNER_MODEL = "planner-model"
+$env:KALDRAX_MODEL = "builder-model"
+$env:KALDRAX_REVIEWER_MODEL = "reviewer-model"
+$env:KALDRAX_EVALUATOR_MODEL = "evaluator-model"
+kaldrax validate-live
+```
+
+The full check exercises the actual planner → builder → reviewer → independent evaluator workflow against a disposable Git repository. The generated patch is applied only to that disposable fixture after reviewer approval, independent evaluation, and Docker test success. It also checks SQLite Memory retrieval and project isolation, validates Docker daemon availability, and writes a JSON report under `.kaldrax/validation/`. The report includes per-role call latency, provider failures, token usage, shared budget data, changed paths, and test verification; it never stores API keys, prompts, or completions.
+
+The command exits 0 on full success, 1 on a validation failure, and 2 when required configuration or infrastructure is blocked. A blocked report is still written so missing provider configuration is explicit rather than silently treated as a pass. The run makes real provider requests and consumes the configured shared budget. GitHub Actions exposes a separate manual provider-smoke job; ordinary pushes and pull requests never require provider credentials.
 
 ### Docker sandbox for Python candidates
 
