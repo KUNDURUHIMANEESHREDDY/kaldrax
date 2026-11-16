@@ -196,6 +196,14 @@ export function TeamRunsPage({ settings, apiKey, operation, onOperationStarted }
   const [reports, setReports] = useState<SavedTeamReport[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const refresh = useCallback(async () => {
+    setError("");
+    try {
+      setReports(await listTeamRuns(settings.enginePath));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }, [settings.enginePath]);
   const result = operation?.kind === "team_run" && ["completed", "cancelled"].includes(operation.status) && operation.result
     ? asRecord(operation.result) : null;
   const repositoryResult = result && typeof result.base_commit === "string"
@@ -300,7 +308,7 @@ export function TeamRunsPage({ settings, apiKey, operation, onOperationStarted }
       <div className="kw-team-plan"><small>UNIFIED PATCH</small><pre>{repositoryResult.patch || "No patch generated."}</pre></div>
     </section>}
     {standardResult && <section className="kx-panel"><div className="kx-panel__head"><div><h2>Current team result</h2><p>{standardResult.objective}</p></div><Badge tone={standardResult.status}>{standardResult.status}</Badge></div><div className="kw-team-plan"><small>PLAN</small><pre>{standardResult.plan}</pre></div><div className="kw-team-trace">{standardResult.trace?.map(trace => <article key={trace.sequence}><div><Badge>{trace.role}</Badge><span>Cycle {trace.cycle}</span><small>{trace.agent_id}</small></div><p>{trace.output_excerpt}</p></article>)}</div><div className="kw-team-evaluation"><strong>Independent evaluation</strong><Badge tone={standardResult.evaluation?.passed ? "passed" : "failed"}>{standardResult.evaluation?.passed ? "Passed" : "Not passed"}</Badge>{standardResult.evaluation?.missing?.map(item => <p key={item}>Missing: {item}</p>)}</div></section>}
-    <section className="kx-panel"><div className="kx-panel__head"><div><h2>Saved team runs</h2><p>{reports.length} persisted team report{reports.length === 1 ? "" : "s"}</p></div><button className="kx-text-button" onClick={refresh}>Refresh <Icon name="refresh" size={14}/></button></div>{reports.length ? <div className="kw-team-list">{reports.map(report => <article key={report.run_id}><div><strong>{report.objective}</strong><small>{report.run_id} ? {reportCycles(report)} cycles ? {formatTime(report.created_at)} ? {"base_commit" in report ? report.applied ? "patch applied" : "dry run" : "agent team"}</small></div><Badge tone={report.status}>{report.status}</Badge></article>)}</div> : <div className="kx-empty"><Icon name="users" size={24}/><strong>No team reports yet</strong><p>Configure the four distinct models and start a team run.</p></div>}</section>
+    <section className="kx-panel"><div className="kx-panel__head"><div><h2>Saved team runs</h2><p>{reports.length} persisted team report{reports.length === 1 ? "" : "s"}</p></div><button className="kx-text-button" onClick={() => void refresh()}>Refresh <Icon name="refresh" size={14}/></button></div>{reports.length ? <div className="kw-team-list">{reports.map(report => <article key={report.run_id}><div><strong>{report.objective}</strong><small>{report.run_id} ? {reportCycles(report)} cycles ? {formatTime(report.created_at)} ? {"base_commit" in report ? report.applied ? "patch applied" : "dry run" : "agent team"}</small></div><Badge tone={report.status}>{report.status}</Badge></article>)}</div> : <div className="kx-empty"><Icon name="users" size={24}/><strong>No team reports yet</strong><p>Configure the four distinct models and start a team run.</p></div>}</section>
   </>;
 }
 
