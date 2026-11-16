@@ -1,7 +1,7 @@
 # ADR 0006: Memory quality evaluation and opposition-aware conflict candidates
 
 - **Status:** Accepted
-- **Date:** 2026-11-16
+- **Date:** 2026-11-15
 - **Scope:** Memory retrieval, contradiction candidate detection, extraction evaluation, and confidence measurement
 
 ## Context
