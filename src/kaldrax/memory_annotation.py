@@ -12,7 +12,7 @@ from typing import Any, Callable
 
 _SESSION_SCHEMA_VERSION = 1
 _REVIEWED_QUERY_STATES = {"approved", "modified"}
-_VERSION_RE = re.compile(r"^[0-9]+\\.[0-9]+\\.[0-9]+$")
+_VERSION_RE = re.compile(r"^[0-9]+[.][0-9]+[.][0-9]+$")
 
 
 def _now() -> str:

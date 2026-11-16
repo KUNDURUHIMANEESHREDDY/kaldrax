@@ -89,17 +89,17 @@ def test_human_review_and_privacy_are_separate_gates_and_export_is_immutable(tmp
     assert verify_dataset_integrity(exported) is True
     assert assess_dataset_review(exported)["validated"] is True
 
-    original_bytes = open(export_path, "rb").read()
-    export_approved_dataset(
-        {
-            **exported,
-            "integrity": None,
-        },
-        session,
+    source_dataset = json.loads(source.read_text(encoding="utf-8"))
+    completed_session = json.loads((tmp_path / "session.json").read_text(encoding="utf-8"))
+    repeated_path = export_approved_dataset(
+        source_dataset,
+        completed_session,
         export_dir=tmp_path / "exports",
         version="1.0.0",
-    ) if False else None
-    assert open(export_path, "rb").read() == original_bytes
+    )
+    original_bytes = open(export_path, "rb").read()
+    assert str(repeated_path) == export_path
+    assert repeated_path.read_bytes() == original_bytes
 
 
 def test_rejected_query_blocks_dataset_approval_and_export(tmp_path):

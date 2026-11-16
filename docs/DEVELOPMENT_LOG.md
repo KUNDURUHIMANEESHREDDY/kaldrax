@@ -225,3 +225,9 @@ This file records implementation decisions, changes, commands, verification, and
 - The implementation was pushed to main; hosted CI is the authoritative verification because this session cannot clone GitHub in its local execution environment.
 - No query labels or privacy scope were approved by the assistant. The source-backed dataset remains pending until an operator completes the review workflow.
 - Ollama hybrid comparison and live extraction quality remain unmeasured until a configured local embedding model and provider run are available.
+
+
+### CI correction
+- The first annotation-workflow CI run exposed a SemVer-validation regex escaping error; 130 other tests passed on Python 3.11 and 3.13.
+- Corrected the pattern to use explicit dot character classes and strengthened the write-once export test to repeat the export from the persisted review session.
+- Verification is pending the next hosted CI run.
