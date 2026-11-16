@@ -1,5 +1,5 @@
-type Variant = "primary" | "secondary" | "ghost" | "soft" | "danger" | "danger-soft";
-type Size = "sm" | "md" | "lg";
+export type Variant = "primary" | "secondary" | "ghost" | "soft" | "danger" | "danger-soft";
+export type Size = "sm" | "md" | "lg";
 
 export function buttonClass(variant: Variant = "secondary", size: Size = "md", extra = ""): string {
   return ["btn", `btn--${variant}`, size !== "md" ? `btn--${size}` : "", extra].filter(Boolean).join(" ");

@@ -14,7 +14,7 @@ import {
 import { createPortal } from "react-dom";
 import { NavLink } from "react-router-dom";
 import { Icon, type IconName } from "./Icons";
-import { avatarTone, buttonClass } from "./ui-helpers";
+import { avatarTone, buttonClass, type Size, type Variant } from "./ui-helpers";
 import { initials, stockLabel, stockTone } from "../lib/format";
 import type { Category, ItemStatus } from "../lib/types";
 
