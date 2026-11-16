@@ -1,0 +1,270 @@
+{
+  "name": "kaldrax-memory-extraction-v1",
+  "version": 1,
+  "provenance": "synthetic_curated",
+  "description": "Annotated synthetic engineering candidates. Expected claims have manually authored match_terms used for deterministic one-to-one matching; confidence metrics are descriptive for this sample only.",
+  "cases": [
+    {
+      "id": "persistence-and-migration",
+      "category": "persistence",
+      "objective": "Summarize durable storage decisions",
+      "candidate": "Decision: SQLite is the local durable store. The database uses write-ahead logging and a busy timeout. Rule: schema upgrades are additive and preserve existing rows. A developer also prefers dark terminal themes.",
+      "expected": [
+        {
+          "match_terms": [
+            "sqlite",
+            "durable"
+          ]
+        },
+        {
+          "match_terms": [
+            "write-ahead",
+            "logging"
+          ]
+        },
+        {
+          "match_terms": [
+            "additive",
+            "schema"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "api-contracts",
+      "category": "api",
+      "objective": "Extract stable API behavior",
+      "candidate": "Rule: retryable writes require idempotency keys. API throttling returns Retry-After. Decision: list endpoints use opaque cursors so pagination remains stable while records change.",
+      "expected": [
+        {
+          "match_terms": [
+            "idempotency",
+            "writes"
+          ]
+        },
+        {
+          "match_terms": [
+            "retry-after",
+            "throttling"
+          ]
+        },
+        {
+          "match_terms": [
+            "opaque",
+            "cursors"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "security-controls",
+      "category": "security",
+      "objective": "Extract security controls from implementation notes",
+      "candidate": "Rule: session cookies use Secure, HttpOnly, and SameSite. Rule: credentials and authorization headers are redacted from logs. Rule: database access uses parameterized SQL rather than string interpolation.",
+      "expected": [
+        {
+          "match_terms": [
+            "httponly",
+            "samesite"
+          ]
+        },
+        {
+          "match_terms": [
+            "credentials",
+            "logs"
+          ]
+        },
+        {
+          "match_terms": [
+            "parameterized",
+            "sql"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "asynchronous-processing",
+      "category": "async",
+      "objective": "Capture resilient background processing practices",
+      "candidate": "Pattern: the outbox row is committed in the same transaction as the domain update. Rule: transient failures use exponential backoff with jitter. Rule: exhausted messages move to a dead-letter queue with the failure reason preserved.",
+      "expected": [
+        {
+          "match_terms": [
+            "outbox",
+            "transaction"
+          ]
+        },
+        {
+          "match_terms": [
+            "exponential",
+            "jitter"
+          ]
+        },
+        {
+          "match_terms": [
+            "dead-letter",
+            "queue"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "observability",
+      "category": "observability",
+      "objective": "Record observability conventions",
+      "candidate": "Rule: structured logs include a correlation identifier and redact personal data. Rule: trace identifiers propagate into background jobs. Decision: alert on service-level objective burn rate rather than host CPU alone.",
+      "expected": [
+        {
+          "match_terms": [
+            "structured",
+            "logs",
+            "redact"
+          ]
+        },
+        {
+          "match_terms": [
+            "trace",
+            "background"
+          ]
+        },
+        {
+          "match_terms": [
+            "objective",
+            "burn",
+            "rate"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "release-safety",
+      "category": "delivery",
+      "objective": "Extract release and deployment safeguards",
+      "candidate": "Rule: readiness checks fail when a required dependency is unavailable. Rule: a failed post-deploy health check triggers rollback to the previous artifact. CI pins the Python runtime and uses the dependency lock file.",
+      "expected": [
+        {
+          "match_terms": [
+            "readiness",
+            "dependency"
+          ]
+        },
+        {
+          "match_terms": [
+            "rollback",
+            "artifact"
+          ]
+        },
+        {
+          "match_terms": [
+            "python",
+            "lock"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "frontend-accessibility",
+      "category": "frontend",
+      "objective": "Summarize accessibility requirements",
+      "candidate": "Rule: all interactive controls work with keyboard navigation and show visible focus. Rule: text meets WCAG AA contrast requirements. Status must not be communicated by color alone.",
+      "expected": [
+        {
+          "match_terms": [
+            "keyboard",
+            "focus"
+          ]
+        },
+        {
+          "match_terms": [
+            "wcag",
+            "contrast"
+          ]
+        },
+        {
+          "match_terms": [
+            "status",
+            "color"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "testing-and-quality",
+      "category": "testing",
+      "objective": "Extract repeatable software quality practices",
+      "candidate": "Pattern: property-based tests exercise parser invariants over generated inputs. Rule: migration tests include the oldest supported database schema. CI runs formatting, lint, type checking, and static analysis.",
+      "expected": [
+        {
+          "match_terms": [
+            "property-based",
+            "parser"
+          ]
+        },
+        {
+          "match_terms": [
+            "migration",
+            "schema"
+          ]
+        },
+        {
+          "match_terms": [
+            "lint",
+            "static"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "operations",
+      "category": "operations",
+      "objective": "Capture operational safety practices",
+      "candidate": "Rule: restore drills verify that backups are recoverable. Rule: risky launches use feature flags with an emergency kill switch. Rule: service containers run as a non-root user.",
+      "expected": [
+        {
+          "match_terms": [
+            "restore",
+            "backups"
+          ]
+        },
+        {
+          "match_terms": [
+            "feature",
+            "kill"
+          ]
+        },
+        {
+          "match_terms": [
+            "containers",
+            "non-root"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "architecture-and-config",
+      "category": "architecture",
+      "objective": "Extract architectural boundaries and configuration safety",
+      "candidate": "Decision: domain workflows depend on stable ports while provider integrations remain replaceable adapters. Rule: all memory reads are isolated by project identifier. Rule: required configuration is type-checked at startup and errors do not reveal secret values.",
+      "expected": [
+        {
+          "match_terms": [
+            "ports",
+            "adapters"
+          ]
+        },
+        {
+          "match_terms": [
+            "memory",
+            "project"
+          ]
+        },
+        {
+          "match_terms": [
+            "configuration",
+            "startup"
+          ]
+        }
+      ]
+    }
+  ]
+}
