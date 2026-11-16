@@ -1,3 +1,5 @@
+import pytest
+
 from kaldrax.memory import MemoryRecord, MemoryStatus, MemoryType, SQLiteMemoryStore
 
 
@@ -107,4 +109,29 @@ def test_embedding_provider_failure_falls_back_to_lexical_conflicts(tmp_path):
     conflicts = store.detect_conflicts("project")
     assert len(conflicts) == 1
     assert "semantic similarity=unavailable" in conflicts[0].reason
+    store.close()
+
+@pytest.mark.parametrize(("dimension", "first", "second"), [
+    ("availability", "allow", "deny"),
+    ("visibility", "public", "private"),
+    ("location", "local", "cloud"),
+    ("connectivity", "connected", "disconnected"),
+    ("execution", "synchronous", "asynchronous"),
+    ("mutability", "writable", "immutable"),
+    ("retention", "retain", "delete"),
+    ("membership", "include", "exclude"),
+    ("obligation", "required", "optional"),
+    ("operation", "accept", "reject"),
+    ("automation", "automatic", "manual"),
+    ("transport_security", "encrypted", "plaintext"),
+    ("strictness", "fail_closed", "fail_open"),
+])
+def test_all_opposition_dimensions_are_detected(tmp_path, dimension, first, second):
+    store = SQLiteMemoryStore(tmp_path / "memory.sqlite3")
+    store.save(_record(f"Rule: {first} project artifact storage"))
+    store.save(_record(f"Rule: {second} project artifact storage"))
+
+    conflicts = store.detect_conflicts("project")
+    assert len(conflicts) == 1
+    assert dimension in conflicts[0].reason
     store.close()
