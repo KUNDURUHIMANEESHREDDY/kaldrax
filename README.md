@@ -157,12 +157,13 @@ python -m compileall -q src tests
 
 All provider calls in one run share a single thread-safe budget, including the executor, evaluator, optional memory extractor, planner, builder, and reviewer.
 
-Default limits are 20 calls, 60,000 estimated input tokens, 12,000 completion tokens, and 72,000 total tokens. Override them using:
+Default limits are 20 calls, 60,000 estimated input tokens, 12,000 completion tokens, 72,000 total tokens, and 600 seconds of wall-clock time. Each provider request timeout is capped by the remaining run deadline. Override them using:
 
 - `KALDRAX_MAX_PROVIDER_CALLS`
 - `KALDRAX_MAX_RUN_INPUT_TOKENS`
 - `KALDRAX_MAX_RUN_OUTPUT_TOKENS`
 - `KALDRAX_MAX_RUN_TOTAL_TOKENS`
+- `KALDRAX_MAX_RUN_DURATION_SECONDS` — shared wall-clock budget (default 600 seconds)
 
 An optional estimated spending ceiling requires all three variables:
 

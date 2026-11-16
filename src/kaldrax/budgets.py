@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import math
 import threading
+import time
 from dataclasses import asdict, dataclass
 from uuid import uuid4
 
 
 class BudgetExceeded(RuntimeError):
-    """Raised before a provider request when its reservation exceeds the run budget."""
+    """Raised when a provider request would exceed a run-wide budget."""
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,8 @@ class BudgetSnapshot:
     max_total_tokens: int
     max_cost_usd: float | None
     cost_is_estimated: bool
+    elapsed_seconds: float
+    max_duration_seconds: float
 
     def to_dict(self) -> dict[str, int | float | bool | None]:
         return asdict(self)
@@ -43,7 +46,8 @@ class RunBudget:
     Before sending a request, KALDRAX reserves a conservative prompt-token
     estimate (UTF-8 byte count) and the requested completion ceiling. Provider
     usage replaces the estimate when returned. Missing usage remains estimated.
-    Cost enforcement is enabled only when both model rates are configured.
+    The wall-clock deadline is shared across every provider role. Cost
+    enforcement is enabled only when both model rates are configured.
     """
 
     def __init__(
@@ -53,32 +57,48 @@ class RunBudget:
         max_input_tokens: int = 60_000,
         max_output_tokens: int = 12_000,
         max_total_tokens: int = 72_000,
+        max_duration_seconds: float = 600.0,
         max_cost_usd: float | None = None,
         input_cost_per_million_usd: float | None = None,
         output_cost_per_million_usd: float | None = None,
     ) -> None:
         limits = (max_calls, max_input_tokens, max_output_tokens, max_total_tokens)
-        if any(not isinstance(value, int) or isinstance(value, bool) or value < 1 for value in limits):
+        if any(
+            not isinstance(value, int) or isinstance(value, bool) or value < 1
+            for value in limits
+        ):
             raise ValueError("all token and call budgets must be positive")
         if max_total_tokens < 2:
             raise ValueError("max_total_tokens must be at least 2")
+        if not math.isfinite(max_duration_seconds) or max_duration_seconds <= 0:
+            raise ValueError("max_duration_seconds must be finite and positive")
         if max_cost_usd is not None:
-            if not math.isfinite(max_cost_usd) or max_cost_usd <= 0:
+            if (
+                isinstance(max_cost_usd, bool)
+                or not math.isfinite(max_cost_usd)
+                or max_cost_usd <= 0
+            ):
                 raise ValueError("max_cost_usd must be positive")
             if input_cost_per_million_usd is None or output_cost_per_million_usd is None:
                 raise ValueError("cost budget requires input and output model rates")
+        if (input_cost_per_million_usd is None) != (output_cost_per_million_usd is None):
+            raise ValueError("input and output model rates must be configured together")
         for rate in (input_cost_per_million_usd, output_cost_per_million_usd):
-            if rate is not None and (not math.isfinite(rate) or rate < 0):
-                raise ValueError("model token rates cannot be negative")
+            if rate is not None and (
+                isinstance(rate, bool) or not math.isfinite(rate) or rate < 0
+            ):
+                raise ValueError("model token rates must be finite and non-negative")
 
         self.max_calls = max_calls
         self.max_input_tokens = max_input_tokens
         self.max_output_tokens = max_output_tokens
         self.max_total_tokens = max_total_tokens
+        self.max_duration_seconds = float(max_duration_seconds)
         self.max_cost_usd = max_cost_usd
         self.input_rate = input_cost_per_million_usd
         self.output_rate = output_cost_per_million_usd
 
+        self._started_at = time.monotonic()
         self._calls = 0
         self._input_tokens = 0
         self._output_tokens = 0
@@ -89,14 +109,24 @@ class RunBudget:
         self._reservations: dict[str, BudgetReservation] = {}
         self._lock = threading.Lock()
 
+    def remaining_seconds(self) -> float:
+        with self._lock:
+            elapsed = time.monotonic() - self._started_at
+            return max(0.0, self.max_duration_seconds - elapsed)
+
     def reserve(self, prompt_bytes: int, requested_output_tokens: int) -> BudgetReservation:
-        if (not isinstance(prompt_bytes, int) or isinstance(prompt_bytes, bool)
-                or not isinstance(requested_output_tokens, int) or isinstance(requested_output_tokens, bool)
-                or prompt_bytes < 0 or requested_output_tokens < 1):
+        if (
+            not isinstance(prompt_bytes, int) or isinstance(prompt_bytes, bool)
+            or not isinstance(requested_output_tokens, int)
+            or isinstance(requested_output_tokens, bool)
+            or prompt_bytes < 0 or requested_output_tokens < 1
+        ):
             raise ValueError("prompt size must be non-negative and output limit positive")
         # Byte count is deliberately conservative and avoids an unconfigured tokenizer.
         estimated_input = max(1, prompt_bytes)
         with self._lock:
+            if time.monotonic() - self._started_at >= self.max_duration_seconds:
+                raise BudgetExceeded("run time budget exhausted")
             if self._calls >= self.max_calls:
                 raise BudgetExceeded(f"provider call budget exhausted ({self.max_calls})")
             input_remaining = self.max_input_tokens - self._input_tokens - self._reserved_input
@@ -107,7 +137,9 @@ class RunBudget:
             output_remaining = self.max_output_tokens - self._output_tokens - self._reserved_output
             if estimated_input > input_remaining or estimated_input >= total_remaining:
                 raise BudgetExceeded("prompt exceeds the remaining run input/total token budget")
-            output_reserved = min(requested_output_tokens, output_remaining, total_remaining - estimated_input)
+            output_reserved = min(
+                requested_output_tokens, output_remaining, total_remaining - estimated_input
+            )
             if output_reserved < 1:
                 raise BudgetExceeded("no completion tokens remain in the run budget")
 
@@ -146,10 +178,18 @@ class RunBudget:
             self._reserved_output -= current.output_tokens_reserved
             self._reserved_cost -= current.cost_usd_reserved
 
-            actual_input = current.input_tokens_reserved if prompt_tokens is None else prompt_tokens
-            actual_output = max(0, completion_bytes) if completion_tokens is None else completion_tokens
-            if actual_input < 0 or actual_output < 0:
-                raise ValueError("provider usage cannot be negative")
+            actual_input = (
+                current.input_tokens_reserved if prompt_tokens is None else prompt_tokens
+            )
+            actual_output = (
+                max(0, completion_bytes) if completion_tokens is None else completion_tokens
+            )
+            if (
+                not isinstance(actual_input, int) or isinstance(actual_input, bool)
+                or not isinstance(actual_output, int) or isinstance(actual_output, bool)
+                or actual_input < 0 or actual_output < 0
+            ):
+                raise ValueError("provider usage must be non-negative integer token counts")
             self._input_tokens += actual_input
             self._output_tokens += actual_output
             if self.max_cost_usd is not None:
@@ -167,6 +207,8 @@ class RunBudget:
                 violations.append("total-token")
             if self.max_cost_usd is not None and self._cost_usd > self.max_cost_usd:
                 violations.append("monetary")
+            if time.monotonic() - self._started_at > self.max_duration_seconds:
+                violations.append("run-time")
             if violations:
                 raise BudgetExceeded(
                     "provider-reported usage exceeded run budget after the request: "
@@ -174,11 +216,16 @@ class RunBudget:
                 )
 
     def record_failed_request(self, reservation: BudgetReservation) -> None:
-        """Release output reservation but conservatively count prompt bytes for attempted calls."""
-        self.settle(reservation, completion_tokens=0)
+        """Charge the full reservation because a timed-out request may have generated output."""
+        self.settle(
+            reservation,
+            prompt_tokens=reservation.input_tokens_reserved,
+            completion_tokens=reservation.output_tokens_reserved,
+        )
 
     def snapshot(self) -> BudgetSnapshot:
         with self._lock:
+            elapsed = max(0.0, time.monotonic() - self._started_at)
             return BudgetSnapshot(
                 calls=self._calls,
                 input_tokens=self._input_tokens,
@@ -191,4 +238,6 @@ class RunBudget:
                 max_total_tokens=self.max_total_tokens,
                 max_cost_usd=self.max_cost_usd,
                 cost_is_estimated=self.max_cost_usd is not None,
+                elapsed_seconds=round(elapsed, 3),
+                max_duration_seconds=self.max_duration_seconds,
             )

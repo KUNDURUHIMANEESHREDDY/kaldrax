@@ -9,7 +9,7 @@ KALDRAX v0.4 adds local memory intelligence, but its LLM-backed operations still
 
 ## Decisions
 
-- Share one thread-safe run budget across all provider clients involved in a task/team run. Reserve calls, prompt input estimate, and completion ceilings before requests; settle actual usage when returned by the provider.
+- Share one thread-safe run budget across all provider clients involved in a task/team run. Reserve calls, prompt input estimate, completion ceilings, and remaining wall-clock duration before requests; settle actual usage when returned by the provider.
 - Use optional estimated monetary ceilings only when the operator supplies input and output token rates. Explain that rates and byte-based token estimates are not provider invoices.
 - Provide an evaluator-specific benchmark corpus and classification metrics independent of the memory-retrieval benchmark.
 - Add a live provider smoke command; execute it in CI only on manual dispatch and only when repository secrets/variables are present.

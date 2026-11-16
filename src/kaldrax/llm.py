@@ -7,7 +7,7 @@ from typing import Callable, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from .budgets import BudgetReservation, RunBudget
+from .budgets import BudgetExceeded, BudgetReservation, RunBudget
 
 _MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 
@@ -82,9 +82,15 @@ class OpenAICompatibleClient:
         prompt_bytes = len((system_prompt + user_prompt).encode("utf-8"))
         reservation: BudgetReservation | None = None
         requested_output_tokens = self.max_tokens
+        request_timeout = self.timeout
         if self.budget is not None:
             reservation = self.budget.reserve(prompt_bytes, self.max_tokens)
             requested_output_tokens = reservation.output_tokens_reserved
+            remaining_seconds = self.budget.remaining_seconds()
+            if remaining_seconds <= 0:
+                self.budget.record_failed_request(reservation)
+                raise BudgetExceeded("run time budget exhausted")
+            request_timeout = min(self.timeout, remaining_seconds)
 
         payload = json.dumps(
             {
@@ -108,7 +114,7 @@ class OpenAICompatibleClient:
         )
 
         try:
-            with self._opener(request, timeout=self.timeout) as response:  # type: ignore[attr-defined]
+            with self._opener(request, timeout=request_timeout) as response:  # type: ignore[attr-defined]
                 raw = response.read(_MAX_RESPONSE_BYTES + 1)
         except HTTPError as exc:
             if reservation is not None:

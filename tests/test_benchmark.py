@@ -11,7 +11,7 @@ def test_benchmark_measures_confusion_matrix():
     cases = [
         BenchmarkCase("tp", "must be present", "this must be present", True),
         BenchmarkCase("tn", "missing phrase", "nothing relevant", False),
-        BenchmarkCase("fp", "test", "tests passed", False),
+        BenchmarkCase("fp", "test", "test was not run", False),
     ]
     result = run_benchmark(CriteriaEvaluator(), cases)
     assert result.total == 3

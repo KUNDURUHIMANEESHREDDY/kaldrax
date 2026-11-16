@@ -179,3 +179,32 @@ def test_client_reports_estimated_usage_when_provider_omits_usage():
     assert result.usage.estimated
     assert budget.snapshot().calls == 1
     assert budget.snapshot().total_tokens >= len("systemuser")
+
+
+def test_provider_request_timeout_is_capped_by_remaining_run_deadline(monkeypatch):
+    import json
+    import kaldrax.budgets as budgets_module
+    from kaldrax.budgets import RunBudget
+
+    now = [100.0]
+    monkeypatch.setattr(budgets_module.time, "monotonic", lambda: now[0])
+    budget = RunBudget(max_duration_seconds=5.0)
+    now[0] = 104.0
+    observed = {}
+
+    def opener(request, timeout):
+        observed["timeout"] = timeout
+        return FakeResponse(json.dumps({
+            "choices": [{"message": {"content": "bounded"}}],
+            "usage": {"prompt_tokens": 2, "completion_tokens": 1},
+        }).encode())
+
+    client = OpenAICompatibleClient(
+        api_key="secret",
+        model="model",
+        timeout=30,
+        budget=budget,
+        opener=opener,
+    )
+    assert client.complete(system_prompt="s", user_prompt="u") == "bounded"
+    assert observed["timeout"] == 1.0

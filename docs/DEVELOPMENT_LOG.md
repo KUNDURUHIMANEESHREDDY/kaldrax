@@ -150,3 +150,13 @@ This file records implementation decisions, changes, commands, verification, and
 - Brier/ECE over 30 expected claims are sample diagnostics, not calibrated guarantees.
 - Contradiction dimensions and thresholds are heuristic; nuanced scope, time, exception, and domain logic may be missed or over-flagged.
 - Embedding assistance for contradiction detection requires the existing local Ollama embedding configuration.
+
+
+### Benchmark and budget repair follow-up — 2026-11-16
+
+- Hosted CI run [43826700841](https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/actions/runs/43826700841) reported 87 passed and 2 failed on both Python 3.11 and 3.13. Later runs showed the same single remaining benchmark fixture failure after the memory benchmark count test was updated for the expanded corpus.
+- `tests/test_benchmark.py` incorrectly expected a whole-phrase evaluator to match the substring "tests" for criterion "test". The fixture now uses the exact phrase "test was not run" to measure a genuine negation false positive.
+- Added `KALDRAX_MAX_RUN_DURATION_SECONDS` (default 600 seconds) to the shared run budget. Provider HTTP timeouts are capped by the remaining run deadline.
+- Failed/uncertain provider calls now consume the full reserved completion allowance as well as the reserved input estimate, avoiding free retries after a timeout that may follow provider-side generation.
+- Added regression tests for wall-clock enforcement, conservative failed-call accounting, and request-timeout capping.
+- Hosted CI after these fixes is pending; v0.5 must not be marked verified until both Python matrix jobs pass.

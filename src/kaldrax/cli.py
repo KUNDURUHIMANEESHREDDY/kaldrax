@@ -16,7 +16,6 @@ from .execution import ExampleExecutor, LLMExecutor
 from .llm import OpenAICompatibleClient
 from .memory import MemoryReviewConflict, SQLiteMemoryStore
 from .memory_benchmarks import run_retrieval_benchmark
-from .memory_quality import run_extraction_benchmark
 from .memory_intelligence import LLMMemoryExtractor
 from .models import Task
 
@@ -40,24 +39,6 @@ def _memory_store(path: Path) -> SQLiteMemoryStore:
     return SQLiteMemoryStore(path, embedder=_embedding_provider())
 
 
-def _memory_extractor_from_env(max_memories: int = 8) -> LLMMemoryExtractor:
-    api_key = os.getenv("KALDRAX_API_KEY", "").strip()
-    model = os.getenv("KALDRAX_MODEL", "").strip()
-    if not api_key:
-        raise ValueError("KALDRAX_API_KEY is required for memory extraction benchmarking")
-    if not model:
-        raise ValueError("KALDRAX_MODEL is required for memory extraction benchmarking")
-    client = OpenAICompatibleClient(
-        api_key=api_key,
-        model=model,
-        base_url=os.getenv("KALDRAX_BASE_URL", "https://api.openai.com/v1"),
-        timeout=float(os.getenv("KALDRAX_TIMEOUT_SECONDS", "60")),
-        max_tokens=int(os.getenv("KALDRAX_MAX_TOKENS", "2048")),
-        token_parameter=os.getenv("KALDRAX_TOKEN_PARAMETER", "max_completion_tokens"),
-    )
-    return LLMMemoryExtractor(client, max_memories=max_memories)
-
-
 
 
 def _budget_from_env() -> RunBudget:
@@ -69,6 +50,7 @@ def _budget_from_env() -> RunBudget:
         max_input_tokens=int(os.getenv("KALDRAX_MAX_RUN_INPUT_TOKENS", "60000")),
         max_output_tokens=int(os.getenv("KALDRAX_MAX_RUN_OUTPUT_TOKENS", "12000")),
         max_total_tokens=int(os.getenv("KALDRAX_MAX_RUN_TOTAL_TOKENS", "72000")),
+        max_duration_seconds=float(os.getenv("KALDRAX_MAX_RUN_DURATION_SECONDS", "600")),
         max_cost_usd=float(max_cost) if max_cost else None,
         input_cost_per_million_usd=float(input_rate) if input_rate else None,
         output_cost_per_million_usd=float(output_rate) if output_rate else None,
@@ -289,15 +271,9 @@ def main() -> int:
     consolidate.add_argument("--project", default=None)
     consolidate.add_argument("--memory-db", type=Path, default=Path(".kaldrax/memory.sqlite3"))
 
-    benchmark = memory_actions.add_parser("benchmark", help="measure retrieval quality on an annotated engineering corpus")
-    benchmark.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_retrieval_engineering_v2.json"))
+    benchmark = memory_actions.add_parser("benchmark", help="measure retrieval quality on the bundled benchmark corpus")
+    benchmark.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_retrieval.json"))
     benchmark.add_argument("--k", type=int, default=3)
-
-    extraction_benchmark = memory_actions.add_parser(
-        "extraction-benchmark", help="evaluate extraction quality and confidence calibration using the configured LLM",
-    )
-    extraction_benchmark.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_extraction_v1.json"))
-    extraction_benchmark.add_argument("--max-memories", type=int, default=8)
 
 
     provider = commands.add_parser("provider-check", help="smoke-test configured executor and evaluator models")
@@ -391,16 +367,7 @@ def main() -> int:
                 result = run_retrieval_benchmark(
                     args.dataset, embedder=_embedding_provider(), k=args.k,
                 )
-            except (ValueError, TypeError, RuntimeError) as exc:
-                parser.error(str(exc))
-            print(json.dumps(result, indent=2))
-            return 0
-
-        if args.memory_action == "extraction-benchmark":
-            try:
-                extractor = _memory_extractor_from_env(args.max_memories)
-                result = run_extraction_benchmark(args.dataset, extractor=extractor)
-            except (ValueError, TypeError, RuntimeError) as exc:
+            except (ValueError, TypeError) as exc:
                 parser.error(str(exc))
             print(json.dumps(result, indent=2))
             return 0
