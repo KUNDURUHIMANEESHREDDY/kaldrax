@@ -402,6 +402,8 @@ This file records implementation decisions, changes, commands, verification, and
 - Raised the manually dispatched provider-smoke and tag-only release budgets to 40 provider calls, 36,000 completion tokens, and 100,000 total tokens so the 30-case extraction benchmark can run without silently exceeding its bounded budget.
 
 ### Verification and limitations
-- Candidate counts and structural invariants are checked in the new regression tests; hosted CI is required to verify the complete repository test matrix and Docker integration.
-- No human reviewed these labels during generation. The contradiction and extraction datasets remain ineligible for release until every case and expected claim is reviewed and immutable reviewed exports plus a hash-bound approval manifest are committed.
-- No live provider requests, Ollama measurements, extraction metrics, or confidence-calibration measurements were performed by this change.
+- GitHub Actions run [43869970403](https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/actions/runs/43869970403) passed for commit [e829858](https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/commit/e829858e6fe3e9a92af65925673671eb60f82d19).
+- Python 3.11 and 3.13 each completed the full suite with 180 passed and 1 skipped. The Python 3.13 job also passed the Docker sandbox smoke, repository patch integration, compilation, and CI-profile memory quality report.
+- Every sample-size check passed: 50 contradiction pairs (25 positive, 25 negative), 30 extraction cases, and 70 expected claims. The unreviewed contradiction benchmark reported 23 true positives, 0 false positives, and 2 false negatives (precision 1.0, recall 0.92, F1 0.9583); the two missed candidates are search-index-execution and customer-session-retention. This remains exploratory-only because labels are pending human review.
+- The overall CI-profile report passed, while release readiness remained false. Human retrieval/privacy approval, contradiction/extraction label review, hybrid retrieval evidence, live extraction, and 30 confidence observations remain outstanding.
+- The optional live-provider smoke and tag-only release gate were skipped; no live provider requests, Ollama measurements, extraction metrics, or confidence-calibration measurements were performed by this change.
