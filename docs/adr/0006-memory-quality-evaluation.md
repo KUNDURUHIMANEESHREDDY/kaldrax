@@ -38,7 +38,7 @@ These capabilities need evaluation without introducing hosted vector infrastruct
 ### Extraction and confidence evaluation
 
 - Define model confidence as a conservative estimated probability that the whole extracted claim is accurate, supported by candidate evidence, and durable.
-- Strengthen evidence quotes to exact candidate substrings with a minimum 12 characters and three tokens.
+- Strengthen evidence quotes to exact candidate substrings with a minimum 12 characters and three meaningful tokens.
 - Retain the original model-reported score and a description of its meaning in memory metadata.
 - Add a ten-case, 30-claim synthetic annotated extraction dataset with explicit match-term rubrics.
 - Match predictions to expected claims one-to-one, then report precision, recall, F1, FP/FN, and quote-validity rate.
