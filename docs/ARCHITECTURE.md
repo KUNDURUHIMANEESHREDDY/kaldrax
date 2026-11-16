@@ -1,4 +1,4 @@
-# KALDRAX v0.4 Architecture
+# KALDRAX v0.6 Architecture
 
 ## Architecture decision
 
@@ -110,14 +110,6 @@ The team coordinator runs a bounded sequential graph: planner → builder → re
 
 The provider smoke command executes a simple completion against the executor model and an evidence-backed evaluation against a distinct evaluator model. Regular CI is credential-free. A separate manual workflow dispatch can invoke live smoke only when the API key secret and model repository variables are configured.
 
-## Repository-grounded validation corpus
-
-A second retrieval corpus is derived from the public KALDRAX repository snapshot recorded in `benchmarks/memory_retrieval_kaldrax_v1.json`. Each memory cites a repository path and anchor. The draft contains 37 source-backed memories and 36 proposed engineering queries. It intentionally excludes local databases, runtime reports, credentials, environment values, private conversations, and private repositories.
-
-The dataset declares both its privacy-screening and annotation states. At introduction, privacy screening is pending operator sign-off and every query label is `assistant_proposed_pending_human_review`. The rationale and proposed relevant IDs are inspectable. A human reviewer must confirm or amend every judgment before the corpus is described as human-labeled. The automated scope check is not represented as human privacy approval.
-
-`kaldrax memory benchmark-compare` executes the lexical baseline and, when a configured loopback Ollama embedder is available, a second isolated hybrid run over the identical queries. It reports paired aggregate, per-category, and per-query deltas. If embeddings are disabled or fail, it emits the lexical result with an explicit unavailable status and no hybrid deltas. The comparison is descriptive; it does not claim statistical significance. CI always runs the credential-free lexical baseline. Local hybrid comparison requires the operator's embedding model.
-
 ## Memory quality evaluation
 
 Run the default annotated retrieval workload:
@@ -135,3 +127,25 @@ kaldrax memory extraction-benchmark
 ```
 
 This optional command makes one LLM extraction request per case. It reports the number of expected and predicted claims, one-to-one matches, false positives/negatives, precision/recall/F1, quote validity, Brier score, ECE, and reliability bins. The benchmark does not write results into the user's memory database. The synthetic dataset and its matching rubric must be replaced or supplemented with privacy-reviewed, human-labeled project examples before its metrics can support production claims.
+
+
+## Repository engineering workflow
+
+The repository path is a separate coordinator from the prose-only team flow. It depends on the planner/builder/reviewer chat-client port, the independent evaluator port, the shared run-budget ledger, a clean Git workspace, and a Docker-backed workspace verifier.
+
+1. Require a Git repository root with no staged, unstaged, or untracked changes; record the immutable base HEAD.
+2. Capture a bounded UTF-8 file snapshot. Prioritize source/tests; omit Git/runtime metadata, dependency/build caches, credentials, environment files, databases, keys, certificates, symlinks, binary/oversized files, and lower-priority files that exceed the total limit.
+3. Send the planner a path/size manifest, then send the builder the bounded snapshot and task contract. The builder must return JSON containing a summary and unified Git diff.
+4. Validate every diff section and path. Reject traversal, Windows drive/ADS syntax, Git metadata/runtime paths, credential files, binary changes, renames, submodules, and mode changes.
+5. Apply the patch only to a temporary Git staging workspace. Run one fixed Python verification module (unittest, pytest, or compileall) inside a separate disposable Docker copy. The container has no network and bounded memory, CPU, PIDs, runtime, and output.
+6. Send the diff and captured verification results to the reviewer. The independent evaluator receives an evidence pack with the original criteria, patch, sandbox status/output, and reviewer verdict.
+7. Only a successful command, non-empty test discovery for unittest/pytest, untruncated output, reviewer approval, and evaluator pass can accept the patch.
+8. Default to dry-run. Applying requires the explicit apply flag; immediately before the write, verify the checkout remains clean and its HEAD matches the captured base commit. KALDRAX does not commit or push the resulting changes.
+
+The workspace snapshot and sandbox copy are independent of the user's actual working directory. The actual checkout is never mounted into Docker. The Docker daemon, host kernel, and pre-pulled image remain trusted parts of the boundary. This is defense-in-depth, not VM-grade isolation. Custom images selected through KALDRAX_SANDBOX_IMAGE must be pre-pulled and contain Python plus the requested test module/dependencies.
+
+## New repository runtime modules
+
+- workspace captures bounded, secret-filtered Git snapshots, validates unified diffs, stages them in temporary Git workspaces, and applies accepted patches only after checking the base HEAD and clean-tree invariant.
+- workspace_sandbox copies staged files into another disposable directory and runs an allowlisted Python verification module inside Docker with no network and resource/output limits.
+- engineering implements the repository planner → patch builder → sandbox verifier → reviewer → independent evaluator loop with a shared run budget and structured report.

@@ -51,6 +51,12 @@ jobs:
           printf "print('KALDRAX_SANDBOX_SMOKE_OK')\n" > "$RUNNER_TEMP/kaldrax_sandbox_smoke.py"
           python -m kaldrax.cli sandbox run-python "$RUNNER_TEMP/kaldrax_sandbox_smoke.py" --timeout 20
 
+      - name: Verify repository patch, Docker tests, review, and apply integration
+        if: matrix.python-version == '3.13'
+        env:
+          KALDRAX_RUN_DOCKER_INTEGRATION: "1"
+        run: python -m pytest -q tests/test_engineering_integration.py
+
       - name: Compile source and tests
         run: python -m compileall -q src tests
 

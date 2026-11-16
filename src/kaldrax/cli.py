@@ -8,6 +8,8 @@ from .agents import MultiAgentCoordinator
 from .benchmark import load_cases, run_benchmark
 from .budgets import RunBudget
 from .sandbox import SandboxRunner
+from .engineering import RepositoryTeamCoordinator
+from .workspace_sandbox import WorkspaceSandboxRunner
 
 from .embeddings import OllamaEmbeddingProvider
 from .engine import RecursiveEngine
@@ -16,8 +18,6 @@ from .execution import ExampleExecutor, LLMExecutor
 from .llm import OpenAICompatibleClient
 from .memory import MemoryReviewConflict, SQLiteMemoryStore
 from .memory_benchmarks import run_retrieval_benchmark
-from .memory_benchmark_comparison import run_retrieval_comparison
-from .memory_annotation import run_annotation_review
 from .memory_quality import run_extraction_benchmark
 from .memory_intelligence import LLMMemoryExtractor
 from .models import Task
@@ -153,8 +153,39 @@ def _team(args: argparse.Namespace) -> int:
         )
     if len({model.casefold() for model in models}) != 4:
         raise ValueError("planner, builder, reviewer, and evaluator model identifiers must all differ")
+    if args.apply and args.workspace is None:
+        raise ValueError("--apply requires --workspace; the existing prose-only team workflow cannot modify files")
 
     budget = _budget_from_env()
+    task = Task(args.objective, tuple(args.criterion), project_id=args.project)
+    if args.workspace is not None:
+        default_verify_args = {
+            "unittest": ("discover", "-s", "tests", "-v"),
+            "pytest": ("-q",),
+            "compileall": ("-q", "."),
+        }
+        verify_args = tuple(args.verify_arg) if args.verify_arg is not None else default_verify_args[args.verify_module]
+        report = RepositoryTeamCoordinator(
+            planner=_client(planner_model, budget),
+            builder=_client(builder_model, budget),
+            reviewer=_client(reviewer_model, budget),
+            evaluator=LLMEvaluator(_client(evaluator_model, budget)),
+            workspace_root=args.workspace,
+            sandbox=WorkspaceSandboxRunner(
+                workspace_root=args.sandbox_workspace_root,
+                image=os.getenv("KALDRAX_SANDBOX_IMAGE") or None,
+            ),
+            verify_module=args.verify_module,
+            verify_args=verify_args,
+            timeout_seconds=args.sandbox_timeout,
+            max_cycles=args.max_cycles,
+            budget=budget,
+            artifact_dir=args.artifacts,
+        ).run(task, apply_changes=args.apply)
+        payload = report.to_dict()
+        print(json.dumps(payload, indent=2))
+        return 0 if report.status.value == "passed" else 1
+
     memory = _memory_store(_memory_path(args))
     try:
         report = MultiAgentCoordinator(
@@ -167,7 +198,7 @@ def _team(args: argparse.Namespace) -> int:
             agent_namespace=args.agent_namespace,
             budget=budget,
             artifact_dir=args.artifacts,
-        ).run(Task(args.objective, tuple(args.criterion), project_id=args.project))
+        ).run(task)
     finally:
         memory.close()
     payload = report.to_dict()
@@ -278,23 +309,6 @@ def main() -> int:
     benchmark.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_retrieval_engineering_v2.json"))
     benchmark.add_argument("--k", type=int, default=3)
 
-    benchmark_compare = memory_actions.add_parser(
-        "benchmark-compare", help="compare lexical and local-hybrid retrieval on a source-backed corpus",
-    )
-    benchmark_compare.add_argument(
-        "--dataset", type=Path, default=Path("benchmarks/memory_retrieval_kaldrax_v1.json"),
-    )
-    benchmark_compare.add_argument("--k", type=int, default=3)
-
-    benchmark_annotate = memory_actions.add_parser(
-        "benchmark-annotate", help="human-review relevance labels and privacy scope before exporting a benchmark",
-    )
-    benchmark_annotate.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_retrieval_kaldrax_v1.json"))
-    benchmark_annotate.add_argument("--reviewer", required=True, help="reviewer identity recorded with every decision")
-    benchmark_annotate.add_argument("--session", type=Path, default=None, help="resumable review-session path")
-    benchmark_annotate.add_argument("--export-dir", type=Path, default=Path(".kaldrax/benchmark-exports"))
-    benchmark_annotate.add_argument("--version", default="1.0.0", help="immutable export version (MAJOR.MINOR.PATCH)")
-
     extraction_benchmark = memory_actions.add_parser(
         "extraction-benchmark", help="evaluate extraction quality and confidence calibration using the configured LLM",
     )
@@ -316,6 +330,12 @@ def main() -> int:
     team.add_argument("--max-cycles", type=int, default=2)
     team.add_argument("--artifacts", type=Path, default=Path(".kaldrax/runs"))
     team.add_argument("--memory-db", type=Path, default=None)
+    team.add_argument("--workspace", type=Path, default=None, help="Git repository root for real file changes")
+    team.add_argument("--apply", action="store_true", help="apply the patch to the clean checkout after all checks pass")
+    team.add_argument("--verify-module", choices=("unittest", "pytest", "compileall"), default="unittest")
+    team.add_argument("--verify-arg", action="append", default=None, help="repeat to add a verification-module argument")
+    team.add_argument("--sandbox-timeout", type=int, default=120)
+    team.add_argument("--sandbox-workspace-root", type=Path, default=Path(".kaldrax/sandbox"))
 
     sandbox = commands.add_parser("sandbox", help="execute untrusted Python inside a Docker sandbox")
     sandbox_actions = sandbox.add_subparsers(dest="sandbox_action", required=True)
@@ -388,30 +408,9 @@ def main() -> int:
             parser.error(str(exc))
 
     if args.command == "memory":
-        if args.memory_action == "benchmark-annotate":
-            try:
-                result = run_annotation_review(
-                    args.dataset, reviewer=args.reviewer, session_path=args.session,
-                    export_dir=args.export_dir, version=args.version,
-                )
-            except (ValueError, TypeError, RuntimeError, OSError) as exc:
-                parser.error(str(exc))
-            print(json.dumps(result, indent=2))
-            return 0
-
         if args.memory_action == "benchmark":
             try:
                 result = run_retrieval_benchmark(
-                    args.dataset, embedder=_embedding_provider(), k=args.k,
-                )
-            except (ValueError, TypeError, RuntimeError, OSError) as exc:
-                parser.error(str(exc))
-            print(json.dumps(result, indent=2))
-            return 0
-
-        if args.memory_action == "benchmark-compare":
-            try:
-                result = run_retrieval_comparison(
                     args.dataset, embedder=_embedding_provider(), k=args.k,
                 )
             except (ValueError, TypeError, RuntimeError, OSError) as exc:

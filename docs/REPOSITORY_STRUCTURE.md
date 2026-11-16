@@ -15,7 +15,8 @@ kaldrax/
 │   │   ├── 0003-persistent-project-memory.md
 │   │   ├── 0004-memory-intelligence.md
 │   │   ├── 0005-budgeted-sandbox-agent-runtime.md
-│   │   └── 0006-memory-quality-evaluation.md
+│   │   ├── 0006-memory-quality-evaluation.md
+│   │   └── 0007-repository-engineering-loop.md
 │   ├── PRD.md
 │   ├── ARCHITECTURE.md
 │   ├── DEVELOPMENT_LOG.md
@@ -27,6 +28,9 @@ kaldrax/
 │   ├── benchmark.py
 │   ├── budgets.py
 │   ├── sandbox.py
+│   ├── workspace.py
+│   ├── workspace_sandbox.py
+│   ├── engineering.py
 │   ├── embeddings.py
 │   ├── engine.py
 │   ├── evaluation.py
@@ -70,4 +74,4 @@ Runtime files are stored under .kaldrax by default: SQLite project memory and JS
 The engine depends on domain models and the executor/evaluator/memory interfaces. Embedding and LLM transports are injected adapters. The CLI configures local storage and optional providers. Memory retrieval and extraction benchmarks use isolated datasets and temporary storage and do not mutate user project memory. Retrieval uses synthetic-curated relevance judgments; extraction uses an annotated match-term rubric.
 
 
-GitHub Actions additionally runs evaluator acceptance regression tests, the existing memory retrieval benchmark, and a Docker sandbox smoke case. The optional provider-smoke job requires manually configured repository secrets and variables.
+GitHub Actions additionally runs evaluator acceptance regression tests, lexical-versus-hybrid memory comparison, a Docker single-file smoke case, and a repository-aware patch/test/review/apply integration case. The optional provider-smoke job requires manually configured repository secrets and variables.

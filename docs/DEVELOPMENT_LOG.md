@@ -236,3 +236,36 @@ This file records implementation decisions, changes, commands, verification, and
 ### CI fixture correction
 - The second hosted run passed 132 tests and exposed one test-input ordering error in the privacy-approval scenario. The workflow correctly required the explicit privacy action before its typed confirmation.
 - Corrected the fixture sequence; hosted verification is pending.
+
+
+## 2026-11-16 — v0.6 repository build-test-review runtime
+
+### Decisions
+- Keep repository-aware engineering separate from the existing prose-only team workflow.
+- Require a clean Git repository root and snapshot one immutable base HEAD per run.
+- Never mount the operator's working checkout into Docker. Stage the candidate patch in a temporary Git workspace, then execute tests against a second disposable copy.
+- Accept unified Git diffs only; reject unsafe/traversal/credential/runtime paths, binary changes, renames, submodules, and mode changes.
+- Make repository writes opt-in with the apply flag; dry-run is the default. Applying must re-check cleanliness and the original HEAD and never creates a commit.
+- Require at least one discovered test for unittest/pytest; a zero-test green exit is not accepted.
+- Keep verification commands allowlisted to Python modules (unittest, pytest, compileall). A custom sandbox image must be pre-pulled and is configured by the operator.
+
+### Changes
+- Added workspace.py for bounded source/test-prioritized snapshots, secret filtering, patch validation, isolated staging, and stale-HEAD-safe application.
+- Added workspace_sandbox.py for a second disposable project copy and no-network, unprivileged, resource-limited Docker verification.
+- Added engineering.py for repository-aware planner/builder/reviewer/evaluator coordination, structured evidence, retry feedback, trace/report output, and explicit application.
+- Extended kaldrax team with workspace, opt-in apply, verifier-module/arguments, timeout, and sandbox-workspace options. Existing prose-only operation remains unchanged.
+- Added KALDRAX_SANDBOX_IMAGE for a pre-pulled image containing Python and the selected verification module.
+- Added a real CSV parsing repair integration fixture that begins with failing tests and verifies quoted-comma and blank-row behavior through Docker before applying.
+
+### Verification
+- Focused local test harness: 20 passed, 1 Docker integration test skipped because this execution environment has no Docker CLI.
+- Python compilation of the new modules and CLI passed.
+- The full repository matrix and actual Docker integration are delegated to push-triggered GitHub Actions; do not mark hosted verification complete until those jobs finish.
+- Live provider validation remains credential-gated and is not implied by deterministic test clients used by the CSV integration fixture.
+
+### Risks and limitations
+- Snapshot limits are 240 files, 48 KB/file, and 45 KB aggregate; omitted files cannot be understood or patched reliably.
+- Docker isolation trusts the Docker daemon, host kernel, and pre-pulled image; it is not a microVM.
+- The default Python image ships with standard-library unittest; pytest and project-specific dependencies require a custom image pre-pulled on the host.
+- The apply flag writes a patch to the user's working tree but does not commit or push it. The user remains responsible for inspecting and committing accepted changes.
+- The multi-agent sequence remains serial. It does not dispatch independent parallel worker processes or execute arbitrary shell commands.

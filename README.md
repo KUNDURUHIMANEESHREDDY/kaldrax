@@ -5,7 +5,7 @@
 
 KALDRAX is a local-first engineering application. Its local Python control plane runs bounded engineering tasks, independently evaluates candidate artifacts, and preserves project knowledge between runs. AI providers are adapters; local SQLite storage and the offline demo do not require a hosted KALDRAX service.
 
-## Core capabilities (v0.5)
+## Core capabilities (v0.6)
 
 - Bounded recursive execution with a separate evidence-backed evaluator.
 - Persistent SQLite memory scoped by project, with optional agent-private records and project-shared records.
@@ -256,6 +256,7 @@ The GitHub Actions matrix runs on Python 3.11 and 3.13, executes the full test s
 - [ADR 0004: Memory intelligence](docs/adr/0004-memory-intelligence.md)
 - [ADR 0005: Budgeted sandbox and agent runtime](docs/adr/0005-budgeted-sandbox-agent-runtime.md)
 - [ADR 0006: Memory quality and contradiction evaluation](docs/adr/0006-memory-quality-evaluation.md)
+- [ADR 0007: Repository-aware engineering loop](docs/adr/0007-repository-engineering-loop.md)
 - [Repository structure](docs/REPOSITORY_STRUCTURE.md)
 
 
@@ -277,3 +278,29 @@ For each query, the workflow displays the query, proposed relevant memories, and
 Dataset annotation approval and privacy approval are separate gates. Privacy approval requires an explicit confirmation after the source paths and copied memory content have been displayed. The source dataset is never edited. An export is written under `.kaldrax/benchmark-exports/` only when every query is approved or corrected, dataset annotation approval is granted, and privacy screening is independently approved.
 
 Exports use a numeric MAJOR.MINOR.PATCH version, a SHA-256 content digest, and write-once filenames. Retrieval benchmark reports expose `benchmark_validation.status`; datasets without complete review provenance and a valid integrity digest are labelled `exploratory_only`, not validated. Review sessions and exports are local operator data and are ignored by Git.
+
+
+### Repository-aware team workflow
+
+KALDRAX can now perform a guarded repository build-test-review cycle. It requires a Git repository root with a clean working tree, Git installed, Docker running, four distinct configured role models, and a pre-pulled sandbox image.
+
+~~~powershell
+docker pull python:3.13-slim
+kaldrax team --workspace . --project kaldrax-core --objective "Fix CSV parsing so quoted commas are preserved and blank rows are ignored" --criterion "csv.reader" --criterion "any(field.strip() for field in row)" --criterion "Sandbox verification exit code: 0" --verify-module unittest --sandbox-timeout 90
+~~~
+
+The default is a dry run: KALDRAX snapshots a bounded selection of source and test files, asks the builder for a unified Git diff, rejects unsafe paths and credential/runtime files, stages the patch in a temporary Git workspace, and runs the selected verification command in a separate disposable Docker copy. The reviewer sees the diff and actual test output; a separate evaluator checks the evidence pack. A patch is accepted only when verification exits successfully, at least one test was discovered for unittest/pytest, output was not truncated or timed out, the reviewer approves, and the independent evaluator passes.
+
+To write the accepted patch into the real checkout, add the explicit apply flag:
+
+~~~powershell
+kaldrax team --workspace . --objective "Fix CSV parsing" --criterion "csv.reader" --criterion "Sandbox verification exit code: 0" --verify-module unittest --apply
+~~~
+
+The apply flag modifies the working tree but does not create a Git commit. It rechecks that the original HEAD is unchanged and the checkout remains clean immediately before applying. Without apply, the report records a verified dry run and leaves the checkout untouched. Existing prose-only team operation remains available without a workspace argument.
+
+Supported verification modules are unittest, pytest, and compileall. The default is unittest discovery under the tests directory. Pytest requires an image that already contains pytest and the project's test dependencies. Configure a pre-pulled image with KALDRAX_SANDBOX_IMAGE; KALDRAX never pulls arbitrary images during a run. The image must contain Python and the selected verification module. Additional module arguments can be supplied with repeated verify-arg options.
+
+The snapshot is bounded to 240 files, 48 KB per file, and 45 KB total. Source and test paths take priority over docs and examples. Common credential locations, environment files (except the example file), key/certificate/database files, Git metadata, and KALDRAX runtime state are excluded or rejected. A repository that is dirty, has unsupported submodules/symlinks in touched paths, or changes HEAD during the run is refused.
+
+The sandbox disables networking, uses an unprivileged UID, drops capabilities, applies CPU/memory/PID/time/output limits, and mounts only a disposable copy (never the operator's checkout). Docker and its host kernel remain trusted; this is not a VM boundary. The workspace is a bounded snapshot, not an unrestricted clone: omitted files are unavailable to the model and may make a patch unverifiable.

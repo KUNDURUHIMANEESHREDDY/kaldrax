@@ -266,3 +266,18 @@ def test_run_budget_settings_are_shared_in_provider_clients(monkeypatch):
     budget = _budget_from_env()
     assert _client("builder", budget)[1] is budget
     assert _client("judge", budget)[1] is budget
+
+
+def test_team_apply_requires_an_explicit_repository_workspace(monkeypatch):
+    monkeypatch.setenv("KALDRAX_API_KEY", "key")
+    monkeypatch.setenv("KALDRAX_PLANNER_MODEL", "planner")
+    monkeypatch.setenv("KALDRAX_MODEL", "builder")
+    monkeypatch.setenv("KALDRAX_REVIEWER_MODEL", "reviewer")
+    monkeypatch.setenv("KALDRAX_EVALUATOR_MODEL", "judge")
+    monkeypatch.setattr("sys.argv", [
+        "kaldrax", "team", "--objective", "Change a repository",
+        "--criterion", "tests pass", "--apply",
+    ])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
