@@ -591,3 +591,30 @@ This file records implementation decisions, changes, commands, verification, and
 - Python 3.11 and 3.13 full-suite jobs passed. Python 3.13 also passed the Docker sandbox smoke and repository patch/live-validation Docker integration; Python 3.11 Docker-only steps were skipped by matrix conditions.
 - Desktop lint and production build passed. Optional live-provider smoke and v0.6 release evidence jobs were skipped; no live provider call or release approval is claimed.
 - The local 205-passed/5-skipped count was measured on the working checkout, which also contained separate untracked repository-intelligence files/tests; those concurrent changes were not staged or pushed in this work.
+
+## 2026-11-16 — Repository intelligence and dependency mapping
+
+### Decisions
+- Add repository understanding as a separate read-only layer. It can inspect a dirty checkout; the existing repository-team workflow still requires a clean, immutable Git snapshot before patch generation and apply.
+- Use the standard-library AST for Python. Use bounded language-specific recognizers for JavaScript/TypeScript, Go, Rust, Java/Kotlin, C#, and C/C++; report the heuristic boundary rather than claiming compiler-grade parsing.
+- Represent local dependency edges as importer → imported file. Detect cycles with strongly connected components, calculate transitive dependents by reverse traversal, and rank likely tests from dependency reachability plus conventional naming.
+- Keep repository scans bounded (750 files, 300 KB per file, 14 MB total), omit credentials/runtime/build outputs/symlinks/binary files, and report omissions.
+
+### Changes
+- Added src/kaldrax/repository_intelligence.py with language/framework/build-system detection, import/export metadata, local dependency resolution, entry-point candidates, cycles, affected components, relevant tests, and compact prompt serialization.
+- Added kaldrax repo analyze --root PATH with repeatable --changed PATH arguments. The command is read-only and works on dirty worktrees.
+- Integrated the architecture map into repository-team planner and builder context. Candidate patch impact and likely tests are recorded in RepositoryTeamReport and passed to the independent reviewer/evaluator evidence.
+- Added temporary-Git regression coverage for Python, JavaScript/TypeScript aliases, Go, Rust, Java, .NET, C/C++, cycle detection, transitive impact, test selection, scan exclusions, unsafe changed paths, and CLI integration.
+- Updated README, architecture documentation, repository structure, and ADR 0008.
+
+### Verification
+- Focused repository-intelligence, CLI, and repository-engineering suite: 29 passed.
+- Full local Python suite: 208 passed, 5 skipped.
+- python -m compileall -q src tests and git diff --check passed.
+- Ran kaldrax repo analyze on the actual KALDRAX checkout: 112 files scanned, 295 resolved dependency edges, 4 entry-point candidates, 27 test files, and one circular dependency component reported. For src/kaldrax/workspace.py, the analyzer found transitive dependents and 8 candidate tests.
+- No live model-provider calls were made. The analyzer and its regression tests use no API credentials or external parsing services.
+
+### Limitations
+- Python parsing is syntax-aware; other language import/export extraction is heuristic and cannot replace compiler, language-server, or build-system analysis.
+- Only imports resolved to files in the bounded scan become dependency edges. Monorepo-specific aliasing and advanced language/module semantics may require additional adapters.
+- Affected components and test targets are candidate navigation evidence. The existing Docker verification, reviewer, independent evaluator, and explicit apply gates remain authoritative.

@@ -168,6 +168,16 @@ def test_planner_is_told_it_only_receives_a_file_manifest(tmp_path):
     assert "not source contents" in prompt
     assert all(set(item) == {"path", "characters"} for item in payload["workspace_manifest"]["files"])
     assert all("content" not in item for item in payload["workspace_manifest"]["files"])
+    assert "repository_intelligence" in payload
+    assert any(
+        edge["target"] == "csv_reader.py"
+        for edge in payload["repository_intelligence"]["dependencies"]
+    )
+    assert "dependencies" in coordinator.builder.prompts[0][1]["repository_intelligence"]
+    review_payload = coordinator.reviewer.prompts[0][1]
+    assert review_payload["repository_impact"]["changed_paths"] == ["csv_reader.py"]
+    assert report.repository_intelligence["changed_paths"] == ["csv_reader.py"]
+    assert report.repository_intelligence["relevant_tests"]["csv_reader.py"] == ["tests/test_csv_reader.py"]
 
 def test_repository_team_cancellation_after_planner_stops_before_builder(tmp_path):
     root = tmp_path / "repo"

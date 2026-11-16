@@ -129,13 +129,23 @@ kaldrax memory extraction-benchmark
 This optional command makes one LLM extraction request per case. It reports the number of expected and predicted claims, one-to-one matches, false positives/negatives, precision/recall/F1, quote validity, Brier score, ECE, and reliability bins. The benchmark does not write results into the user's memory database. The synthetic dataset and its matching rubric must be replaced or supplemented with privacy-reviewed, human-labeled project examples before its metrics can support production claims.
 
 
+## Repository intelligence
+
+`RepositoryIntelligenceAnalyzer` is a read-only layer over a local Git worktree. It does not require a clean status and does not write to the repository. It discovers source languages from file suffixes, frameworks/build systems from common project manifests (Python project metadata and requirements, package.json and lockfiles, Cargo.toml, go.mod, Maven/Gradle, .NET project files, CMake/Make, and common tool configs), then extracts source-level structure.
+
+Python imports, relative imports, top-level exports, and `__main__` guards are derived from the standard-library AST. JavaScript/TypeScript imports, re-exports and declarations, Go imports/exports and package mains, Rust uses/modules/public items, Java/Kotlin imports and public types, C# using directives/public types, and C/C++ quoted includes/function declarations are extracted with bounded language-specific recognizers. External imports are retained on each file but do not become graph edges unless a matching local source file can be resolved. TypeScript path aliases and common index/module extensions are considered.
+
+The resulting directed graph points from importer to imported file. Strongly connected components with more than one file (or a self-edge) are reported as circular dependency groups. For supplied changed paths, reverse graph traversal finds transitive dependents; relevant tests are the test files in that closure plus conventional name matches. Entry points combine language syntax and common filenames with package.json and Python console-script metadata. These are candidate signals, not a guarantee every framework-specific entry point or test has been found.
+
+The scanner is bounded to 750 files, 300 KB per file, and 14 MB total. It excludes repository runtime, credentials, dependency/build outputs, symlinks, binary/invalid UTF-8, and other private paths. It reports an omission count and warns when paths are skipped. Python structure is syntax-aware; non-Python parsing is heuristic and does not replace compiler, language-server, or build-system analysis. The CLI exposes the report with `kaldrax repo analyze --root PATH`; repeat `--changed PATH` to calculate impact and test candidates.
+
 ## Repository engineering workflow
 
 The repository path is a separate coordinator from the prose-only team flow. It depends on the planner/builder/reviewer chat-client port, the independent evaluator port, the shared run-budget ledger, a clean Git workspace, and a Docker-backed workspace verifier.
 
 1. Require a Git repository root with no staged, unstaged, or untracked changes; record the immutable base HEAD.
 2. Capture a bounded UTF-8 file snapshot. Prioritize source/tests; omit Git/runtime metadata, dependency/build caches, credentials, environment files, databases, keys, certificates, symlinks, binary/oversized files, and lower-priority files that exceed the total limit.
-3. Send the planner a path/size manifest, then send the builder the bounded snapshot and task contract. The builder must return JSON containing a summary and unified Git diff.
+3. Analyze the clean checkout and send the planner the path/size manifest plus repository-intelligence map. Send the builder the bounded source snapshot and the same dependency/test map. The builder must return JSON containing a summary and unified Git diff.
 4. Validate every diff section and path. Reject traversal, Windows drive/ADS syntax, Git metadata/runtime paths, credential files, binary changes, renames, submodules, and mode changes.
 5. Apply the patch only to a temporary Git staging workspace. Run one fixed Python verification module (unittest, pytest, or compileall) inside a separate disposable Docker copy. The container has no network and bounded memory, CPU, PIDs, runtime, and output.
 6. Send the diff and captured verification results to the reviewer. The independent evaluator receives an evidence pack with the original criteria, patch, sandbox status/output, and reviewer verdict.

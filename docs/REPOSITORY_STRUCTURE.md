@@ -16,7 +16,8 @@ kaldrax/
 │   │   ├── 0004-memory-intelligence.md
 │   │   ├── 0005-budgeted-sandbox-agent-runtime.md
 │   │   ├── 0006-memory-quality-evaluation.md
-│   │   └── 0007-repository-engineering-loop.md
+│   │   ├── 0007-repository-engineering-loop.md
+│   │   └── 0008-repository-intelligence.md
 │   ├── PRD.md
 │   ├── ARCHITECTURE.md
 │   ├── DEVELOPMENT_LOG.md
@@ -29,6 +30,7 @@ kaldrax/
 │   ├── budgets.py
 │   ├── sandbox.py
 │   ├── workspace.py
+│   ├── repository_intelligence.py
 │   ├── workspace_sandbox.py
 │   ├── engineering.py
 │   ├── embeddings.py
@@ -50,6 +52,7 @@ kaldrax/
 │   ├── test_budgets.py
 │   ├── test_sandbox.py
 │   ├── test_cli.py
+│   ├── test_repository_intelligence.py
 │   ├── test_embeddings.py
 │   ├── test_engine.py
 │   ├── test_evaluation.py

@@ -1,4 +1,5 @@
 import json
+import subprocess
 
 import pytest
 
@@ -281,3 +282,47 @@ def test_team_apply_requires_an_explicit_repository_workspace(monkeypatch):
     with pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 2
+
+
+def test_repo_analyze_cli_reports_stack_and_changed_path_impact(tmp_path, monkeypatch, capsys):
+    root = tmp_path / "repo"
+    (root / "src").mkdir(parents=True)
+    (root / "tests").mkdir()
+    (root / "package.json").write_text(json.dumps({
+        "name": "cli-fixture",
+        "dependencies": {"react": "^19.0.0"},
+    }), encoding="utf-8")
+    (root / "src" / "app.ts").write_text(
+        "import { helper } from './helper';\nexport function run() { return helper(); }\n",
+        encoding="utf-8",
+    )
+    (root / "src" / "helper.ts").write_text(
+        "export function helper() { return 1; }\n",
+        encoding="utf-8",
+    )
+    (root / "tests" / "app.test.ts").write_text(
+        "import { run } from '../src/app';\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    subprocess.run(["git", "-C", str(root), "config", "user.email", "cli@example.invalid"], check=True)
+    subprocess.run(["git", "-C", str(root), "config", "user.name", "CLI Tests"], check=True)
+    subprocess.run(["git", "-C", str(root), "add", "--all"], check=True)
+    subprocess.run(["git", "-C", str(root), "commit", "-qm", "baseline"], check=True)
+
+    # Repository intelligence must remain read-only and usable on an operator's dirty worktree.
+    (root / "src" / "helper.ts").write_text(
+        "export function helper() { return 2; }\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("sys.argv", [
+        "kaldrax", "repo", "analyze", "--root", str(root),
+        "--changed", "src/helper.ts",
+    ])
+
+    assert main() == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["frameworks"] == ["React"]
+    assert "npm" in result["build_systems"]
+    assert "src/app.ts" in result["affected_components"]["src/helper.ts"]
+    assert result["relevant_tests"]["src/helper.ts"] == ["tests/app.test.ts"]

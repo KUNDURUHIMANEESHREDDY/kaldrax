@@ -35,6 +35,7 @@ from .memory_evaluation import (
 from .memory_intelligence import LLMMemoryExtractor
 from .models import Task
 from .workspace import RepositoryWorkspace, WorkspaceError
+from .repository_intelligence import RepositoryIntelligenceAnalyzer
 from .orchestration import CheckpointStore, RetryPolicy, TaskDecomposer, TaskGraphScheduler
 from .live_validation import run_live_validation
 
@@ -828,6 +829,11 @@ def main() -> int:
     repo_read = repository_actions.add_parser("read", help="read one bounded UTF-8 text file with a SHA-256")
     repo_read.add_argument("--root", type=Path, required=True)
     repo_read.add_argument("--path", required=True)
+    repo_analyze = repository_actions.add_parser(
+        "analyze", help="discover repository languages, frameworks, dependencies, entry points, and relevant tests",
+    )
+    repo_analyze.add_argument("--root", type=Path, required=True)
+    repo_analyze.add_argument("--changed", action="append", default=[], help="changed repository path; repeat to calculate affected components and tests")
     repo_apply = repository_actions.add_parser("apply", help="apply an explicit single-file edit with backup and hash precondition")
     repo_apply.add_argument("--root", type=Path, required=True)
     repo_apply.add_argument("--path", required=True)
@@ -844,6 +850,10 @@ def main() -> int:
                 payload = workspace.list_files(args.directory, limit=args.limit)
             elif args.repo_action == "read":
                 payload = workspace.read_file(args.path)
+            elif args.repo_action == "analyze":
+                payload = RepositoryIntelligenceAnalyzer(args.root).analyze(
+                    changed_paths=args.changed,
+                ).to_dict()
             elif args.repo_action == "apply":
                 content_path = args.content_file
                 if content_path.is_symlink() or not content_path.is_file():

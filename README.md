@@ -18,6 +18,7 @@ KALDRAX is a local-first engineering application. Its local Python control plane
 - Explainable contradiction candidates across negation, access policy, visibility, local/cloud, sync/async, retention, and other opposing concepts; optional hosted embeddings improve paraphrase recall. Human resolution remains mandatory.
 - Annotated engineering retrieval corpus covering 40 memories and 42 queries across 15 workload categories, with Recall@k, Precision@k, NDCG@k, MRR, top-1, and category breakdowns.
 - Extraction evaluation over 10 annotated scenarios and 30 expected claims, reporting precision, recall, F1, evidence-quote validity, Brier score, and expected calibration error.
+- Repository intelligence for multi-language structure discovery, import/export mapping, dependency graphs, cycle detection, entry points, change impact, and relevant test selection.
 - Existing v0.2/v0.3 SQLite databases migrate in place.
 
 ## Quick start
@@ -254,7 +255,7 @@ kaldrax team --project kaldrax-core --objective "Design a CSV import utility" --
 
 The coordinator runs sequentially: planner → builder → reviewer → independent evaluator. Failed reviewer findings and unmet acceptance criteria feed the next builder cycle. A run passes only when the reviewer approves and the separate evaluator passes the original immutable criteria. Role traces are stored in project-scoped, agent-specific memory, and every role shares the same run budget.
 
-This is a bounded local workflow, not a distributed scheduler. With `--workspace`, the repository coordinator captures a clean Git snapshot, provides a path manifest to the planner and a bounded source snapshot to the builder, stages a proposed unified diff in isolation, and verifies a disposable copy with the Docker workspace sandbox. A patch is applied only when sandbox verification succeeds, the reviewer approves, and the independent evaluator passes the original task criteria. Dry-run is the default; `--apply` is explicit. The engine rechecks the base commit and clean worktree before applying. It never commits or pushes.
+This is a bounded local workflow, not a distributed scheduler. With `--workspace`, the repository coordinator captures a clean Git snapshot, provides a path manifest and repository-intelligence map to the planner, and gives the builder a bounded source snapshot plus the dependency/test map. For every candidate patch it calculates affected components and relevant tests, stages the unified diff in isolation, and verifies a disposable copy with the Docker workspace sandbox. A patch is applied only when sandbox verification succeeds, the reviewer approves, and the independent evaluator passes the original task criteria. Dry-run is the default; `--apply` is explicit. The engine rechecks the base commit and clean worktree before applying. It never commits or pushes.
 
 For an example, see the repository engineering integration tests. Docker image and dependency availability remain operator-managed; arbitrary dependency installation and network access are not enabled inside the verification container.
 
@@ -274,6 +275,7 @@ The GitHub Actions matrix runs on Python 3.11 and 3.13, executes the full test s
 - [ADR 0005: Budgeted sandbox and agent runtime](docs/adr/0005-budgeted-sandbox-agent-runtime.md)
 - [ADR 0006: Memory quality and contradiction evaluation](docs/adr/0006-memory-quality-evaluation.md)
 - [ADR 0007: Repository-aware engineering loop](docs/adr/0007-repository-engineering-loop.md)
+- [ADR 0008: Repository intelligence and dependency mapping](docs/adr/0008-repository-intelligence.md)
 - [Repository structure](docs/REPOSITORY_STRUCTURE.md)
 
 
@@ -363,6 +365,8 @@ The local operator CLI also exposes a narrow repository interface:
 ```powershell
 kaldrax repo status --root .\
 kaldrax repo files --root .\ --directory src
+kaldrax repo analyze --root .\
+kaldrax repo analyze --root .\ --changed src\kaldrax\workspace.py --changed tests\test_workspace.py
 kaldrax repo read --root .\ --path src\kaldrax\engine.py
 ```
 
@@ -371,6 +375,8 @@ A single-file replacement requires the SHA-256 returned by the last read and a U
 ```powershell
 kaldrax repo apply --root .\ --path src\kaldrax\engine.py --content-file .\.kaldrax\proposed-engine.py --expected-sha256 CURRENT_SHA256
 ```
+
+`repo analyze` is read-only and works with a dirty worktree. It reports file languages, detected frameworks/build systems, imports/exports, resolved local dependency edges, probable entry points, test files, strongly connected circular-dependency groups, and—when `--changed` paths are supplied—transitive dependents and likely tests. Python imports/exports use the standard-library AST. JavaScript/TypeScript, Go, Rust, Java/Kotlin, C#, and C/C++ use bounded language-specific recognizers; only resolvable local imports become graph edges. Results are navigation evidence, not compiler-grade semantic analysis. The scanner excludes credentials, runtime state, dependency/build outputs, symlinks, binary/oversized files, and files beyond its scan limits; omissions are reported.
 
 The workspace filters secret/runtime/build paths, refuses path traversal and symlink components, limits files to supported UTF-8 text up to 1 MB, rejects stale hashes, backs up the old file under `.kaldrax/desktop-backups/`, and uses an atomic replacement. This is an explicit local edit, not an autonomous patching pipeline; it does not run tests or commit the change. The desktop editor adds a separate confirmation step before calling it.
 
