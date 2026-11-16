@@ -92,11 +92,20 @@ def run_retrieval_benchmark(
                 )
                 store.save(record)
 
+            active_embedder = False
+            embedding_error: str | None = None
             if embedder is not None:
                 # Index the fixture in batches instead of one provider request
                 # per record; this keeps local model overhead predictable.
                 store.embedder = embedder
-                store.reindex_embeddings(project_id="benchmark", batch_size=32)
+                try:
+                    store.reindex_embeddings(project_id="benchmark", batch_size=32)
+                    active_embedder = True
+                except Exception as exc:
+                    # A configured-but-unavailable local model must not make
+                    # the offline regression benchmark unusable.
+                    store.embedder = None
+                    embedding_error = type(exc).__name__
 
             case_results: list[dict[str, Any]] = []
             by_category: dict[str, list[dict[str, float]]] = defaultdict(list)
@@ -156,8 +165,9 @@ def run_retrieval_benchmark(
                 "query_count": count,
                 "categories": sorted(by_category),
                 "k": k,
-                "retrieval_mode": "hybrid" if embedder is not None else "lexical",
-                "embedding_model": getattr(embedder, "model_id", None),
+                "retrieval_mode": "hybrid" if active_embedder else "lexical",
+                "embedding_model": getattr(embedder, "model_id", None) if active_embedder else None,
+                "embedding_error": embedding_error,
                 "recall_at_k": round(_mean(recall_values), 4),
                 "precision_at_k": round(_mean(precision_values), 4),
                 "ndcg_at_k": round(_mean(ndcg_values), 4),
