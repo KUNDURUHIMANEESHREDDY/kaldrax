@@ -170,3 +170,13 @@ This file records implementation decisions, changes, commands, verification, and
 - The optional live-provider job was skipped because repository credentials/model variables were not configured; live provider behavior remains unverified.
 - The deterministic evaluator regression fixture reported 0.80 accuracy, 0.714 precision, and 1.0 recall. Known false accepts remain; this is a small regression fixture, not proof of semantic reliability.
 - Cost guardrails use operator-supplied estimates. Docker trusts the host daemon/kernel. Multi-agent orchestration is sequential and does not yet apply repository patches or invoke sandbox execution automatically.
+
+### Final review follow-up
+
+- Rewired `memory extraction-benchmark` against the current v0.5 CLI tree and shared `RunBudget`; extraction evaluation no longer uses a separate unbudgeted provider path.
+- Require model-reported confidence explicitly rather than silently substituting a default score.
+- Require evidence quotes to contain at least three meaningful tokens as well as the exact-candidate and 12-character constraints.
+- Return a null evidence-validity rate when no claims were produced.
+- Batch fixture embedding indexing in groups of 32, fall back to lexical scoring if local embedding initialization/indexing fails, and keep fixture IDs out of retrieval text.
+- Normalize environment aliases (for example, prod/production) and add parameterized tests for all 13 opposition dimensions.
+- Final GitHub Actions result for the newest main-branch commit remains unverified in this session; keep this milestone marked pending until the push-triggered workflow result is checked.
