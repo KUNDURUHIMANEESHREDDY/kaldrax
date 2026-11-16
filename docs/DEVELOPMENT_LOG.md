@@ -340,3 +340,19 @@ This file records implementation decisions, changes, commands, verification, and
 ### Release dataset selection
 - The tag-only workflow now accepts the committed, reviewed retrieval export path through the `KALDRAX_RETRIEVAL_DATASET` repository variable; unset defaults to the canonical benchmark path.
 - Documentation now requires the same file path for local attestation creation and the GitHub tag-run report, preventing accidental approval/report path mismatches.
+
+
+## 2026-11-16 — Resumable contradiction and extraction label review
+
+### Changes
+- Added `kaldrax memory quality-review` for per-case human review of contradiction and extraction labels.
+- Contradiction reviewers can accept or toggle each proposed conflict label; extraction reviewers can accept or replace each expected-claims list.
+- Persisted review progress in a source-hash-bound local session, with reviewer identity and timestamps per case. A changed source dataset invalidates the session.
+- Require separate explicit dataset approvals before creating immutable, SHA-256-addressed reviewed exports.
+- Automatically create the hash-bound review manifest against the exact reviewed exports and retrieval dataset path.
+
+### Verification and limitations
+- Added tests for label corrections, export metadata, resumable sessions, and changed-source rejection.
+- Human review is still an operator action; no labels were reviewed or approved during implementation.
+- Reviewed exports are generated only when an operator runs the command and completes every case and dataset approval.
+- Hosted CI is the authoritative verification for this change.

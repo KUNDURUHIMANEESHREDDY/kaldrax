@@ -316,13 +316,13 @@ python -m kaldrax.cli memory quality-report --profile ci
 
 The command writes JSON and Markdown under `.kaldrax/evaluation/` by default. CI uploads the same evidence as a GitHub Actions artifact and enforces the credential-free regression floors from `benchmarks/memory_release_thresholds_v1.json`.
 
-Before a v0.6 release candidate, complete the existing query-by-query review and separate privacy approval with `memory benchmark-annotate`, then use the resulting approved immutable export as the retrieval benchmark dataset. Review every expected contradiction pair and expected extraction claim, then create the hash-bound attestation:
+Before a v0.6 release candidate, complete the existing query-by-query review and separate privacy approval with `memory benchmark-annotate`, then use the resulting approved immutable export as the retrieval benchmark dataset. Review contradiction and extraction labels with the resumable, case-by-case workflow:
 
 ```bash
-python -m kaldrax.cli memory quality-approve --reviewer "reviewer-id"
+python -m kaldrax.cli memory quality-review --reviewer "reviewer-id"
 ```
 
-The command prints every labeled case for inspection and requires the exact confirmation `REVIEWED` for both datasets. Correct any proposed labels in the benchmark JSON before running approval. The manifest records the exact ordered case IDs and SHA-256 hashes of all three datasets; incomplete case coverage, changed data, or a modified manifest fails validation. The file is write-once; use a new versioned approval path after any re-review.
+For each contradiction case, explicitly accept or toggle the proposed conflict label. For each extraction case, accept or replace the expected-claims JSON. Progress is saved under `.kaldrax/`; the session is bound to the exact source-file hashes and refuses to resume against changed datasets. Each dataset requires a separate typed approval before immutable, hash-addressed reviewed exports are written under `benchmarks/reviewed/`. The command then creates the hash-bound approval manifest. It never approves labels without those interactive decisions.
 
 **Commit the evidence used by the tag build.** Pass the approved retrieval export to `quality-approve --retrieval-dataset PATH`. Commit that export, any corrected contradiction/extraction dataset files, and the resulting `benchmarks/memory_quality_review_v1.json` manifest to the release candidate. Set the GitHub repository variable `KALDRAX_RETRIEVAL_DATASET` to the committed export path so the tag workflow evaluates the same file (when unset, it uses `benchmarks/memory_retrieval_kaldrax_v1.json`). Locally, pass the same path to `quality-report --dataset PATH`. The tag workflow checks out the tagged commit; files that exist only on a developer machine cannot satisfy the release gate. The SHA-256 digest detects accidental changes, but the reviewer field is an operator attestation, not a cryptographic identity signature.
 
