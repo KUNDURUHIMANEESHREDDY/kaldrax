@@ -231,3 +231,8 @@ This file records implementation decisions, changes, commands, verification, and
 - The first annotation-workflow CI run exposed a SemVer-validation regex escaping error; 130 other tests passed on Python 3.11 and 3.13.
 - Corrected the pattern to use explicit dot character classes and strengthened the write-once export test to repeat the export from the persisted review session.
 - Verification is pending the next hosted CI run.
+
+
+### CI fixture correction
+- The second hosted run passed 132 tests and exposed one test-input ordering error in the privacy-approval scenario. The workflow correctly required the explicit privacy action before its typed confirmation.
+- Corrected the fixture sequence; hosted verification is pending.

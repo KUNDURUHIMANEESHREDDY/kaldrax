@@ -136,7 +136,7 @@ def test_tampered_export_fails_integrity_assessment(tmp_path):
         reviewer="reviewer-a",
         session_path=tmp_path / "session.json",
         export_dir=tmp_path / "exports",
-        input_fn=_inputs(["a", "a", "APPROVE", "a", "APPROVE"]),
+        input_fn=_inputs(["a", "a", "a", "APPROVE"]),
         output_fn=lambda _line: None,
     )
     export_path = next((tmp_path / "exports").glob("*.json"))
