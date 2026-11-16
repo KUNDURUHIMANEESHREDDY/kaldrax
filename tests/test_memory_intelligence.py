@@ -73,3 +73,21 @@ def test_empty_candidate_produces_no_memory_records():
         Task("Extract", ("criterion",)), "",
         source_run_id="run-1", source_event_sequences=(),
     ) == []
+
+def test_extractor_evidence_requires_three_meaningful_words():
+    candidate = "This is the data."
+    payload = json.dumps({
+        "memories": [{
+            "content": "The data is stored",
+            "summary": "Stored data",
+            "evidence": candidate,
+            "confidence": 0.8,
+            "tags": [],
+        }],
+    })
+    extractor = LLMMemoryExtractor(FakeChatClient(payload))
+    with pytest.raises(MemoryExtractionError, match="three words"):
+        extractor.extract(
+            Task("Extract a data fact", ("candidate backed",)), candidate,
+            source_run_id="run-meaningless-quote", source_event_sequences=(),
+        )
