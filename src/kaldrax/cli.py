@@ -344,6 +344,17 @@ class _TaskGraphContextClient:
 
 
 def _orchestrate(args: argparse.Namespace) -> int:
+    workspace_root = getattr(args, "workspace", None)
+    apply_changes = bool(getattr(args, "apply", False))
+    if apply_changes and workspace_root is None:
+        raise ValueError("--apply requires --workspace")
+    if workspace_root is not None:
+        workspace_status = RepositoryWorkspace(workspace_root).status()
+        if not workspace_status["clean"]:
+            raise ValueError(
+                "--workspace must be clean before orchestration starts; move or commit unrelated changes first"
+            )
+
     api_key = os.getenv("KALDRAX_API_KEY", "").strip()
     planner_model = os.getenv("KALDRAX_PLANNER_MODEL", "").strip()
     builder_model = os.getenv("KALDRAX_MODEL", "").strip()
@@ -359,11 +370,6 @@ def _orchestrate(args: argparse.Namespace) -> int:
         raise ValueError("planner, builder, reviewer, and evaluator model identifiers must all differ")
     if not args.criterion:
         raise ValueError("orchestrate requires at least one --criterion for independent evaluation")
-    workspace_root = getattr(args, "workspace", None)
-    apply_changes = bool(getattr(args, "apply", False))
-    if apply_changes and workspace_root is None:
-        raise ValueError("--apply requires --workspace")
-
     budget = _budget_from_env()
     planner = _client(planner_model, budget)
     builder = _client(builder_model, budget)

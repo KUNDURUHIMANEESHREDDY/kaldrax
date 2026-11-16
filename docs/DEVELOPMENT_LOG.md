@@ -578,3 +578,9 @@ This file records implementation decisions, changes, commands, verification, and
 
 
 - Final post-handoff verification update: full local suite **199 passed, 5 skipped**; `python -m compileall -q src tests`, `kaldrax orchestrate --help`, and `git diff --check` passed.
+
+
+- Workspace safety refinement: `kaldrax orchestrate --workspace` now validates that the target is a Git root with a clean worktree before creating provider clients, preventing model charges for a target that cannot be safely snapshotted. The existing repository coordinator still performs its immutable HEAD/clean-state recheck immediately before patch application. Added a regression test proving a dirty workspace is rejected before any provider client is created.
+
+
+- Final dirty-workspace preflight verification: full local suite **205 passed, 5 skipped** after adding the no-provider-call regression test; focused orchestration tests **18 passed**; Python compilation and `git diff --check` passed.

@@ -445,3 +445,30 @@ def test_cli_orchestration_refuses_apply_without_workspace(tmp_path, monkeypatch
     )
     with pytest.raises(ValueError, match="--apply requires --workspace"):
         cli._orchestrate(args)
+
+
+
+def test_cli_orchestration_rejects_dirty_workspace_before_provider_calls(tmp_path, monkeypatch):
+    import subprocess
+    from types import SimpleNamespace
+
+    import kaldrax.cli as cli
+
+    root = tmp_path / "dirty-repo"
+    root.mkdir()
+    tracked = root / "README.md"
+    tracked.write_text("baseline\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    subprocess.run(["git", "-C", str(root), "config", "user.name", "KALDRAX Tests"], check=True)
+    subprocess.run(["git", "-C", str(root), "config", "user.email", "tests@kaldrax.invalid"], check=True)
+    subprocess.run(["git", "-C", str(root), "add", "README.md"], check=True)
+    subprocess.run(["git", "-C", str(root), "commit", "-qm", "baseline"], check=True)
+    tracked.write_text("uncommitted edit\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        cli, "_client",
+        lambda *args, **kwargs: pytest.fail("provider clients must not be created for a dirty workspace"),
+    )
+    args = SimpleNamespace(workspace=root, apply=False)
+    with pytest.raises(ValueError, match="workspace must be clean"):
+        cli._orchestrate(args)
