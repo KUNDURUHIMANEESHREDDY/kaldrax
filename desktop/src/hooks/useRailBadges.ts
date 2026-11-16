@@ -1,4 +1,4 @@
-import { useApp } from "../store/AppStore";
+import { useApp } from "../store/useApp";
 import { itemStatus } from "../lib/format";
 
 export function useRailBadges() {

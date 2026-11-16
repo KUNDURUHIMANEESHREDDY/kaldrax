@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useApp } from "../store/AppStore";
+import { useApp } from "../store/useApp";
 import { useToast } from "../hooks/useToast";
 import { Button, Field, Input, Modal, Select, Textarea } from "./ui";
 import type {

@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useLayoutEffect,
@@ -34,6 +32,7 @@ import {
   ROLE_ACTORS,
 } from "../lib/permissions";
 import { requestAvailability } from "../lib/derive";
+import { StoreContext } from "./store-context";
 
 const STORAGE_KEY = "inventra.pbl.v1";
 
@@ -181,8 +180,6 @@ export interface StoreApi {
   resetData: () => void;
   exportState: () => string;
 }
-
-const StoreContext = createContext<StoreApi | null>(null);
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(loadState);
@@ -1043,8 +1040,3 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
 
-export function useApp(): StoreApi {
-  const ctx = useContext(StoreContext);
-  if (!ctx) throw new Error("useApp must be used inside AppStoreProvider");
-  return ctx;
-}

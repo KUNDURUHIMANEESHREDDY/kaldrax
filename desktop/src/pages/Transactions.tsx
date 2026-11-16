@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useApp } from "../store/AppStore";
+import { useApp } from "../store/useApp";
 import { projectName } from "../lib/derive";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useToast } from "../hooks/useToast";

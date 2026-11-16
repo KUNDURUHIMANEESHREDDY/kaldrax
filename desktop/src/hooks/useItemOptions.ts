@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useApp } from "../store/AppStore";
+import { useApp } from "../store/useApp";
 import { itemStatus, num } from "../lib/format";
 
 export function useItemOptions() {

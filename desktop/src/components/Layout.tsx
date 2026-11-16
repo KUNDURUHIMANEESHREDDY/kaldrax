@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { useApp } from "../store/AppStore";
+import { useApp } from "../store/useApp";
 import { alerts, searchAll, categoryById } from "../lib/derive";
 import { ROLE_ACTORS, ROLE_LABELS } from "../lib/permissions";
 import { Icon, BrandGlyph, type IconName } from "./Icons";
