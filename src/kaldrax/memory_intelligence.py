@@ -9,6 +9,13 @@ from .llm import ChatClient
 from .memory import MemoryRecord, MemoryStatus, MemoryType
 from .models import Task
 
+_EVIDENCE_STOP_WORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "been", "by", "do", "does",
+    "did", "for", "from", "has", "have", "in", "into", "is", "it", "its",
+    "of", "on", "or", "that", "the", "their", "this", "to", "was", "were",
+    "with", "without", "will", "would", "should", "could", "can", "must",
+}
+
 
 class KnowledgeExtractor(Protocol):
     def extract(
@@ -85,9 +92,15 @@ class LLMMemoryExtractor:
                 raise MemoryExtractionError("memory content must be a non-empty string of at most 800 characters")
             if not isinstance(summary, str) or len(summary) > 300:
                 raise MemoryExtractionError("memory summary must be a string of at most 300 characters")
+            evidence_tokens = (
+                token.casefold() for token in re.findall(r"[a-zA-Z0-9_]{2,}", evidence)
+            ) if isinstance(evidence, str) else ()
+            meaningful_evidence_tokens = [
+                token for token in evidence_tokens if token not in _EVIDENCE_STOP_WORDS
+            ]
             if (
                 not isinstance(evidence, str) or len(evidence.strip()) < 12
-                or len(re.findall(r"[a-zA-Z0-9_]{2,}", evidence)) < 3
+                or len(meaningful_evidence_tokens) < 3
                 or evidence not in candidate
             ):
                 raise MemoryExtractionError(
