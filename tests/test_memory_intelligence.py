@@ -53,6 +53,7 @@ def test_llm_extractor_requires_candidate_backed_quotes_and_queues_for_review():
     json.dumps({"memories": [{"content": "Fact", "evidence": "fabricated"}]}),
     json.dumps({"memories": [{"content": "Fact", "evidence": "Fact", "confidence": 2.0}]}),
     json.dumps({"memories": [{"content": "A fact", "evidence": "This is the data", "confidence": 0.8}]}),
+    json.dumps({"memories": [{"content": "A durable fact", "evidence": "Only candidate evidence is available."}]}),
 ])
 def test_llm_extractor_rejects_unverified_or_malformed_records(payload):
     extractor = LLMMemoryExtractor(FakeChatClient(payload))
