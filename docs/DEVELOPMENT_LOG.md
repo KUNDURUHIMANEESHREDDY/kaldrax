@@ -584,3 +584,10 @@ This file records implementation decisions, changes, commands, verification, and
 
 
 - Final dirty-workspace preflight verification: full local suite **205 passed, 5 skipped** after adding the no-provider-call regression test; focused orchestration tests **18 passed**; Python compilation and `git diff --check` passed.
+
+
+### Hosted verification — DAG repository handoff and clean-workspace preflight
+- Main-branch commit [1442a28](https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/commit/1442a283711f2b0dfebfac43cd0cc511825fb60e) passed GitHub Actions run [43901611927](https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/actions/runs/43901611927).
+- Python 3.11 and 3.13 full-suite jobs passed. Python 3.13 also passed the Docker sandbox smoke and repository patch/live-validation Docker integration; Python 3.11 Docker-only steps were skipped by matrix conditions.
+- Desktop lint and production build passed. Optional live-provider smoke and v0.6 release evidence jobs were skipped; no live provider call or release approval is claimed.
+- The local 205-passed/5-skipped count was measured on the working checkout, which also contained separate untracked repository-intelligence files/tests; those concurrent changes were not staged or pushed in this work.
