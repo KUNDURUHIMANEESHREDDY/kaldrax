@@ -166,6 +166,7 @@ export default function ProjectDetail() {
     [state, project]
   );
 
+
   if (!project || !stats) {
     return (
       <>
