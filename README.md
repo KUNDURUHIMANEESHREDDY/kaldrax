@@ -396,3 +396,23 @@ npm run desktop:build
 ```
 
 Windows installers are emitted under `desktop/src-tauri/target/release/bundle/`. See [desktop/README.md](desktop/README.md), [desktop/DESIGN.md](desktop/DESIGN.md), [desktop/UX-CONTRACT.md](desktop/UX-CONTRACT.md), and [desktop/ENGINEERING-WORKFLOW-UI.md](desktop/ENGINEERING-WORKFLOW-UI.md) for setup, design and integration boundaries.
+
+
+## Dependency-aware parallel orchestration
+
+The `orchestrate` command decomposes one objective into a validated task DAG, runs independent tasks concurrently, and passes completed prerequisite outputs to dependent workers. The default concurrency is four workers (maximum eight). Every provider request shares the same thread-safe run budget.
+
+Configure `KALDRAX_API_KEY`, a distinct `KALDRAX_PLANNER_MODEL`, and `KALDRAX_MODEL`, then run:
+
+```powershell
+$env:KALDRAX_API_KEY = "..."
+$env:KALDRAX_PLANNER_MODEL = "planner-model"
+$env:KALDRAX_MODEL = "builder-model"
+kaldrax orchestrate --objective "Build a CSV import feature" --criterion "quoted fields are preserved" --max-workers 4
+```
+
+Each task has a bounded retry policy (default three attempts) with exponential backoff for transient transport failures. Permanent failures are escalated to the planner for a recovery recommendation and remain failed until explicitly retried. Tasks depending on failed work are marked blocked; independent tasks continue.
+
+A graph-fingerprint-bound atomic JSON checkpoint is written under `.kaldrax/checkpoints/` by default. Re-running the same objective resumes successful work and retries interrupted work within its remaining attempt budget. Use `--retry-failed` to explicitly reset failed tasks, `--fresh` to ignore a prior checkpoint, `--checkpoint PATH` to select a checkpoint, and `--progress-jsonl PATH` to stream task events. A changed decomposition is rejected against an existing checkpoint rather than mixing results from different graphs.
+
+This DAG runner is an additional workflow; the existing planner → builder → reviewer → independent evaluator and repository patch-verification workflows remain available and unchanged. The DAG runner returns task artifacts and does not itself apply repository patches or declare a whole repository change verified. No local model runtime or local LLM is used; all planning, worker, and escalation completions go through the configured hosted HTTPS provider.

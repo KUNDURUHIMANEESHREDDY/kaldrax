@@ -489,3 +489,31 @@ This file records implementation decisions, changes, commands, verification, and
 - Hosted Docker execution and repository-team patch verification are verified. Local Windows Docker Desktop/Linux-engine execution and native desktop end-to-end testing remain locally unverified.
 - Live chat/embedding provider execution still needs operator-configured hosted API credentials and a manually dispatched provider check.
 - Regular CI success is not v0.6 release approval. Human-reviewed retrieval/privacy evidence, contradiction/extraction label approval, live embedding/retrieval measurements, and live extraction/calibration evidence remain separate release requirements.
+
+## 2026-11-16 — Dependency-aware parallel orchestration
+
+### Decisions
+- Add a distinct task-DAG workflow rather than changing the established sequential planner → builder → reviewer → independent evaluator or repository patch-verification contracts.
+- Keep decomposition bounded to 32 tasks, concurrency to 8 workers, and retries to 5 attempts maximum. A run shares the existing thread-safe provider budget across planner, workers, and escalation calls.
+- Persist task state atomically in a graph-fingerprint-bound JSON checkpoint. Never reuse checkpoint results if the decomposition fingerprint changes.
+- Retry only transient transport/provider failures with capped exponential backoff. Permanent failures are escalated for planner diagnosis and remain failed until an operator explicitly retries them. Descendants of failed tasks are blocked; unrelated tasks continue.
+- Keep all model completions on configured hosted HTTPS providers. No local LLM runtime or API credentials are needed for deterministic implementation tests.
+
+### Changes
+- Added `src/kaldrax/orchestration.py`: strict task graph validation, bounded LLM decomposition, dependency-aware parallel scheduling, per-task attempts and outputs, retry classification/backoff, failure escalation, progress events, and atomic checkpoint persistence/resumption.
+- Added `kaldrax orchestrate` with worker/attempt bounds, checkpoint selection, fresh-run and retry-failed controls, artifact output, and JSONL progress events.
+- Dependent workers receive completed outputs from their prerequisite tasks. Independent tasks run concurrently; failures do not cancel unrelated work.
+- Added `tests/test_orchestration.py` for malformed graphs/planner output, dependency cycles, concurrency, dependency blocking, transient retries, escalation, checkpoint resume, graph mismatch, and explicit failed-task retry.
+- Documented the new workflow and its boundaries in README.md.
+
+### Verification
+- Focused orchestration, existing agent, and repository-engineering tests: 25 passed.
+- Full local suite on the connected Windows device after rebasing onto the latest `origin/main`: 196 passed, 4 skipped.
+- `kaldrax orchestrate --help` rendered successfully.
+- `python -m compileall -q src tests` and `git diff --check` passed after the final edits and remote rebase.
+- Live provider calls were not run. Hosted CI, Docker-backed integration, and live provider behavior remain separate verification layers.
+
+### Limitations and risks
+- The new DAG runner produces per-task artifacts; it does not yet synthesize those outputs into a repository patch or run the existing independent evaluator over a final aggregate. Use `kaldrax team --workspace ...` for the established repository patch/review/sandbox/evaluator/apply gates.
+- A resumed run invokes decomposition again; if the planner produces a different graph, the checkpoint fingerprint check fails closed rather than mixing work. Use `--fresh` to intentionally start over.
+- Interrupted in-flight provider requests have unknown completion/billing state. Resume is at-least-once for those tasks, within the remaining attempt and shared run budgets.
