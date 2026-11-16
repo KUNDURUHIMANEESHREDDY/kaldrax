@@ -44,3 +44,28 @@ def test_benchmark_rejects_empty_relevant_sets(tmp_path):
     import pytest
     with pytest.raises(ValueError, match="cannot be empty"):
         run_retrieval_benchmark(dataset)
+
+def test_engineering_benchmark_covers_a_broad_annotated_workload():
+    from pathlib import Path
+
+    dataset = Path(__file__).parents[1] / "benchmarks" / "memory_retrieval_engineering_v2.json"
+    result = run_retrieval_benchmark(dataset, k=3)
+    assert result["dataset_provenance"] == "synthetic_curated"
+    assert result["memory_count"] >= 35
+    assert result["query_count"] >= 40
+    assert len(result["by_category"]) >= 10
+    assert "precision_at_k" in result
+    assert "ndcg_at_k" in result
+    assert result["retrieval_mode"] == "lexical"
+
+
+def test_benchmark_rejects_relevance_ids_not_in_the_corpus(tmp_path):
+    import pytest
+
+    dataset = tmp_path / "unknown-id.json"
+    dataset.write_text(json.dumps({
+        "memories": [{"id": "known", "content": "Known memory"}],
+        "queries": [{"query": "find known memory", "relevant": ["missing"]}],
+    }), encoding="utf-8")
+    with pytest.raises(ValueError, match="unknown memory IDs"):
+        run_retrieval_benchmark(dataset)
