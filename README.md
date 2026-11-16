@@ -3,19 +3,21 @@
 **Autonomous Engineering Infrastructure**
 *Build. Verify. Evolve.*
 
-KALDRAX executes engineering tasks through bounded feedback loops, evaluates candidate artifacts independently, and preserves evidence about each run. Its local control plane is designed to remain provider-neutral and auditable.
+KALDRAX is a local-first engineering application. Its local Python control plane runs bounded engineering tasks, independently evaluates candidate artifacts, and preserves project knowledge between runs. AI providers are adapters; local SQLite storage and the offline demo do not require a hosted KALDRAX service.
 
-## v0.3 capabilities
+## v0.4 capabilities
 
-- Bounded execution with configurable iteration limits.
-- OpenAI-compatible LLM executor and separate evidence-backed LLM evaluator.
-- Deterministic offline evaluator with phrase boundaries and quote evidence.
+- Bounded recursive execution with a separate evidence-backed evaluator.
 - Persistent SQLite memory scoped by project, with optional agent-private records and project-shared records.
-- Per-run working memory containing retrieved memories, failed-criterion feedback, and the previous candidate.
-- Automatic episodic memory for every completed run.
-- Conservative semantic knowledge extraction from explicit \`Decision:\`, \`Pattern:\`, \`Lesson:\`, and \`Rule:\` lines in passing candidates.
-- Deterministic lexical retrieval and exact-duplicate consolidation with source provenance.
-- Structured run events, evidence, and JSON reports.
+- Per-run working memory with retrieved context, retry feedback, and previous candidates.
+- Hybrid retrieval: local embedding cosine similarity plus lexical relevance, confidence, and freshness.
+- Optional local Ollama embeddings; no embedding SDK or hosted vector database.
+- Automatic episodic run memory and evidence-checked LLM knowledge extraction.
+- Human approval required before extracted semantic memories can influence future runs.
+- Confidence metadata, configurable memory lifetimes, and automatic exclusion of expired records.
+- Conservative contradiction detection and operator-controlled conflict resolution.
+- Reproducible retrieval benchmark with Recall@k, mean reciprocal rank, and top-1 accuracy.
+- Existing v0.2/v0.3 SQLite databases migrate in place.
 
 ## Quick start
 
@@ -26,11 +28,26 @@ python -m pip install -e ".[dev]"
 kaldrax demo
 \`\`\`
 
-The offline demo requires no credentials. Reports are written under \`.kaldrax/runs/\` and persistent memory is written to \`.kaldrax/memory.sqlite3\` by default. Both paths are ignored by Git.
+The offline demo requires no AI credentials. Reports are written under \`.kaldrax/runs/\` and persistent memory is stored at \`.kaldrax/memory.sqlite3\` by default. Runtime data is ignored by Git.
 
-## LLM-backed run
+## Local semantic embeddings
 
-Copy \`.env.example\` to \`.env\` and provide your provider settings. Export those variables in the shell before running KALDRAX; the CLI does not load \`.env\` automatically.
+KALDRAX can generate embeddings through a local Ollama process. Install Ollama, pull an embedding model, and configure:
+
+\`\`\`powershell
+ollama pull embeddinggemma
+$env:KALDRAX_EMBEDDING_MODEL = "embeddinggemma"
+$env:KALDRAX_OLLAMA_URL = "http://127.0.0.1:11434"
+kaldrax memory reindex --project kaldrax-core
+\`\`\`
+
+The Ollama adapter only accepts loopback endpoints. It uses Ollama's local \`POST /api/embed\` endpoint and stores vectors in the local SQLite database. Set \`KALDRAX_EMBEDDING_MODEL\` to an empty value or leave it unset to use lexical retrieval only. When an embedding model is changed, run \`memory reindex\` to refresh existing vectors; records indexed with a different model are not compared against the new model's query vectors.
+
+Embedding requests include project memory text and remain on the local Ollama endpoint. No vector database or additional Python package is required.
+
+## LLM-backed engineering runs
+
+Copy \`.env.example\` to \`.env\` and export your provider settings in the shell; the CLI does not load \`.env\` automatically.
 
 Required environment variables:
 
@@ -38,63 +55,81 @@ Required environment variables:
 - \`KALDRAX_MODEL\` — executor model identifier
 - \`KALDRAX_EVALUATOR_MODEL\` — a different model identifier for evaluation
 
-Optional variables: \`KALDRAX_BASE_URL\` (defaults to OpenAI's \`/v1\` API base), \`KALDRAX_TIMEOUT_SECONDS\` (defaults to \`60\`), \`KALDRAX_MAX_TOKENS\` (defaults to \`2048\` per provider request), and \`KALDRAX_TOKEN_PARAMETER\` (defaults to \`max_completion_tokens\`; set to \`max_tokens\` for legacy-compatible endpoints).
+Optional provider variables include \`KALDRAX_BASE_URL\`, \`KALDRAX_TIMEOUT_SECONDS\`, \`KALDRAX_MAX_TOKENS\`, and \`KALDRAX_TOKEN_PARAMETER\`. Embedding variables are \`KALDRAX_EMBEDDING_MODEL\`, \`KALDRAX_OLLAMA_URL\`, and \`KALDRAX_EMBEDDING_TIMEOUT_SECONDS\`.
 
 \`\`\`powershell
 $env:KALDRAX_API_KEY = "..."
 $env:KALDRAX_MODEL = "executor-model"
 $env:KALDRAX_EVALUATOR_MODEL = "different-evaluator-model"
+$env:KALDRAX_EMBEDDING_MODEL = "embeddinggemma"
 kaldrax run --project kaldrax-core --agent primary --objective "Implement a CSV parser" --criterion "unit tests pass" --criterion "README documents usage" --max-iterations 3
 \`\`\`
 
-The API key is read from the environment and is not written to run reports or memory. Each provider request has a timeout and output-token cap. The iteration limit bounds the number of executor/evaluator cycles; aggregate token or monetary accounting is not yet implemented.
+The LLM-backed run performs one additional knowledge-extraction request after a passing candidate. Extracted claims must include exact quotes from that candidate and remain pending until reviewed. The API key is not written to reports or memory. Per-request timeouts, output-token caps, and task iteration limits apply; aggregate monetary accounting is not yet implemented.
 
 ## Memory operations
 
-Every run in a given project adds an episodic record, including failures and iteration-limit outcomes. A passing candidate may also create semantic records, but only from explicit reusable-knowledge markers:
-
-\`\`\`text
-Decision: Keep acceptance criteria immutable throughout a run.
-Lesson: A failed evaluator result should feed only the missing criteria into the next iteration.
-\`\`\`
-
-Search a project's memories:
+Search approved project memories:
 
 \`\`\`powershell
 kaldrax memory search --project kaldrax-core --query "acceptance evaluator feedback"
 \`\`\`
 
-Search as a specific agent (the agent sees its own records plus project-shared records):
+Inspect candidate memories awaiting review:
 
 \`\`\`powershell
-kaldrax memory search --project kaldrax-core --agent primary --query "evaluator feedback"
+kaldrax memory search --project kaldrax-core --query "acceptance evaluator" --include-pending
 \`\`\`
 
-Consolidate exact normalized duplicates while retaining source run IDs and event sequences:
+Approve or reject a pending record using its ID:
 
 \`\`\`powershell
+kaldrax memory review --id MEMORY_ID --decision approve --reviewer local-user
+kaldrax memory review --id OTHER_MEMORY_ID --decision reject --reviewer local-user
+\`\`\`
+
+Detect possible contradictions and resolve them explicitly:
+
+\`\`\`powershell
+kaldrax memory conflicts --project kaldrax-core
+kaldrax memory resolve-conflict --conflict-id CONFLICT_ID --keep-memory-id MEMORY_ID --reviewer local-user
+\`\`\`
+
+Refresh old records by reindexing, expire records whose retention deadline has passed, and consolidate exact duplicates:
+
+\`\`\`powershell
+kaldrax memory reindex --project kaldrax-core
+kaldrax memory expire --project kaldrax-core
 kaldrax memory consolidate --project kaldrax-core
 \`\`\`
 
-\`--memory-db\` can override the default database path on \`demo\`, \`run\`, and \`memory\` commands. \`--project\` is the isolation boundary; use a stable, distinct project identifier for each codebase or workstream. \`--agent\` optionally scopes private records to one agent while allowing project-shared memory to remain visible.
+Run the bundled retrieval benchmark:
 
-## Memory model and limitations
+\`\`\`powershell
+kaldrax memory benchmark
+\`\`\`
 
-- **Working memory** is transient and scoped to one engine run. It holds retrieved records, feedback, iteration number, and previous/current candidates.
-- **Episodic memory** stores what happened during a run, with run and event provenance.
-- **Semantic memory** stores explicitly marked lessons extracted from passing outputs, also with provenance.
+The benchmark reports Recall@k, mean reciprocal rank, and top-1 accuracy. It uses an isolated temporary database and does not modify project memory. Configure a local embedding model to benchmark hybrid retrieval; without one it measures the lexical fallback.
 
-Retrieval currently uses deterministic lexical token overlap, not embeddings or a vector database. Semantic extraction is intentionally rule-based; it does not ask an LLM to invent lessons. Consolidation merges exact normalized duplicates only and is invoked explicitly with the CLI. It does not infer that two differently worded facts mean the same thing, resolve contradictions, or automatically expire outdated knowledge.
+## Memory model and guarantees
 
-Memory is local and project-scoped, not a distributed shared-memory service. Agent sharing is implemented through the shared project namespace and optional per-agent records. Separate agents/processes can use the same SQLite database, but concurrent distributed coordination and remote memory backends are not implemented. Treat memory content as untrusted historical input; the executor prompt explicitly warns against following instructions embedded in it.
+- **Working memory** is transient and scoped to one engine run.
+- **Episodic memory** records passed, failed, and iteration-limit runs with source run/event provenance.
+- **Semantic memory** stores reusable knowledge proposals with supporting candidate quotes.
+- **Approval state** separates pending, active, rejected, contested, superseded, and expired records. Only active records are retrieved by default.
+- **Confidence** influences ranking but is not a calibrated probability. Human approval raises confidence and refreshes verification time.
+- **Freshness** decays ranking as records age. Episodic records default to a 365-day lifetime and semantic records to 180 days; expired records are excluded even before the maintenance command marks their status.
+- **Hybrid retrieval** combines local embedding cosine similarity and lexical overlap, then adjusts ranking by confidence and freshness.
+- **Contradiction detection** flags high-overlap statements with explicit opposing polarity. It is a review aid, not a general natural-language logic engine. A human decides which record remains active.
+- **Consolidation** merges exact normalized duplicates only and preserves contributing source run IDs and event sequences.
 
-## Evaluation guarantees and limitations
+When Ollama is not configured or temporarily unavailable, memory persistence and lexical retrieval continue to work. Semantic extraction, conflict detection, and approval workflows do not require embeddings.
 
-The offline evaluator checks literal phrases with token boundaries. It is deterministic but does not understand paraphrases or prove semantic correctness. The LLM evaluator judges each criterion separately and requires an exact quote from the candidate for every passing result. Quotes make judgments traceable to the candidate but do not prove that the evaluator interpreted the quote correctly. A passing result is not a substitute for running tests, security checks, or human review.
+## Local-first boundary and limitations
 
-The executor produces text artifacts only. KALDRAX does not run arbitrary shell commands or code, spawn multiple agents, provision workers, or deploy software. Do not treat model-generated claims about tests or deployments as verification evidence.
+The application, SQLite database, reports, and optional embeddings runtime are local. LLM-backed execution can send the task and candidate to the configured model provider; use the offline demo or a local OpenAI-compatible model endpoint when task data must stay on-device. KALDRAX does not run arbitrary shell commands or generated code, spawn distributed agents, provision cloud workers, or deploy software.
 
-Memory and run reports may contain sensitive project information. Protect \`.kaldrax/\` and any custom paths supplied through \`--memory-db\` or \`--artifacts\`.
+Memory content and reports may contain proprietary information. Protect \`.kaldrax/\` and custom artifact/database paths. Memory is untrusted historical input and cannot alter evaluator policy or acceptance criteria.
 
 ## Development
 
@@ -111,4 +146,5 @@ python -m compileall -q src tests
 - [ADR 0001: Core stack](docs/adr/0001-core-stack.md)
 - [ADR 0002: LLM execution and evidence evaluator](docs/adr/0002-llm-executor-and-evidence-evaluator.md)
 - [ADR 0003: Persistent project memory](docs/adr/0003-persistent-project-memory.md)
+- [ADR 0004: Memory intelligence](docs/adr/0004-memory-intelligence.md)
 - [Repository structure](docs/REPOSITORY_STRUCTURE.md)

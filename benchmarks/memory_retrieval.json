@@ -1,0 +1,58 @@
+{
+  "name": "kaldrax-memory-retrieval-v1",
+  "description": "Small local regression set for project engineering memory retrieval.",
+  "memories": [
+    {
+      "id": "project-isolation",
+      "content": "Rule: Every memory lookup is constrained by project identifier to prevent cross-project disclosure.",
+      "summary": "Keep unrelated project knowledge separate.",
+      "tags": ["privacy", "tenant", "isolation"]
+    },
+    {
+      "id": "sqlite-durability",
+      "content": "Decision: SQLite persists local memory records across process restarts without a hosted database.",
+      "summary": "Durable local memory persistence.",
+      "tags": ["storage", "database", "restart"]
+    },
+    {
+      "id": "bounded-retries",
+      "content": "Rule: The recursive engine imposes finite iteration budgets to stop runaway retries.",
+      "summary": "Prevent unbounded agent loops.",
+      "tags": ["execution", "safety", "budget"]
+    },
+    {
+      "id": "secret-handling",
+      "content": "Rule: Provider credentials are not written to persisted run reports or project memory.",
+      "summary": "Keep API secrets out of durable records.",
+      "tags": ["security", "secrets", "privacy"]
+    },
+    {
+      "id": "memory-approval",
+      "content": "Decision: Newly extracted semantic knowledge remains pending until a human reviews and approves it.",
+      "summary": "Human approval gates reusable knowledge.",
+      "tags": ["review", "trust", "confidence"]
+    }
+  ],
+  "queries": [
+    {
+      "query": "how do we stop one codebase seeing another project's memories",
+      "relevant": ["project-isolation"]
+    },
+    {
+      "query": "what local database keeps notes after the app restarts",
+      "relevant": ["sqlite-durability"]
+    },
+    {
+      "query": "prevent the agent from retrying forever",
+      "relevant": ["bounded-retries"]
+    },
+    {
+      "query": "where are provider API keys stored in history",
+      "relevant": ["secret-handling"]
+    },
+    {
+      "query": "who must accept proposed reusable facts",
+      "relevant": ["memory-approval"]
+    }
+  ]
+}

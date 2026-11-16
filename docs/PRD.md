@@ -1,100 +1,86 @@
-# KALDRAX v0.3 Product Requirements Document
+# KALDRAX v0.4 Product Requirements Document
 
-**Status:** v0.3 implementation baseline
-**Category:** Autonomous Engineering Infrastructure
-**Release objective:** Add persistent project memory to bounded, independently evaluated model-backed execution.
+**Status:** v0.4 implementation baseline
+**Category:** Local-first Autonomous Engineering Infrastructure
+**Release objective:** Improve project-memory retrieval, quality controls, and human oversight without introducing hosted infrastructure.
 
 ## Vision
 
-KALDRAX is infrastructure for specifying work, coordinating execution, evaluating artifacts against explicit contracts, and iterating safely when results fail. It is not merely a chat interface or AI coding wrapper.
+KALDRAX is a local-first engineering application that learns from previous project runs while keeping execution policy, storage, and memory under local control. It should reuse traceable knowledge without treating unreviewed model output as fact.
 
-## v0.2 goals (implemented)
+## v0.4 goals
 
-1. Preserve the provider-neutral executor and evaluator ports.
-2. Add an OpenAI-compatible chat-completions adapter without a runtime SDK dependency.
-3. Add an LLM executor that receives the objective, criteria, iteration, and failed-criterion feedback.
-4. Add an LLM evaluator configured with a different model identifier from the executor.
-5. Require one evaluator result per criterion and verbatim candidate evidence for every positive judgment.
-6. Derive run success from validated criterion results, never a model-provided aggregate verdict.
-7. Improve offline deterministic matching to avoid substring false positives and preserve matched quotes.
-8. Persist evaluator exceptions as explicit failed runs.
-9. Keep the offline demo credential-free.
-
-## v0.3 goals: persistent memory
-
-1. Define typed memory records, retrieval matches, a memory-store port, and explicit per-run working memory.
-2. Persist episodic run outcomes in local SQLite, including failed and iteration-limit outcomes.
-3. Isolate all memory reads and writes by \`project_id\`.
-4. Support project-shared records and optional agent-private records without exposing another agent's private records to an agent-scoped query.
-5. Retrieve relevant memory before execution and expose it only through an optional memory-aware executor interface.
-6. Include prior candidate and evaluator feedback in the next LLM executor iteration.
-7. Extract semantic knowledge only from explicit reusable-knowledge markers in passing candidates.
-8. Preserve source run IDs and event sequence numbers for every memory record.
-9. Consolidate exact normalized duplicates while retaining their provenance.
-10. Provide CLI operations to search and consolidate memory; keep offline demo operational without credentials.
+1. Add a pluggable embedding interface and optional loopback-only Ollama adapter.
+2. Persist vectors and model identity in SQLite and support explicit reindexing after model changes.
+3. Combine semantic cosine similarity and lexical relevance, then adjust by confidence and freshness.
+4. Benchmark retrieval using Recall@k, mean reciprocal rank, and top-1 accuracy.
+5. Add confidence, verification timestamp, expiry timestamp, and review status to memory records.
+6. Require human approval before extracted semantic memories become active retrieval context.
+7. Extract additional candidate-backed knowledge through a strict optional LLM extractor.
+8. Detect explicit positive/negative contradictions and prevent approval until a human resolves them.
+9. Provide local CLI commands to inspect, approve, reject, resolve, reindex, expire, benchmark, and consolidate memory.
+10. Migrate existing v0.3 SQLite databases in place.
 
 ## Non-goals
 
-- Autonomous unrestricted shell or code execution.
-- Multi-agent coordination, agent spawning, or distributed scheduling.
-- Cloud worker provisioning, hosted memory, API, or web UI.
-- Production deployment automation.
-- A claim that LLM evaluation is objectively correct or fully independent.
-- Embedding/vector retrieval, LLM-generated memory extraction, semantic contradiction resolution, or automatic expiry in v0.3.
+- Hosted or distributed memory services.
+- Remote embedding providers or a mandatory embedding model dependency.
+- General natural-language theorem proving or contradiction resolution.
+- Probabilistic confidence calibration.
+- Multi-agent coordination across machines.
+- Automatic destructive deletion of stale or rejected knowledge.
+- Arbitrary shell/code execution or deployment automation.
+- Web UI for memory review in this milestone.
 
 ## Functional requirements
 
 | ID | Requirement | Acceptance |
 |---|---|---|
-| FR-01 | Task contract | Reject blank objective, empty/blank/duplicate criteria, and invalid iteration limit. |
-| FR-02 | Pluggable executor | Engine depends on the executor protocol, not a provider implementation. |
-| FR-03 | Pluggable evaluator | Evaluator receives only task contract and candidate. |
-| FR-04 | LLM executor | OpenAI-compatible request uses configured model and carries retry feedback. |
-| FR-05 | Independent model setting | CLI requires a non-empty evaluator model different from executor model. |
-| FR-06 | Evidence-backed LLM evaluation | Require exact criterion coverage; accept positive criterion only with a verbatim quote from candidate. |
-| FR-07 | Safe outcome derivation | Derive pass/fail from validated criterion rows, not model aggregate verdicts. |
-| FR-08 | Deterministic fallback | Match whole phrases case-insensitively with token boundaries and record matched quote. |
-| FR-09 | Bounded execution | Never exceed configured iterations; apply timeout and per-request output-token limit. |
-| FR-10 | Explicit failures | Persist executor/evaluator errors as failed run events. |
-| FR-11 | Provenance | Persist evaluations, evidence, ordered events, timestamps, and run identifier. |
-| FR-12 | Offline demo | Demo runs without network or credentials. |
-| MEM-01 | Working memory | Maintain retrieved memories, feedback, iteration, and prior/current candidates for one run only. |
-| MEM-02 | Episodic persistence | Persist every completed run with project ID, run ID, outcome, and event provenance. |
-| MEM-03 | Project isolation | Retrieval for one project never returns another project's records. |
-| MEM-04 | Agent scope | An agent-scoped read returns its own and project-shared records, not another agent's private records. |
-| MEM-05 | Memory-aware execution | Existing executor implementations remain compatible; memory-aware executors receive structured working context. |
-| MEM-06 | Semantic extraction | Extract only explicit Decision/Pattern/Lesson/Rule lines from passing candidates. |
-| MEM-07 | Evidence provenance | Every stored outcome/lesson references its source run and event sequence numbers. |
-| MEM-08 | Retrieval | Deterministic lexical ranking is bounded by a configurable result limit. |
-| MEM-09 | Consolidation | Exact duplicate merge preserves contributing source IDs, event sequences, and tags. |
-| MEM-10 | Operator controls | CLI supports project memory search and consolidation. |
+| MEM-11 | Embedding provider port | Core retrieval accepts an injected embedding provider without importing provider SDKs. |
+| MEM-12 | Local embedding adapter | Ollama adapter calls /api/embed and only accepts loopback URLs. |
+| MEM-13 | Vector persistence | Save record vectors and model ID in SQLite; migrate v0.3 schemas in place. |
+| MEM-14 | Hybrid retrieval | Combine lexical overlap and same-model cosine similarity; fall back to lexical when vectors are unavailable. |
+| MEM-15 | Retrieval benchmarks | Produce Recall@k, MRR, and top-1 metrics against a versioned corpus. |
+| MEM-16 | Confidence | Persist a bounded 0–1 confidence value and use it as a ranking factor. |
+| MEM-17 | Freshness | Apply age decay and configurable search half-life; exclude records past expiry. |
+| MEM-18 | Automatic expiry | Apply default 365-day episodic and 180-day semantic lifetimes; provide an explicit status-maintenance command. |
+| MEM-19 | Approval queue | Keep automatic semantic extraction pending; require reviewer approval or rejection before retrieval. |
+| MEM-20 | Evidence-backed extraction | LLM-generated proposals require exact quotes present in the candidate. |
+| MEM-21 | Contradiction candidates | Detect high-overlap explicit opposing-polarity semantic statements. |
+| MEM-22 | Conflict resolution | Prevent approval of conflicted pending records until a human chooses one side; supersede the rejected side with provenance. |
+| MEM-23 | Local operator controls | CLI exposes search, review, conflicts, resolve, reindex, expire, benchmark, and consolidate. |
+| MEM-24 | Backward migration | Existing SQLite memory records remain readable and default to active state after schema migration. |
+| MEM-25 | Local-first privacy | Embeddings use loopback Ollama; no hosted vector DB or cloud memory service is introduced. |
 
 ## Quality attributes
 
-- **Safety:** no arbitrary command execution; retrieved memory is untrusted; memory cannot alter evaluator policy or acceptance criteria.
-- **Reliability:** strict provider response validation, bounded requests, explicit failure events, and behavior tests.
-- **Auditability:** criterion-level quotes, ordered run events, and source run/event provenance for memory.
-- **Extensibility:** provider transport and memory persistence remain behind stable interfaces.
-- **Portability:** Python 3.11+, standard-library runtime.
-- **Cost control:** per-request output cap and iteration limit; aggregate token and monetary budgets remain open work.
-- **Memory isolation:** every memory query and write is scoped by project; optional agent-private records are kept separate.
+- **Safety:** pending memories are excluded from default retrieval; memories cannot alter evaluation policy or task acceptance criteria.
+- **Auditability:** all proposals retain source run/event references, evidence quotes, reviewer identity, and conflict resolutions.
+- **Reliability:** provider failures fall back to lexical retrieval; embeddings are validated for count, dimension, and finite numeric values.
+- **Portability:** Python 3.11+ and standard library; Ollama is optional.
+- **Data integrity:** v0.3 SQLite databases migrate additively; reindexing is explicit after model changes.
+- **Privacy:** local embedding adapter rejects non-loopback hosts; local app controls storage location.
+- **Maintainability:** embedding, extraction, and storage remain behind independent interfaces.
 
-## v0.3 success metrics
+## v0.4 success metrics
 
-- Project separation, agent visibility, persistence across process restart, and consolidation provenance have automated tests.
-- A second run in the same project retrieves prior episodic/semantic context; a different project does not.
-- The LLM executor prompt includes retrieved memory IDs and source provenance plus prior iteration output.
-- Existing v0.2 tests and offline demo continue to pass without an API key.
+- Existing v0.3 records survive migration without data loss.
+- Hybrid retrieval can return semantically relevant results with no lexical overlap when vectors are available.
+- Provider failures retain lexical retrieval behavior.
+- Extracted knowledge cannot enter default retrieval without approval.
+- Conflicting pending facts cannot be approved until resolved.
+- Expired records are not retrieved.
+- Retrieval benchmark metrics are reproducible on the bundled fixture dataset.
+- Existing v0.3 run/executor/evaluator tests remain green.
 
 ## Risks and mitigations
 
 | Risk | Mitigation |
 |---|---|
-| Evaluator misinterprets evidence | Verbatim quote requirement; document probabilistic limitation; add deterministic checks for critical criteria. |
-| Same model self-approves output | Require distinct model IDs; do not claim provider-level independence. |
-| Provider hangs or returns oversized output | Per-request timeout and 4 MiB response cap. |
-| Model usage becomes expensive | Per-request output cap and iteration limit; add aggregate token/cost accounting before higher autonomy. |
-| Generated code is unsafe | Do not execute generated code in v0.3; sandboxing remains prerequisite. |
-| Memory retrieval misses relevant knowledge | Lexical retrieval is an initial deterministic baseline; evaluate embeddings only with measured recall needs. |
-| Memory stores stale or misleading lessons | Extract only explicit markers from passing outputs; keep provenance and document that human review is still required. |
-| Similar facts are not text-identical | Consolidate exact normalized duplicates only; do not claim semantic conflict resolution. |
+| Embedding model changes vector space | Persist model identity and require reindex before querying with new model vectors. |
+| Ollama is not running | Persist records without vectors and use lexical fallback. |
+| Confidence is over-interpreted | Document that it is a ranking heuristic, not calibrated probability. |
+| Contradiction heuristic misses nuanced claims | Require explicit polarity and high token overlap; keep human approval as the final decision. |
+| LLM extraction creates inaccurate facts | Require exact candidate quote, strict schema validation, and pending approval. |
+| Old memories become stale | Apply type-specific expiry and ranking decay; preserve audit data. |
+| Benchmark is too small | Treat bundled data as a regression fixture; add real project query sets before claiming production retrieval quality. |

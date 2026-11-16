@@ -1,88 +1,86 @@
-# KALDRAX v0.3 Architecture
+# KALDRAX v0.4 Architecture
 
 ## Architecture decision
 
-KALDRAX uses a modular Python core with explicit ports for execution and evaluation. Local orchestration, policy, memory, and reports remain in the control plane. Provider integrations are adapters and cannot control run status or rewrite acceptance criteria.
+KALDRAX is a local-first engineering application. The local Python control plane owns orchestration, policy, memory, and run reports. Model providers and the embedding runtime are adapters. The core remains usable without an internet connection through deterministic execution, evaluation, SQLite persistence, and lexical retrieval.
 
 ## Technology stack
 
 | Layer | Choice | Rationale |
 |---|---|---|
-| Runtime | Python 3.11+ | Portable and suitable for agent/tool integrations. |
-| Core / provider transport | Python standard library | Small, provider-neutral runtime; no SDK lock-in. |
-| Packaging / CLI | pyproject.toml, setuptools, argparse | Minimal installable package and CLI. |
+| Runtime | Python 3.11+ | Portable local runtime. |
+| Core / provider transport | Python standard library | No SDK lock-in or runtime service dependency. |
+| Packaging / CLI | setuptools, argparse | Minimal application packaging. |
 | Tests | pytest | Behavior-focused automated tests. |
-| Run records | JSON files | Human-inspectable local provenance. |
-| Memory persistence | SQLite | Durable local records without a new runtime dependency. |
-| LLM transport | OpenAI-compatible chat completions | Compatible hosted or local endpoints through one adapter. |
-| API, cloud workers, UI | Deferred | Stabilize local execution and evaluation contracts first. |
+| Run records | JSON files | Human-inspectable provenance. |
+| Memory persistence | SQLite | Durable local records and vectors. |
+| Embeddings | Local Ollama API, optional | Local semantic vectors without a hosted vector DB. |
+| LLM transport | OpenAI-compatible chat completions | Configurable hosted or local model adapters. |
+| Desktop/web UI | v1 local app surface; not part of this memory milestone | Keep application policy in the Python core. |
 
 ## Component boundaries
 
 - **Task contract (models):** immutable objective, unique acceptance criteria, iteration budget, and project scope.
-- **Chat client (llm):** provider HTTP transport, authentication header, timeout, response size, and response-shape validation.
-- **Executor (execution):** produces one candidate per iteration; the LLM adapter cannot assign a verdict.
-- **Evaluator (evaluation):** evaluates only the task contract and candidate. The LLM evaluator requires criterion-level results and exact candidate quotes for positive judgments.
-- **Memory (memory):** typed records, working context, retrieval matches, and a storage protocol; SQLite is the first adapter.
-- **Engine (engine):** controls iteration, memory retrieval, feedback, stop conditions, error handling, and event recording.
-- **CLI (cli):** configures adapters from environment variables and delegates to the engine.
-- **Run report:** terminal status, evaluations, quote evidence, final output, and ordered events. API credentials are excluded.
+- **Chat client (llm):** model request transport, authentication, timeout, response size, and response validation.
+- **Executor (execution):** produces one candidate per iteration; cannot assign a verdict.
+- **Evaluator (evaluation):** evaluates only the task contract and candidate; the evaluator does not receive memory.
+- **Embedding adapter (embeddings):** generates local vectors through Ollama's loopback-only HTTP API.
+- **Memory (memory):** typed records, statuses, confidence, expiry, retrieval matches, conflicts, and SQLite persistence.
+- **Memory intelligence (memory_intelligence):** optional LLM extraction with exact-candidate evidence requirements.
+- **Benchmark (memory_benchmarks):** measures retrieval on an isolated fixture database.
+- **Engine (engine):** controls iteration, memory retrieval, feedback, extraction, stop conditions, and event recording.
+- **CLI (cli):** configures adapters from environment variables and exposes local operator controls.
 
-## Execution and evaluation sequence
+## Execution with memory
 
-1. Validate the task contract and finite iteration limit.
-2. Ask the executor for a candidate.
-3. Ask the independent evaluator to assess every original acceptance criterion.
-4. Validate the evaluator response schema and evidence quotes.
-5. Derive the overall verdict from validated per-criterion results.
-6. On failure, pass missing criteria back to the executor; stop on success or iteration exhaustion.
-7. On executor/evaluator exception, mark the run failed and persist an explicit error event.
-8. Persist the report when an artifact directory is configured.
+1. Validate the task, stable project ID, and iteration limit.
+2. Retrieve active project memory using lexical ranking and, when configured, same-model embeddings.
+3. Rank candidate records using hybrid relevance, confidence, and freshness.
+4. Give the memory-aware executor bounded context containing retrieved records, provenance, feedback, and the previous candidate.
+5. Give only the original task contract and candidate to the independent evaluator.
+6. Retry with missing criteria as feedback, or stop on pass/limit/error.
+7. Persist every completed run as an episodic record.
+8. On a passing run, optionally extract reusable candidate-backed facts. Store proposals as pending; they are not retrieved by default until a human approves them.
 
-## Provider configuration
+## Memory persistence and schema evolution
 
-The LLM CLI reads \`KALDRAX_API_KEY\`, \`KALDRAX_MODEL\`, and \`KALDRAX_EVALUATOR_MODEL\`. Executor and evaluator model identifiers must differ. \`KALDRAX_BASE_URL\`, \`KALDRAX_TIMEOUT_SECONDS\`, \`KALDRAX_MAX_TOKENS\`, and \`KALDRAX_TOKEN_PARAMETER\` are optional. The token parameter defaults to \`max_completion_tokens\`; legacy-compatible endpoints can select \`max_tokens\`. A separate model identifier reduces direct self-evaluation but does not prove independence of provider, model lineage, or data. Secrets are not serialized into reports or memory.
+The default database is \`.kaldrax/memory.sqlite3\`. SQLite schema migration adds confidence, status, verification/expiry timestamps, embedding vector/model, and update-time columns to v0.3 databases without discarding existing records. WAL mode and a busy timeout support local processes using one database; this is not a distributed coordination protocol.
 
-## v0.3 memory architecture
+Each record stores project ID, memory type, content/summary, source run ID, source event sequences, optional agent ID, tags, confidence, status, verification time, expiry time, and optional vector/model ID. SQL retrieval always scopes by project. Agent-scoped reads expose that agent's private records plus project-shared records.
 
-### Memory layers
+## Hybrid retrieval
 
-- **Working memory:** transient state owned by one \`RecursiveEngine.run\` call. It contains run/project IDs, retrieved matches, current iteration, previous/current candidate, and failed-criterion feedback. It is discarded after the run.
-- **Episodic memory:** a durable record for every completed run, including passed, failed, and iteration-limit outcomes. Each entry stores objective, acceptance criteria, outcome, iteration count, final candidate, source run ID, and originating event sequence numbers.
-- **Semantic memory:** reusable knowledge extracted only from explicit \`Decision:\`, \`Pattern:\`, \`Lesson:\`, or \`Rule:\` lines in passing candidates. Each entry retains its source run and event provenance.
+The optional \`OllamaEmbeddingProvider\` sends input to a local \`POST /api/embed\` endpoint. The base URL must resolve to localhost or a loopback IP. The returned vector is stored with the provider/model identifier. Query vectors are compared only to vectors created with the same model identifier and compatible dimension. A model change requires explicit reindexing.
 
-### Components and dependency direction
+Hybrid relevance combines normalized cosine similarity and lexical token overlap, with configurable semantic weight. If embeddings are disabled, unavailable, absent for older records, or incompatible, the record uses lexical score only. Confidence and an exponential freshness decay then scale the result. The search excludes records whose expiry deadline has passed and retrieves active records only unless an operator explicitly asks to include pending records.
 
-- **Memory contract (\`memory\`):** \`MemoryRecord\`, \`MemoryMatch\`, \`WorkingMemory\`, \`MemoryType\`, and the \`MemoryStore\` protocol.
-- **SQLite adapter (\`SQLiteMemoryStore\`):** schema creation, durable writes, project-constrained retrieval, and exact-duplicate consolidation.
-- **Engine:** retrieves context before the first iteration, updates working memory during retries, and records the completed run after execution/evaluation.
-- **Memory-aware executor:** optional \`execute_with_memory(task, context)\` extension. Existing executors implementing only \`execute(task, feedback, iteration)\` remain compatible.
-- **LLM executor:** serializes bounded relevant memories with IDs, scores, source run IDs, event sequences, and tags. Retrieved memories are labeled untrusted historical input and cannot override the task contract.
-- **Evaluator:** receives only the original task and candidate. Memory is intentionally not supplied to the evaluator.
+The benchmark fixture reports Recall@k, mean reciprocal rank, and top-1 accuracy. Benchmark execution uses a temporary SQLite database and does not seed or modify the user's project memory.
 
-### Run sequence with memory
+## Confidence, freshness, and approval
 
-1. Validate the task, including its stable \`project_id\` and finite iteration limit.
-2. Retrieve up to the configured number of relevant project memories using the objective and acceptance criteria.
-3. Populate working memory and record the retrieved memory IDs in the run event stream.
-4. Ask the executor for a candidate. A memory-aware executor also receives relevant memory, prior feedback, and the previous candidate.
-5. Evaluate the candidate against the unchanged acceptance criteria using the independent evaluator.
-6. On failure, update working memory with the missing criteria and current candidate, then retry within the iteration budget.
-7. Persist the run report and an episodic memory record. On success, also extract explicitly marked reusable knowledge into semantic memory.
-8. Consolidate duplicates only when explicitly invoked by the operator.
+Confidence is metadata used as a ranking signal, not a calibrated probability. Automatically extracted semantic memories begin in pending status and carry a verbatim evidence quote plus their source run/event provenance. The approval operation records reviewer and timestamp, raises confidence to at least 0.9, refreshes verification time, and resets the retention deadline. Rejected proposals remain stored for audit but are not retrieved.
 
-### Persistence, isolation, and retrieval
+Episodic records default to 365 days; semantic records default to 180 days. Search excludes expired records even before the operator runs the expiry maintenance command. The CLI command marks expired records with an explicit status so they can be inspected and counted.
 
-The default database is \`.kaldrax/memory.sqlite3\`, ignored by Git. All SQL retrieval paths include \`project_id\`. Records with \`agent_id=None\` are project-shared; an agent-scoped query can see that agent's private records plus shared records. A project-level query with no agent ID can inspect all records in that project. SQLite WAL mode and a busy timeout are enabled for local multi-process access; this is not a distributed coordination guarantee.
+## Contradiction detection and resolution
 
-Retrieval uses deterministic lexical token overlap over content, summary, and tags. There is no embedding model, vector index, external database, or LLM-generated query expansion in v0.3. Consolidation groups identical normalized content by project, memory type, and agent scope, preserving contributing run IDs, event sequence numbers, and tags. It does not merge paraphrases, detect contradictions, or judge freshness.
+The current detector examines semantic records within a project for explicit opposing-polarity markers (for example, a positive statement versus an otherwise matching statement containing not/never/avoid). It requires high token-set similarity and does not infer arbitrary logical equivalence. Detected pairs are recorded as open conflicts. A pending record involved in an open conflict cannot be approved until an operator resolves the pair. Resolution activates one side and supersedes the other, recording the reviewer and decision. This is a conservative review gate, not a general contradiction model.
 
-### Trust and data handling
+## Knowledge extraction
 
-Memory content is historical, potentially stale, and untrusted. The LLM executor is instructed not to follow instructions embedded in memory. Memory cannot alter acceptance criteria or evaluator policy. SQLite memory and JSON reports may contain sensitive prompts, outputs, or project facts; protect \`.kaldrax/\` and custom paths. Remote access control, retention policies, encryption-at-rest management, and distributed shared memory remain future work.
+The offline extractor continues to recognize explicit Decision/Pattern/Lesson/Rule lines, but queues them for review rather than activating them automatically. The LLM extractor can propose additional reusable facts after a passing LLM-backed run. Every proposal must include a short exact substring from the candidate, must fit a strict JSON contract, and is stored as pending. Invalid, fabricated, or missing quotes reject the extraction response. The evaluator is never asked to validate memory proposals and does not see memory context.
+
+## Trust, privacy, and local-first constraints
+
+Memory content and retrieved prompts are untrusted historical data. The executor is instructed not to follow embedded instructions and to consider staleness/relevance. Memory cannot alter acceptance criteria or evaluator policy. Ollama embeddings are restricted to loopback endpoints to prevent accidental remote transfer. LLM-backed task execution still sends prompts/candidates to the configured chat endpoint; use a local compatible endpoint for fully local model inference. Secrets are not stored in memory or run reports.
 
 ## Known limitations
 
-LLM evaluation is probabilistic. Verbatim evidence improves traceability but does not establish that a quote logically satisfies a criterion. The offline evaluator is literal phrase matching and does not understand paraphrases. The executor emits text only; this release does not run generated code, tests, shell commands, or deployments. A passing run means only that the configured evaluator accepted the declared criteria.
-
-Semantic memory means reusable labeled knowledge records, not embedding-based semantic search. Extraction is conservative and marker-based, so unmarked lessons are not captured. Exact deduplication is operator-triggered and cannot resolve conflicting or outdated facts. The current store has no automatic expiry or human approval workflow for extracted knowledge.
+- Local embedding models must be installed and started separately; KALDRAX does not bundle model weights.
+- Hybrid retrieval is a single-vector SQLite scan, suited to a local project memory store; it is not a distributed vector index.
+- Confidence is heuristic metadata and requires evaluation against real outcomes before it can be interpreted probabilistically.
+- Freshness defaults are fixed by memory type in this release; per-project retention policy UI is deferred.
+- The contradiction detector catches a narrow class of explicit polarity conflicts and requires human judgment.
+- Automatic extraction can still propose inaccurate claims; evidence quotes improve traceability but do not prove meaning.
+- The bundled benchmark is a regression fixture, not a representative measure of all engineering-memory workloads.
+- Generated code is not executed; sandboxing and command policy are separate work.

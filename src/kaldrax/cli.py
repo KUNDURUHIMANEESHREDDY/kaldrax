@@ -4,16 +4,34 @@ import json
 import os
 from pathlib import Path
 
+from .embeddings import OllamaEmbeddingProvider
 from .engine import RecursiveEngine
 from .evaluation import LLMEvaluator
 from .execution import ExampleExecutor, LLMExecutor
 from .llm import OpenAICompatibleClient
-from .memory import SQLiteMemoryStore
+from .memory import MemoryReviewConflict, SQLiteMemoryStore
+from .memory_benchmarks import run_retrieval_benchmark
+from .memory_intelligence import LLMMemoryExtractor
 from .models import Task
 
 
 def _memory_path(args: argparse.Namespace) -> Path:
     return args.memory_db or Path(".kaldrax/memory.sqlite3")
+
+
+def _embedding_provider() -> OllamaEmbeddingProvider | None:
+    model = os.getenv("KALDRAX_EMBEDDING_MODEL", "").strip()
+    if not model:
+        return None
+    return OllamaEmbeddingProvider(
+        model=model,
+        base_url=os.getenv("KALDRAX_OLLAMA_URL", "http://127.0.0.1:11434"),
+        timeout=float(os.getenv("KALDRAX_EMBEDDING_TIMEOUT_SECONDS", "30")),
+    )
+
+
+def _memory_store(path: Path) -> SQLiteMemoryStore:
+    return SQLiteMemoryStore(path, embedder=_embedding_provider())
 
 
 def _run_llm(args: argparse.Namespace) -> int:
@@ -44,11 +62,16 @@ def _run_llm(args: argparse.Namespace) -> int:
     task = Task(
         args.objective, tuple(args.criterion), args.max_iterations, project_id=args.project,
     )
-    memory = SQLiteMemoryStore(_memory_path(args))
+    memory = _memory_store(_memory_path(args))
     try:
         report = RecursiveEngine(
-            LLMExecutor(executor_client), evaluator=LLMEvaluator(evaluator_client),
-            artifact_dir=args.artifacts, memory_store=memory, agent_id=args.agent,
+            LLMExecutor(executor_client),
+            evaluator=LLMEvaluator(evaluator_client),
+            artifact_dir=args.artifacts,
+            memory_store=memory,
+            agent_id=args.agent,
+            knowledge_extractor=LLMMemoryExtractor(executor_client),
+            memory_limit=args.memory_limit,
         ).run(task)
     finally:
         memory.close()
@@ -73,18 +96,50 @@ def main() -> int:
     run.add_argument("--memory-db", type=Path, default=None)
     run.add_argument("--project", default="default", help="memory isolation key for this project")
     run.add_argument("--agent", default=None, help="optional agent namespace; project-shared memory remains visible")
+    run.add_argument("--memory-limit", type=int, default=5)
 
     memory = commands.add_parser("memory", help="inspect or maintain persistent project memory")
     memory_actions = memory.add_subparsers(dest="memory_action", required=True)
-    search_memory = memory_actions.add_parser("search", help="retrieve memories in one project")
-    search_memory.add_argument("--query", required=True)
-    search_memory.add_argument("--project", default="default")
-    search_memory.add_argument("--limit", type=int, default=10)
-    search_memory.add_argument("--agent", default=None)
-    search_memory.add_argument("--memory-db", type=Path, default=Path(".kaldrax/memory.sqlite3"))
-    consolidate_memory = memory_actions.add_parser("consolidate", help="merge exact duplicate memories")
-    consolidate_memory.add_argument("--project", default=None)
-    consolidate_memory.add_argument("--memory-db", type=Path, default=Path(".kaldrax/memory.sqlite3"))
+
+    search = memory_actions.add_parser("search", help="retrieve approved memories in one project")
+    search.add_argument("--query", required=True)
+    search.add_argument("--project", default="default")
+    search.add_argument("--limit", type=int, default=10)
+    search.add_argument("--agent", default=None)
+    search.add_argument("--include-pending", action="store_true")
+    search.add_argument("--memory-db", type=Path, default=Path(".kaldrax/memory.sqlite3"))
+
+    review = memory_actions.add_parser("review", help="approve or reject a pending semantic memory")
+    review.add_argument("--id", required=True)
+    review.add_argument("--decision", required=True, choices=("approve", "reject"))
+    review.add_argument("--reviewer", default="local-user")
+    review.add_argument("--memory-db", type=Path, default=Path(".kaldrax/memory.sqlite3"))
+
+    conflicts = memory_actions.add_parser("conflicts", help="detect and list possible semantic contradictions")
+    conflicts.add_argument("--project", required=True)
+    conflicts.add_argument("--memory-db", type=Path, default=Path(".kaldrax/memory.sqlite3"))
+
+    resolve = memory_actions.add_parser("resolve-conflict", help="keep one side of a reviewed contradiction")
+    resolve.add_argument("--conflict-id", required=True)
+    resolve.add_argument("--keep-memory-id", required=True)
+    resolve.add_argument("--reviewer", default="local-user")
+    resolve.add_argument("--memory-db", type=Path, default=Path(".kaldrax/memory.sqlite3"))
+
+    expire = memory_actions.add_parser("expire", help="mark expired records inactive")
+    expire.add_argument("--project", default=None)
+    expire.add_argument("--memory-db", type=Path, default=Path(".kaldrax/memory.sqlite3"))
+
+    reindex = memory_actions.add_parser("reindex", help="create or refresh local embeddings")
+    reindex.add_argument("--project", default=None)
+    reindex.add_argument("--memory-db", type=Path, default=Path(".kaldrax/memory.sqlite3"))
+
+    consolidate = memory_actions.add_parser("consolidate", help="merge exact duplicate memories")
+    consolidate.add_argument("--project", default=None)
+    consolidate.add_argument("--memory-db", type=Path, default=Path(".kaldrax/memory.sqlite3"))
+
+    benchmark = memory_actions.add_parser("benchmark", help="measure retrieval quality on the bundled benchmark corpus")
+    benchmark.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_retrieval.json"))
+    benchmark.add_argument("--k", type=int, default=3)
 
     args = parser.parse_args()
     if args.command == "demo":
@@ -93,7 +148,7 @@ def main() -> int:
             ("Scope", "Verification", "Known limitations"),
             project_id=args.project,
         )
-        memory = SQLiteMemoryStore(_memory_path(args))
+        memory = _memory_store(_memory_path(args))
         try:
             report = RecursiveEngine(
                 ExampleExecutor(), artifact_dir=args.artifacts, memory_store=memory,
@@ -102,22 +157,42 @@ def main() -> int:
             memory.close()
         print(json.dumps(report.to_dict(), indent=2))
         return 0 if report.status.value == "passed" else 1
+
     if args.command == "run":
         try:
             return _run_llm(args)
         except (ValueError, TypeError) as exc:
             parser.error(str(exc))
+
     if args.command == "memory":
-        memory_store = SQLiteMemoryStore(args.memory_db)
+        if args.memory_action == "benchmark":
+            try:
+                result = run_retrieval_benchmark(
+                    args.dataset, embedder=_embedding_provider(), k=args.k,
+                )
+            except (ValueError, TypeError) as exc:
+                parser.error(str(exc))
+            print(json.dumps(result, indent=2))
+            return 0
+
+        memory_store = _memory_store(args.memory_db)
         try:
             if args.memory_action == "search":
                 matches = memory_store.search(
-                    args.query, project_id=args.project, limit=args.limit, agent_id=args.agent,
+                    args.query, project_id=args.project, limit=args.limit,
+                    agent_id=args.agent, include_pending=args.include_pending,
                 )
                 print(json.dumps([{
                     "id": match.record.id,
                     "type": match.record.memory_type.value,
+                    "status": match.record.status.value,
+                    "confidence": match.record.confidence,
+                    "expires_at": match.record.expires_at,
                     "score": round(match.score, 5),
+                    "lexical_score": round(match.lexical_score, 5),
+                    "semantic_score": None if match.semantic_score is None else round(match.semantic_score, 5),
+                    "freshness_score": round(match.freshness_score, 5),
+                    "retrieval_method": match.retrieval_method,
                     "summary": match.record.summary,
                     "content": match.record.content,
                     "source_run_id": match.record.source_run_id,
@@ -127,9 +202,60 @@ def main() -> int:
                     "metadata": match.record.metadata,
                 } for match in matches], indent=2))
                 return 0
+
+            if args.memory_action == "review":
+                try:
+                    record = memory_store.review(args.id, args.decision, args.reviewer)
+                except MemoryReviewConflict as exc:
+                    print(json.dumps({"error": str(exc), "conflict_ids": exc.conflict_ids}, indent=2))
+                    return 2
+                print(json.dumps({
+                    "id": record.id, "status": record.status.value,
+                    "confidence": record.confidence, "verified_at": record.verified_at,
+                    "expires_at": record.expires_at, "metadata": record.metadata,
+                }, indent=2))
+                return 0
+
+            if args.memory_action == "conflicts":
+                memory_store.detect_conflicts(args.project)
+                print(json.dumps([{
+                    "id": item.id, "left_memory_id": item.left_memory_id,
+                    "right_memory_id": item.right_memory_id, "reason": item.reason,
+                    "status": item.status, "created_at": item.created_at,
+                } for item in memory_store.list_conflicts(args.project)], indent=2))
+                return 0
+
+            if args.memory_action == "resolve-conflict":
+                item = memory_store.resolve_conflict(
+                    args.conflict_id, args.keep_memory_id, args.reviewer,
+                )
+                print(json.dumps({
+                    "id": item.id, "status": item.status,
+                    "resolution": item.resolution,
+                }, indent=2))
+                return 0
+
+            if args.memory_action == "expire":
+                print(json.dumps({
+                    "expired": memory_store.expire_stale(args.project),
+                    "remaining": memory_store.count(project_id=args.project),
+                }, indent=2))
+                return 0
+
+            if args.memory_action == "reindex":
+                try:
+                    updated = memory_store.reindex_embeddings(args.project)
+                except (ValueError, RuntimeError) as exc:
+                    parser.error(str(exc))
+                print(json.dumps({"embeddings_updated": updated}, indent=2))
+                return 0
+
             if args.memory_action == "consolidate":
                 removed = memory_store.consolidate(args.project)
-                print(json.dumps({"duplicates_removed": removed, "remaining": memory_store.count(project_id=args.project)}, indent=2))
+                print(json.dumps({
+                    "duplicates_removed": removed,
+                    "remaining": memory_store.count(project_id=args.project),
+                }, indent=2))
                 return 0
         finally:
             memory_store.close()

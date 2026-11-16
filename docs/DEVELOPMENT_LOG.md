@@ -5,95 +5,70 @@ This file records implementation decisions, changes, commands, verification, and
 ## 2026-11-16 — v0.2 LLM executor and evidence evaluator
 
 ### Decisions
-- Continue working directly on GitHub \`main\`; no feature branches or pull requests.
-- Preserve the executor/evaluator ports and the Python 3.11+ standard-library runtime.
-- Use an OpenAI-compatible chat-completions transport so provider SDKs do not enter the core dependency set.
-- Configure executor and evaluator with different model identifiers; document that this is not proof of provider-level independence.
-- Require complete criterion coverage and verbatim candidate quotes for passing LLM evaluator results.
-- Derive the verdict from validated per-criterion results; never trust a model-supplied aggregate verdict.
-- Keep the offline evaluator literal and deterministic, but use phrase boundaries and quote provenance.
-- Record evaluator exceptions as failed runs and persist the run report.
+- Continue working directly on GitHub main; no feature branches or pull requests.
+- Preserve executor/evaluator ports and the Python 3.11+ standard-library runtime.
+- Use an OpenAI-compatible chat-completions transport with no provider SDK dependency.
+- Require a different configured model identifier for executor and evaluator, without claiming provider-level independence.
+- Require complete criterion coverage and verbatim candidate quotes for passing LLM evaluations.
+- Derive run verdicts from validated per-criterion results.
 
 ### Changes
-- Added \`llm.py\` with HTTP authentication, configurable endpoint/model, timeout, output-token cap (\`max_completion_tokens\` by default, optional legacy \`max_tokens\`), response size limit, response validation, and API-key redaction in HTTP errors.
-- Added \`LLMExecutor\` that sends objective, acceptance criteria, iteration number, and previous evaluator feedback as structured JSON.
-- Added \`LLMEvaluator\` with strict result-shape validation, exact criterion coverage, and verbatim quote enforcement.
-- Upgraded \`CriteriaEvaluator\` to whole-phrase boundaries and evidence quotes.
-- Added criterion-evidence records to evaluation reports and rejected duplicate task criteria.
-- Updated the engine to persist evaluator failures as explicit failed runs.
-- Added \`kaldrax run\` with required environment configuration and distinct executor/evaluator model IDs; kept \`kaldrax demo\` offline.
-- Added \`.env.example\`, v0.2 documentation, and ADR 0002.
+- Added the OpenAI-compatible chat client, LLM executor, evidence-backed evaluator, strict response validation, per-request timeout/output cap, and CLI integration.
+- Added criterion-evidence records and explicit persisted executor/evaluator failure events.
+- Added v0.2 PRD, architecture, and ADR 0002.
 
-### Commands and results
-- \`PYTHONPATH=src python -m pytest -q\` — 26 passed (final verification).
-- \`PYTHONPATH=src python -m kaldrax.cli demo --artifacts /tmp/kaldrax-demo-report\` — passed in 2 iterations; JSON report persisted.
-- \`python -m compileall -q src tests\` — passed.
-- \`python -m pip install -e . --no-deps --no-build-isolation\` — succeeded using the environment-installed setuptools 82.0.1. (The default isolated install could not download build requirements because this runner has no network access.)
-- \`kaldrax --help\` — succeeded.
-- \`kaldrax demo --artifacts /tmp/kaldrax-installed-demo\` — passed; installed CLI produced a persisted JSON report.
-
-### Risks / follow-up
-- LLM evaluator judgments remain probabilistic; verbatim quotes establish traceability, not semantic truth.
-- Same provider key/endpoint may serve both models; separate model IDs do not guarantee independent training data or provider behavior.
-- Aggregate token and monetary accounting is not implemented; only per-request output caps and iteration bounds exist.
-- The executor produces text only. Do not execute generated code until an isolated sandbox, resource limits, and explicit command policy exist.
+### Verification
+- CI ran on Python 3.11 and 3.13 and passed for the v0.2 code at the time of this baseline.
 
 ## 2026-11-16 — v0.3 persistent project memory
 
 ### Decisions
-- Continue direct development on \`main\`; no feature branches or pull requests.
-- Keep KALDRAX's v0.2 LLM executor and independent evaluator intact and make memory an additive engine port.
-- Use SQLite from the standard library for local durable memory; default path is \`.kaldrax/memory.sqlite3\`.
-- Separate transient working memory, episodic run history, and semantic reusable lessons.
-- Require \`project_id\` on every task (default \`default\`) and every memory query/write.
-- Treat \`agent_id=None\` as project-shared knowledge; an agent-scoped lookup sees only its own private memory plus shared project records.
-- Preserve the legacy executor method and add an optional \`execute_with_memory(task, context)\` capability.
-- Send retrieved memory only to memory-aware executors, never to the evaluator. Include previous candidate and feedback in working memory.
-- Automatically persist every run as an episode. Extract semantic memories only from explicit \`Decision:\`, \`Pattern:\`, \`Lesson:\`, or \`Rule:\` lines in a passing artifact; do not ask an LLM to invent facts.
-- Use deterministic lexical token-overlap ranking, not embeddings. Keep consolidation explicit and limited to exact normalized duplicates, preserving source provenance.
-- Treat retrieved memory as untrusted historical data and instruct the LLM executor not to follow embedded instructions.
+- Continue direct development on main.
+- Use SQLite from the standard library at .kaldrax/memory.sqlite3.
+- Separate working, episodic, and semantic memory.
+- Scope all memory by project; allow project-shared and agent-private records.
+- Preserve the legacy executor protocol and optionally expose working context to memory-aware executors.
+- Persist every completed run; initially extract semantic lessons from explicit markers.
+- Keep memory untrusted and isolated from the evaluator.
 
 ### Changes
-- Added typed memory records, memory matches, memory types, working-memory state, and a \`MemoryStore\` protocol.
-- Added SQLite persistence with project/type/agent indexes, WAL mode, a busy timeout, deterministic lexical retrieval, and exact-duplicate consolidation.
-- Added automatic episodic recording for passed, failed, and iteration-limit runs.
-- Added conservative semantic extraction from explicit reusable-knowledge markers after passing runs.
-- Added engine memory retrieval, audit events with retrieved record IDs, optional agent scope, and best-effort memory failure reporting.
-- Extended \`LLMExecutor\` with a compatible memory-aware entry point carrying retrieved records, source run/event provenance, feedback, and previous candidate.
-- Added CLI \`--project\`, \`--agent\`, and \`--memory-db\` options plus \`kaldrax memory search\` and \`kaldrax memory consolidate\`.
-- Updated README, PRD, architecture, repository structure, and added ADR 0003.
+- Added project memory, run/event provenance, lexical retrieval, duplicate consolidation, memory-aware executor context, and memory CLI commands.
+- Added migration-ready storage, tests, and ADR 0003.
 
 ### Verification
-- \`PYTHONPATH=src python -m pytest -q\` — 41 passed.
-- \`PYTHONPATH=src python -m compileall -q src tests\` — passed.
-- Offline CLI demo executed twice against the same SQLite database; the second run retrieved prior project memories.
-- \`kaldrax memory search\` returned persisted records with source run and event provenance.
-- \`kaldrax memory consolidate\` merged an exact duplicate while preserving contributing provenance.
-- No live provider request was made; existing LLM adapter/evaluator tests remain offline.
+- The v0.3 implementation baseline recorded 41 passing tests and an offline cross-run retrieval check.
+- GitHub Actions CI later passed on both supported Python versions for the repository state preceding v0.4.
 
-### Risks / follow-up
-- Lexical retrieval does not find paraphrases and does not use embeddings.
-- Explicit-marker extraction misses useful lessons that are not labeled and can still preserve misleading candidate text.
-- Exact deduplication cannot detect contradictions or determine whether knowledge is stale.
-- Memory and run reports may contain sensitive project context; local storage and access controls remain the operator's responsibility.
-- Cross-process SQLite use is supported for local persistence but is not a distributed agent coordination protocol.
-
-## 2026-11-16 — CI workflow baseline
+## 2026-11-16 — v0.4 memory intelligence
 
 ### Decisions
-- Add GitHub Actions checks for pushes to main, pull requests targeting main, and manual dispatch.
-- Test Python 3.11 and 3.13.
-- Grant the workflow read-only repository contents permission.
+- Keep the v1 architecture local-first: SQLite remains the durable store and embeddings are generated only by an optional loopback Ollama endpoint.
+- Do not introduce a hosted vector database, remote embedding provider, or required third-party Python package.
+- Persist embedding model identity and compare vectors only when the query and memory use the same model.
+- Use hybrid lexical/vector ranking with confidence and freshness adjustments; fall back to lexical scoring if embeddings are absent or unavailable.
+- Make all automatically extracted semantic memories pending by default; only approved records are provided to future runs.
+- Use exact candidate quotes for LLM-extracted facts and retain source run/event provenance.
+- Limit contradiction detection to explicit opposing polarity with high token overlap. Require a human to resolve conflicts.
+- Apply fixed initial retention periods: 365 days for episodes and 180 days for semantic knowledge. Preserve expired/rejected records for audit.
 
 ### Changes
-- Added .github/workflows/ci.yml to install the editable package with development dependencies, run pytest, and compile source/tests.
+- Added a provider-neutral embedding port and loopback-only Ollama adapter using POST /api/embed.
+- Added SQLite migrations for embeddings, model identity, confidence, status, verification, expiry, and update timestamps.
+- Added hybrid retrieval, lexical fallback, confidence/freshness ranking, reindexing, and same-model vector checks.
+- Added pending approval/rejection, explicit-polarity conflict detection, conflict resolution with superseded provenance, and expiry maintenance.
+- Added evidence-checked LLM knowledge extraction after passing LLM-backed runs; proposals remain pending.
+- Added retrieval benchmark dataset and Recall@k, MRR, and top-1 metrics.
+- Added CLI commands for memory review, conflicts, resolution, expiry, reindexing, and benchmarking.
+- Updated README, PRD, architecture, repository structure, and added ADR 0004.
 
 ### Verification
-- Confirmed GitHub main points to commit 753a70c8accf7f33f7b923a8262b921b2969b9dd before this log-only follow-up.
-- Fetched the committed workflow file and inspected its trigger, matrix, permissions, and steps.
-- GitHub commit status returned no status checks, and the visible Actions-runs query returned zero runs at inspection time. A completed hosted CI result is not yet verified.
-- The v0.3 development entry records 41 passing tests; this session did not independently rerun the repository suite because a local GitHub clone was unavailable.
+- Test suite and GitHub Actions results are pending this v0.4 commit. Do not report a passing result until CI completes.
+- No live LLM or Ollama request is required for the test suite; adapter behavior uses fake HTTP responses.
 
 ### Risks / follow-up
-- Confirm the first GitHub Actions run completes on both Python versions.
-- Live provider validation, evaluator benchmark work, sandboxed code execution, and aggregate token/cost limits remain deferred as requested.
+- Semantic retrieval requires the operator to install and run a local Ollama embedding model; without it, the store falls back to lexical retrieval.
+- Confidence scores are not calibrated probabilities.
+- Contradiction detection catches only explicit polarity patterns and can miss paraphrased or more subtle contradictions.
+- The benchmark corpus is a regression fixture, not representative production workload evidence.
+- The LLM extractor makes an additional provider request after a passing run and may add cost.
+- The local database and reports may contain sensitive project data; protect local storage.

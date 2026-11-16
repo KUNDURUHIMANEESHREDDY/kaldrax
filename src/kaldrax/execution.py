@@ -28,7 +28,7 @@ class ExampleExecutor:
 
 class LLMExecutor:
     """Ask a configured chat model to produce a candidate with prior-run context."""
-    name = "llm-executor-v2"
+    name = "llm-executor-v3"
     _MAX_MEMORY_CHARS = 12_000
     _MAX_ITEM_CHARS = 3_000
 
@@ -64,6 +64,9 @@ class LLMExecutor:
                 "memory_id": record.id,
                 "memory_type": record.memory_type.value,
                 "score": round(match.score, 5),
+                "confidence": record.confidence,
+                "status": record.status.value,
+                "expires_at": record.expires_at,
                 "content": content,
                 "summary": record.summary[:500],
                 "source_run_id": record.source_run_id,

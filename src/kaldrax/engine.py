@@ -1,10 +1,11 @@
-"""Bounded recursive execution loop with optional persistent project memory."""
+"""Bounded recursive execution loop with persistent project memory."""
 import json
 from pathlib import Path
 
 from .evaluation import CriteriaEvaluator, Evaluator
 from .execution import Executor
 from .memory import MemoryRecord, MemoryStore, MemoryType, WorkingMemory, extract_reusable_knowledge
+from .memory_intelligence import KnowledgeExtractor
 from .models import RunReport, RunStatus, Task
 
 
@@ -15,6 +16,7 @@ class RecursiveEngine:
         self, executor: Executor, evaluator: Evaluator | None = None,
         artifact_dir: Path | None = None, memory_store: MemoryStore | None = None,
         memory_limit: int = 5, agent_id: str | None = None,
+        knowledge_extractor: KnowledgeExtractor | None = None,
     ) -> None:
         if memory_limit < 1:
             raise ValueError("memory_limit must be at least 1")
@@ -24,6 +26,7 @@ class RecursiveEngine:
         self.memory_store = memory_store
         self.memory_limit = memory_limit
         self.agent_id = agent_id
+        self.knowledge_extractor = knowledge_extractor
 
     def run(self, task: Task) -> RunReport:
         report = RunReport.new(task.objective)
@@ -38,7 +41,7 @@ class RecursiveEngine:
                 identifiers = ", ".join(match.record.id for match in working_memory.retrieved_memories)
                 report.add_event(
                     "memory_retrieved",
-                    f"Retrieved {len(working_memory.retrieved_memories)} relevant memories: {identifiers}",
+                    f"Retrieved {len(working_memory.retrieved_memories)} approved memories: {identifiers}",
                 )
             except Exception as exc:
                 report.add_event("memory_read_error", f"Memory retrieval unavailable: {type(exc).__name__}.")
@@ -106,6 +109,7 @@ class RecursiveEngine:
             source_event_sequences=event_sequences,
             agent_id=self.agent_id,
             tags=("run", report.status.value),
+            confidence=0.95,
             metadata={
                 "iterations": report.iterations,
                 "evaluation_count": len(report.evaluations),
@@ -114,19 +118,30 @@ class RecursiveEngine:
         )
         try:
             self.memory_store.save(episode)
+            extracted = 0
             if report.status is RunStatus.PASSED:
-                lessons = extract_reusable_knowledge(
-                    project_id=task.project_id,
-                    source_run_id=report.run_id,
-                    source_event_sequences=event_sequences,
-                    candidate=report.final_output,
-                    agent_id=self.agent_id,
-                )
+                if self.knowledge_extractor is not None:
+                    lessons = self.knowledge_extractor.extract(
+                        task, report.final_output, source_run_id=report.run_id,
+                        source_event_sequences=event_sequences, agent_id=self.agent_id,
+                    )
+                else:
+                    lessons = extract_reusable_knowledge(
+                        project_id=task.project_id,
+                        source_run_id=report.run_id,
+                        source_event_sequences=event_sequences,
+                        candidate=report.final_output,
+                        agent_id=self.agent_id,
+                    )
                 for lesson in lessons:
                     self.memory_store.save(lesson)
-            report.add_event("memory_saved", "Run episode stored; explicitly marked lessons extracted when present.")
+                    extracted += 1
+            report.add_event(
+                "memory_saved",
+                f"Run episode stored; {extracted} semantic memories queued for approval.",
+            )
         except Exception as exc:
-            report.add_event("memory_write_error", f"Memory persistence unavailable: {type(exc).__name__}.")
+            report.add_event("memory_write_error", f"Memory persistence or extraction unavailable: {type(exc).__name__}.")
 
     def _persist(self, report: RunReport) -> None:
         if self.artifact_dir is None:
