@@ -21,6 +21,7 @@ from .memory_benchmarks import run_retrieval_benchmark
 from .memory_benchmark_comparison import run_retrieval_comparison
 from .memory_annotation import run_annotation_review
 from .memory_quality import run_extraction_benchmark
+from .memory_quality_review import run_quality_label_review
 from .memory_contradiction_quality import run_contradiction_benchmark
 from .memory_evaluation import (
     DEFAULT_APPROVAL,
@@ -345,6 +346,18 @@ def main() -> int:
     extraction_benchmark.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_extraction_v1.json"))
     extraction_benchmark.add_argument("--max-memories", type=int, default=8)
 
+    quality_review = memory_actions.add_parser(
+        "quality-review",
+        help="interactively review and export contradiction and extraction labels",
+    )
+    quality_review.add_argument("--reviewer", required=True)
+    quality_review.add_argument("--contradiction-dataset", type=Path, default=Path("benchmarks/memory_contradictions_v1.json"))
+    quality_review.add_argument("--extraction-dataset", type=Path, default=Path("benchmarks/memory_extraction_v1.json"))
+    quality_review.add_argument("--session", type=Path, default=Path(".kaldrax/memory-quality-review.session.json"))
+    quality_review.add_argument("--export-dir", type=Path, default=Path("benchmarks/reviewed"))
+    quality_review.add_argument("--retrieval-dataset", type=Path, default=Path("benchmarks/memory_retrieval_kaldrax_v1.json"))
+    quality_review.add_argument("--approval-file", type=Path, default=DEFAULT_APPROVAL)
+
     quality_approve = memory_actions.add_parser(
         "quality-approve",
         help="record a write-once human review of contradiction and extraction benchmark labels",
@@ -505,6 +518,28 @@ def main() -> int:
             print(json.dumps(result, indent=2))
             return 0
 
+
+        if args.memory_action == "quality-review":
+            try:
+                result = run_quality_label_review(
+                    args.contradiction_dataset, args.extraction_dataset,
+                    reviewer=args.reviewer, session_path=args.session,
+                    export_dir=args.export_dir,
+                )
+                if result.get("status") == "complete":
+                    result["approval"] = create_quality_review_approval(
+                        retrieval_dataset=args.retrieval_dataset,
+                        contradiction_dataset=result["exports"]["contradiction"],
+                        extraction_dataset=result["exports"]["extraction"],
+                        approval_path=args.approval_file,
+                        reviewer=args.reviewer,
+                        contradiction_labels_reviewed=True,
+                        extraction_labels_reviewed=True,
+                    )
+            except (ValueError, TypeError, RuntimeError, OSError, json.JSONDecodeError) as exc:
+                parser.error(str(exc))
+            print(json.dumps(result, indent=2))
+            return 0 if result.get("status") == "complete" else 1
 
         if args.memory_action == "quality-approve":
             try:
