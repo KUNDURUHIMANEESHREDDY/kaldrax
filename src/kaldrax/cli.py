@@ -18,6 +18,8 @@ from .execution import ExampleExecutor, LLMExecutor
 from .llm import OpenAICompatibleClient
 from .memory import MemoryReviewConflict, SQLiteMemoryStore
 from .memory_benchmarks import run_retrieval_benchmark
+from .memory_benchmark_comparison import run_retrieval_comparison
+from .memory_annotation import run_annotation_review
 from .memory_quality import run_extraction_benchmark
 from .memory_intelligence import LLMMemoryExtractor
 from .models import Task
@@ -309,6 +311,23 @@ def main() -> int:
     benchmark.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_retrieval_engineering_v2.json"))
     benchmark.add_argument("--k", type=int, default=3)
 
+    benchmark_compare = memory_actions.add_parser(
+        "benchmark-compare", help="compare lexical and local-hybrid retrieval on a source-backed corpus",
+    )
+    benchmark_compare.add_argument(
+        "--dataset", type=Path, default=Path("benchmarks/memory_retrieval_kaldrax_v1.json"),
+    )
+    benchmark_compare.add_argument("--k", type=int, default=3)
+
+    benchmark_annotate = memory_actions.add_parser(
+        "benchmark-annotate", help="human-review relevance labels and privacy scope before exporting a benchmark",
+    )
+    benchmark_annotate.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_retrieval_kaldrax_v1.json"))
+    benchmark_annotate.add_argument("--reviewer", required=True, help="reviewer identity recorded with every decision")
+    benchmark_annotate.add_argument("--session", type=Path, default=None, help="resumable review-session path")
+    benchmark_annotate.add_argument("--export-dir", type=Path, default=Path(".kaldrax/benchmark-exports"))
+    benchmark_annotate.add_argument("--version", default="1.0.0", help="immutable export version (MAJOR.MINOR.PATCH)")
+
     extraction_benchmark = memory_actions.add_parser(
         "extraction-benchmark", help="evaluate extraction quality and confidence calibration using the configured LLM",
     )
@@ -408,9 +427,30 @@ def main() -> int:
             parser.error(str(exc))
 
     if args.command == "memory":
+        if args.memory_action == "benchmark-annotate":
+            try:
+                result = run_annotation_review(
+                    args.dataset, reviewer=args.reviewer, session_path=args.session,
+                    export_dir=args.export_dir, version=args.version,
+                )
+            except (ValueError, TypeError, RuntimeError, OSError) as exc:
+                parser.error(str(exc))
+            print(json.dumps(result, indent=2))
+            return 0
+
         if args.memory_action == "benchmark":
             try:
                 result = run_retrieval_benchmark(
+                    args.dataset, embedder=_embedding_provider(), k=args.k,
+                )
+            except (ValueError, TypeError, RuntimeError, OSError) as exc:
+                parser.error(str(exc))
+            print(json.dumps(result, indent=2))
+            return 0
+
+        if args.memory_action == "benchmark-compare":
+            try:
+                result = run_retrieval_comparison(
                     args.dataset, embedder=_embedding_provider(), k=args.k,
                 )
             except (ValueError, TypeError, RuntimeError, OSError) as exc:
