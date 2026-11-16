@@ -110,6 +110,14 @@ The team coordinator runs a bounded sequential graph: planner → builder → re
 
 The provider smoke command executes a simple completion against the executor model and an evidence-backed evaluation against a distinct evaluator model. Regular CI is credential-free. A separate manual workflow dispatch can invoke live smoke only when the API key secret and model repository variables are configured.
 
+## Repository-grounded validation corpus
+
+A second retrieval corpus is derived from the public KALDRAX repository snapshot recorded in `benchmarks/memory_retrieval_kaldrax_v1.json`. Each memory cites a repository path and anchor. The draft contains 37 source-backed memories and 36 proposed engineering queries. It intentionally excludes local databases, runtime reports, credentials, environment values, private conversations, and private repositories.
+
+The dataset declares both its privacy-screening and annotation states. At introduction, privacy screening is pending operator sign-off and every query label is `assistant_proposed_pending_human_review`. The rationale and proposed relevant IDs are inspectable. A human reviewer must confirm or amend every judgment before the corpus is described as human-labeled. The automated scope check is not represented as human privacy approval.
+
+`kaldrax memory benchmark-compare` executes the lexical baseline and, when a configured loopback Ollama embedder is available, a second isolated hybrid run over the identical queries. It reports paired aggregate, per-category, and per-query deltas. If embeddings are disabled or fail, it emits the lexical result with an explicit unavailable status and no hybrid deltas. The comparison is descriptive; it does not claim statistical significance. CI always runs the credential-free lexical baseline. Local hybrid comparison requires the operator's embedding model.
+
 ## Memory quality evaluation
 
 Run the default annotated retrieval workload:
