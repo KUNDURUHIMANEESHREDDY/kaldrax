@@ -452,3 +452,9 @@ This file records implementation decisions, changes, commands, verification, and
 ### Desktop CI regression repair
 - Moved the ProjectDetail page's memoized current-date hook above the missing-project early return. This preserves its value and dependencies while ensuring React hooks execute in the same order on every render.
 - The repair addresses the conditional `useMemo` error reported by Oxlint; no other desktop behavior was changed.
+
+
+### Desktop TypeScript build repairs
+- StockAdjustForm is rendered only by its open-state wrapper; set the nested Modal's visibility to true instead of accidentally resolving the imported Tauri file-picker function named `open`.
+- Added the missing memoized team-report refresh callback used by TeamRunsPage's Refresh action.
+- These changes resolve the TypeScript errors found by the production build; normal initial report loading remains unchanged.
