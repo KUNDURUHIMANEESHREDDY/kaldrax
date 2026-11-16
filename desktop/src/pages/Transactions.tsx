@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../store/AppStore";
 import { projectName } from "../lib/derive";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useToast } from "../components/Toast";
+import { useToast } from "../hooks/useToast";
 import {
   Badge,
   Button,

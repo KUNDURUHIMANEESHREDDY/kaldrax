@@ -23,7 +23,7 @@ import {
 } from "../components/ui";
 import { DonutChart, DonutLegend, HBars, LineChart, Sparkline } from "../components/Charts";
 import { ItemFormModal } from "../components/forms";
-import { useToast } from "../components/Toast";
+import { useToast } from "../hooks/useToast";
 import { Icon } from "../components/Icons";
 
 const OVERVIEW_REFERENCE_DATE = new Date();

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useApp } from "../store/AppStore";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useToast } from "../components/Toast";
+import { useToast } from "../hooks/useToast";
 import {
   Avatar,
   Badge,

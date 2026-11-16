@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../store/AppStore";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useToast } from "../components/Toast";
+import { useToast } from "../hooks/useToast";
 import { Badge, Button, ConfirmDialog, EmptyState, PageHead, RowMenu, SearchField } from "../components/ui";
 import { CategoryFormModal } from "../components/forms";
 import { Icon, type IconName } from "../components/Icons";

@@ -1,25 +1,8 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { ToastContext, type ToastApi, type ToastItem, type ToastTone } from "./toast-context";
 import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./Icons";
 
-type ToastTone = "success" | "error" | "info" | "warning";
-
-type ToastItem = {
-  id: number;
-  tone: ToastTone;
-  title: string;
-  message?: string;
-};
-
-type ToastApi = {
-  push: (t: { tone?: ToastTone; title: string; message?: string }) => void;
-  success: (title: string, message?: string) => void;
-  error: (title: string, message?: string) => void;
-  info: (title: string, message?: string) => void;
-  warning: (title: string, message?: string) => void;
-};
-
-const ToastContext = createContext<ToastApi | null>(null);
 
 const ICONS: Record<ToastTone, IconName> = {
   success: "check-circle",
@@ -83,8 +66,3 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useToast(): ToastApi {
-  const ctx = useContext(ToastContext);
-  if (!ctx) throw new Error("useToast must be used inside ToastProvider");
-  return ctx;
-}
