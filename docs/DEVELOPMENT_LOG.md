@@ -340,3 +340,32 @@ This file records implementation decisions, changes, commands, verification, and
 ### Release dataset selection
 - The tag-only workflow now accepts the committed, reviewed retrieval export path through the `KALDRAX_RETRIEVAL_DATASET` repository variable; unset defaults to the canonical benchmark path.
 - Documentation now requires the same file path for local attestation creation and the GitHub tag-run report, preventing accidental approval/report path mismatches.
+
+## 2026-11-16 — Desktop workflow bridge and repository workspace integration
+
+### Delivered
+- Added repository CLI commands for Git status, bounded text-file listing, UTF-8 file read with SHA-256, and explicit single-file apply using a hash precondition.
+- Repository file access excludes private/runtime/build paths, rejects traversal and symlink components, and caps inspection/edits at 1 MB.
+- Existing-file replacement creates a backup under \`.kaldrax/desktop-backups/\`, checks both runtime and backup roots against symlinks, writes a sibling temporary file, fsyncs, then atomically replaces the target.
+- Added repository-aware team operation progress and cancellation. Cancellation is checked after each model role and immediately before patch application; the Docker workspace runner kills the active container when the cancellation file appears.
+- Repository team reports include an explicit \`cancelled\` marker. Dry-run remains the default; apply still requires disposable Docker verification, reviewer approval, independent evaluation pass, and a clean/base-commit recheck. The engine does not commit or push.
+- Added CLI \`--cancel-file\` support for team and single-file sandbox operations.
+- Connected the desktop Memory, Team Runs, Sandbox and Repository screens to named Tauri commands. The team UI exposes the opt-in repository workflow and distinguishes cancelled repository-team results.
+- Updated desktop README, design/UX contracts and integration record. The Downloads desktop directory is not a Git repository, so its source and built installers remain local files.
+
+### Verification
+- Python test suite: **170 passed, 4 skipped**. Windows symlink-permission guards skip when symlink creation is unavailable.
+- \`git diff --check\` and staged diff whitespace checks passed.
+- Direct repository CLI smoke passed in a disposable temporary Git repository: status, file listing, SHA-256 read, hash-guarded edit, backup existence and dirty status were verified.
+- CLI help confirmed \`--cancel-file\` on team and sandbox commands.
+- Desktop TypeScript/Vite production build passed.
+- Oxlint passed with 0 errors; 22 warnings remain, largely existing template React effect/Fast Refresh warnings and effect-driven screen loading warnings.
+- Rust \`cargo fmt --check\` and \`cargo check\` passed.
+- Windows Tauri release build passed. MSI: 3.14 MiB. NSIS installer: 2.12 MiB.
+
+### Boundaries and remaining risks
+- The Docker Sandbox screen executes one selected Python file; repository-team mode separately stages a unified patch in a disposable copy and runs one selected verification module.
+- Docker still trusts the host daemon, kernel and pre-pulled image. No network, arbitrary dependency provisioning, commit, push or deployment is introduced.
+- Repository edits are local, single-file, explicit and hash-preconditioned. Repository-team patch application is also local and explicit, after all verification/review/evaluation gates.
+- A provider request already submitted before cancellation may still finish or incur provider cost; cancellation prevents later role calls and patch application.
+- Browser interaction QA performed earlier used mocked Tauri IPC. A complete native end-to-end UI click-through with a configured live LLM provider and Docker daemon remains unverified.

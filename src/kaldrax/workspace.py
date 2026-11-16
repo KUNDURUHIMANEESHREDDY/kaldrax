@@ -1,9 +1,14 @@
 """Bounded, secret-aware Git workspace snapshots and transactional patch staging."""
 from __future__ import annotations
 
+import difflib
+import hashlib
 import os
+import shutil
+import stat
 import subprocess
 import tempfile
+from uuid import uuid4
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -82,14 +87,17 @@ class RepositoryWorkspace:
         try:
             result = subprocess.run(
                 ["git", "-C", str(self.root), *args],
-                input=input_text, text=True, capture_output=True, timeout=30, check=False,
+                input=input_text.encode("utf-8") if input_text is not None else None,
+                capture_output=True, timeout=30, check=False,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise WorkspaceError(f"Git command unavailable: {type(exc).__name__}") from None
         if result.returncode != 0:
-            message = result.stderr.strip() or result.stdout.strip() or "Git command failed"
+            stderr = result.stderr.decode("utf-8", errors="replace").strip()
+            stdout = result.stdout.decode("utf-8", errors="replace").strip()
+            message = stderr or stdout or "Git command failed"
             raise WorkspaceError(message[:1000])
-        return result.stdout
+        return result.stdout.decode("utf-8", errors="replace")
 
     def _assert_clean(self) -> None:
         status = self._git(["status", "--porcelain", "--untracked-files=all"])
@@ -301,15 +309,18 @@ class RepositoryWorkspace:
     def _run_git_in(path: Path, args: list[str], *, input_text: str | None = None) -> str:
         try:
             result = subprocess.run(
-                ["git", "-C", str(path), *args], input=input_text, text=True,
+                ["git", "-C", str(path), *args],
+                input=input_text.encode("utf-8") if input_text is not None else None,
                 capture_output=True, timeout=30, check=False,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise WorkspaceError(f"Git staging failed: {type(exc).__name__}") from None
         if result.returncode != 0:
-            message = result.stderr.strip() or result.stdout.strip() or "Git staging failed"
+            stderr = result.stderr.decode("utf-8", errors="replace").strip()
+            stdout = result.stdout.decode("utf-8", errors="replace").strip()
+            message = stderr or stdout or "Git staging failed"
             raise WorkspaceError(message[:1000])
-        return result.stdout
+        return result.stdout.decode("utf-8", errors="replace")
 
     def apply_patch(self, snapshot: WorkspaceSnapshot, patch: str) -> tuple[str, ...]:
         changed = self.changed_paths(patch)
@@ -338,3 +349,200 @@ class RepositoryWorkspace:
             self._git(["apply", "--reverse", "-"], input_text=patch)
             raise
         return changed
+
+    TEXT_SUFFIXES = {
+        ".py", ".pyi", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs",
+        ".html", ".css", ".scss", ".json", ".jsonc", ".toml", ".yaml",
+        ".yml", ".md", ".mdx", ".txt", ".rst", ".sh", ".ps1", ".bat",
+        ".cmd", ".rs", ".go", ".java", ".kt", ".c", ".h", ".cpp", ".hpp",
+        ".cs", ".sql", ".xml", ".ini", ".cfg", ".conf", ".gitignore",
+        ".dockerignore", ".editorconfig", ".properties",
+    }
+    MAX_DESKTOP_FILE_BYTES = 1_000_000
+
+    def status(self) -> dict[str, object]:
+        raw = self._git(["status", "--porcelain=v1", "--untracked-files=all"])
+        changes: list[dict[str, str]] = []
+        for line in raw.splitlines():
+            if len(line) < 4:
+                continue
+            code = line[:2].strip() or "??"
+            relative = line[3:].strip()
+            if " -> " in relative:
+                relative = relative.rsplit(" -> ", 1)[-1]
+            changes.append({"code": code, "path": relative.strip('"')})
+        branch = self._git(["branch", "--show-current"]).strip()
+        head = self._git(["rev-parse", "--short", "HEAD"]).strip()
+        return {
+            "root": str(self.root),
+            "branch": branch or f"detached@{head}",
+            "head": head,
+            "clean": not raw.strip(),
+            "status": raw,
+            "changes": changes,
+        }
+
+    def _safe_target(self, relative_path: str, *, allow_missing: bool) -> tuple[str, Path]:
+        if not isinstance(relative_path, str) or not relative_path.strip():
+            raise WorkspaceError("repository-relative path is required")
+        self._validate_path(relative_path)
+        parts = PurePosixPath(relative_path).parts
+        target = self.root.joinpath(*parts)
+        current = self.root
+        for part in parts:
+            current = current / part
+            if current.is_symlink():
+                raise WorkspaceError("refusing to access a symlink path component")
+        try:
+            resolved = target.resolve(strict=not allow_missing)
+        except OSError as exc:
+            raise WorkspaceError(f"repository path cannot be resolved: {type(exc).__name__}") from None
+        try:
+            resolved.relative_to(self.root)
+        except ValueError:
+            raise WorkspaceError("repository path resolves outside the selected worktree") from None
+        return PurePosixPath(*parts).as_posix(), target
+
+    def list_files(self, directory: str = ".", *, limit: int = 300) -> list[dict[str, object]]:
+        if not 1 <= limit <= 500:
+            raise WorkspaceError("file limit must be between 1 and 500")
+        if directory in {"", "."}:
+            base = self.root
+        else:
+            _, base = self._safe_target(directory, allow_missing=False)
+        if not base.is_dir() or base.is_symlink():
+            raise WorkspaceError("selected repository directory does not exist")
+        files: list[dict[str, object]] = []
+        for current, dirs, names in os.walk(base, followlinks=False):
+            current_path = Path(current)
+            dirs[:] = sorted(
+                name for name in dirs
+                if name.casefold() not in self.EXCLUDED_DIRS
+                and not (current_path / name).is_symlink()
+            )
+            for name in sorted(names, key=str.casefold):
+                item = current_path / name
+                if item.is_symlink() or not item.is_file():
+                    continue
+                relative = item.relative_to(self.root).as_posix()
+                if self._is_private(relative) or item.suffix.casefold() not in self.TEXT_SUFFIXES:
+                    continue
+                size = item.stat().st_size
+                if size > self.MAX_DESKTOP_FILE_BYTES:
+                    continue
+                files.append({"path": relative, "size": size})
+                if len(files) >= limit:
+                    return sorted(files, key=lambda value: str(value["path"]).casefold())
+        return sorted(files, key=lambda value: str(value["path"]).casefold())
+
+    def read_file(self, relative_path: str) -> dict[str, object]:
+        relative, target = self._safe_target(relative_path, allow_missing=False)
+        if not target.is_file():
+            raise WorkspaceError("selected repository path is not a file")
+        size = target.stat().st_size
+        if size > self.MAX_DESKTOP_FILE_BYTES:
+            raise WorkspaceError("file exceeds the 1 MB desktop inspection limit")
+        try:
+            raw = target.read_bytes()
+            content = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            raise WorkspaceError("file is not valid UTF-8 text") from None
+        return {
+            "path": relative,
+            "content": content,
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "size": len(raw),
+        }
+
+    def apply_file(
+        self,
+        relative_path: str,
+        content: str,
+        *,
+        expected_sha256: str | None,
+    ) -> dict[str, object]:
+        relative, target = self._safe_target(relative_path, allow_missing=True)
+        if not isinstance(content, str):
+            raise WorkspaceError("edited content must be text")
+        raw = content.encode("utf-8")
+        if len(raw) > self.MAX_DESKTOP_FILE_BYTES:
+            raise WorkspaceError("edited file exceeds the 1 MB limit")
+        existed = target.exists()
+        if existed:
+            if not target.is_file():
+                raise WorkspaceError("selected repository path is not a regular file")
+            if not expected_sha256:
+                raise WorkspaceError("an expected SHA-256 is required before replacing an existing file")
+            old_raw = target.read_bytes()
+            old_sha = hashlib.sha256(old_raw).hexdigest()
+            if old_sha.casefold() != expected_sha256.casefold():
+                raise WorkspaceError("file changed since it was read; refresh before applying edits")
+            try:
+                old_text = old_raw.decode("utf-8")
+            except UnicodeDecodeError:
+                raise WorkspaceError("existing file is not valid UTF-8 text") from None
+            old_mode = stat.S_IMODE(target.stat().st_mode)
+        else:
+            if expected_sha256:
+                raise WorkspaceError("file no longer exists; refresh before applying edits")
+            old_raw = b""
+            old_text = ""
+            old_sha = None
+            old_mode = 0o644
+
+        target.parent.mkdir(parents=True, exist_ok=True)
+        current = self.root
+        for part in PurePosixPath(relative).parts[:-1]:
+            current = current / part
+            if current.is_symlink():
+                raise WorkspaceError("refusing to write through a symlink path component")
+
+        backup_path: Path | None = None
+        if existed:
+            runtime_root = self.root / ".kaldrax"
+            if runtime_root.is_symlink() or (runtime_root.exists() and not runtime_root.is_dir()):
+                raise WorkspaceError("refusing to write backups through an unsafe .kaldrax runtime path")
+            backup_parent = runtime_root / "desktop-backups"
+            if backup_parent.is_symlink() or (backup_parent.exists() and not backup_parent.is_dir()):
+                raise WorkspaceError("refusing to write backups through an unsafe desktop-backups path")
+            backup_root = backup_parent / uuid4().hex
+            backup_path = backup_root / Path(*PurePosixPath(relative).parts)
+            backup_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(target, backup_path)
+
+        temporary_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb", prefix=".kaldrax-edit-", suffix=".tmp",
+                dir=target.parent, delete=False,
+            ) as stream:
+                temporary_path = Path(stream.name)
+                stream.write(raw)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.chmod(temporary_path, old_mode)
+            os.replace(temporary_path, target)
+            temporary_path = None
+        finally:
+            if temporary_path is not None:
+                try:
+                    temporary_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+        new_sha = hashlib.sha256(raw).hexdigest()
+        diff = "".join(difflib.unified_diff(
+            old_text.splitlines(keepends=True),
+            content.splitlines(keepends=True),
+            fromfile=f"a/{relative}" if existed else "/dev/null",
+            tofile=f"b/{relative}",
+        ))
+        return {
+            "path": relative,
+            "created": not existed,
+            "old_sha256": old_sha,
+            "new_sha256": new_sha,
+            "backup_path": str(backup_path) if backup_path else None,
+            "diff": diff,
+            "size": len(raw),
+        }

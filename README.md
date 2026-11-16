@@ -239,7 +239,9 @@ kaldrax team --project kaldrax-core --objective "Design a CSV import utility" --
 
 The coordinator runs sequentially: planner → builder → reviewer → independent evaluator. Failed reviewer findings and unmet acceptance criteria feed the next builder cycle. A run passes only when the reviewer approves and the separate evaluator passes the original immutable criteria. Role traces are stored in project-scoped, agent-specific memory, and every role shares the same run budget.
 
-This is a bounded local workflow, not a distributed scheduler. The team coordinator currently produces candidate artifacts; it does not apply patches to a repository or automatically invoke the Docker sandbox. Those should be connected through an explicit, permissioned tool contract in the next iteration.
+This is a bounded local workflow, not a distributed scheduler. With `--workspace`, the repository coordinator captures a clean Git snapshot, provides a path manifest to the planner and a bounded source snapshot to the builder, stages a proposed unified diff in isolation, and verifies a disposable copy with the Docker workspace sandbox. A patch is applied only when sandbox verification succeeds, the reviewer approves, and the independent evaluator passes the original task criteria. Dry-run is the default; `--apply` is explicit. The engine rechecks the base commit and clean worktree before applying. It never commits or pushes.
+
+For an example, see the repository engineering integration tests. Docker image and dependency availability remain operator-managed; arbitrary dependency installation and network access are not enabled inside the verification container.
 
 ### CI coverage
 
@@ -338,3 +340,21 @@ The release profile requires a validated retrieval export with privacy sign-off,
 
 
 **Repository enforcement:** configure a GitHub tag/release ruleset for `v0.6.*` that requires the `v0.6 memory evidence and release thresholds` check. The workflow fails closed, but without a repository ruleset an administrator may still create a tag or release while its check is failing or skipped.
+
+### Local repository inspection and guarded single-file edits
+
+The local operator CLI also exposes a narrow repository interface:
+
+```powershell
+kaldrax repo status --root .\
+kaldrax repo files --root .\ --directory src
+kaldrax repo read --root .\ --path src\kaldrax\engine.py
+```
+
+A single-file replacement requires the SHA-256 returned by the last read and a UTF-8 content file:
+
+```powershell
+kaldrax repo apply --root .\ --path src\kaldrax\engine.py --content-file .\.kaldrax\proposed-engine.py --expected-sha256 CURRENT_SHA256
+```
+
+The workspace filters secret/runtime/build paths, refuses path traversal and symlink components, limits files to supported UTF-8 text up to 1 MB, rejects stale hashes, backs up the old file under `.kaldrax/desktop-backups/`, and uses an atomic replacement. This is an explicit local edit, not an autonomous patching pipeline; it does not run tests or commit the change. The desktop editor adds a separate confirmation step before calling it.

@@ -1,4 +1,6 @@
+import hashlib
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -135,7 +137,10 @@ def test_apply_patch_rejects_a_symlink_parent_component(tmp_path):
     outside.mkdir()
     (outside / "app.py").write_text("print('outside')\n", encoding="utf-8")
     workspace = init_repo(root, {"app.py": "print('safe')\n"})
-    (root / "linked").symlink_to(outside, target_is_directory=True)
+    try:
+        (root / "linked").symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is not permitted on this Windows host: {exc}")
     subprocess.run(["git", "-C", str(root), "add", "linked"], check=True)
     subprocess.run(["git", "-C", str(root), "commit", "-qm", "track symlink"], check=True)
     snapshot = workspace.capture()
@@ -162,3 +167,111 @@ def test_patch_rejects_nested_cloud_credential_and_terraform_state_paths():
         patch = PATCH.replace("a/app.py b/app.py", f"a/{path} b/{path}")
         with pytest.raises(WorkspaceError):
             RepositoryWorkspace.changed_paths(patch)
+
+import hashlib
+
+
+def test_repository_status_lists_branch_head_and_dirty_paths(tmp_path):
+    workspace = init_repo(tmp_path / "repo", {"app.py": "print('safe')\n"})
+    clean = workspace.status()
+    assert clean["clean"] is True
+    assert clean["branch"]
+    assert clean["head"]
+
+    (workspace.root / "app.py").write_text("print('changed')\n", encoding="utf-8")
+    dirty = workspace.status()
+    assert dirty["clean"] is False
+    assert any(item["path"] == "app.py" for item in dirty["changes"])
+
+
+def test_repository_file_listing_and_read_exclude_secrets_and_runtime(tmp_path):
+    workspace = init_repo(tmp_path / "repo", {
+        "app.py": "print('safe')\n",
+        "README.md": "# Project\n",
+        ".env": "TOKEN=private\n",
+        "secrets/token.txt": "private\n",
+        ".kaldrax/state.json": "{\"secret\":true}\n",
+        "assets/image.png": "not text",
+    })
+    files = workspace.list_files()
+    paths = {item["path"] for item in files}
+    assert paths == {"app.py", "README.md"}
+    loaded = workspace.read_file("app.py")
+    assert loaded["content"].replace("\r\n", "\n") == "print('safe')\n"
+    assert loaded["sha256"] == hashlib.sha256((workspace.root / "app.py").read_bytes()).hexdigest()
+    with pytest.raises(WorkspaceError):
+        workspace.read_file(".env")
+    with pytest.raises(WorkspaceError):
+        workspace.read_file("secrets/token.txt")
+
+
+def test_repository_file_apply_uses_hash_precondition_and_creates_backup(tmp_path):
+    workspace = init_repo(tmp_path / "repo", {"app.py": "print('before')\n"})
+    original = workspace.read_file("app.py")
+    result = workspace.apply_file(
+        "app.py", "print('after')\n", expected_sha256=original["sha256"],
+    )
+    assert result["created"] is False
+    assert result["old_sha256"] == original["sha256"]
+    assert result["new_sha256"] == hashlib.sha256(b"print('after')\n").hexdigest()
+    backup = workspace.root / Path(result["backup_path"])
+    assert backup.read_text(encoding="utf-8") == "print('before')\n"
+    assert (workspace.root / "app.py").read_text(encoding="utf-8") == "print('after')\n"
+
+
+def test_repository_file_apply_refuses_stale_hash_and_blind_overwrite(tmp_path):
+    workspace = init_repo(tmp_path / "repo", {"app.py": "print('before')\n"})
+    original = workspace.read_file("app.py")
+    (workspace.root / "app.py").write_text("print('concurrent')\n", encoding="utf-8")
+    with pytest.raises(WorkspaceError, match="changed since it was read"):
+        workspace.apply_file("app.py", "print('after')\n", expected_sha256=original["sha256"])
+    with pytest.raises(WorkspaceError, match="expected SHA-256"):
+        workspace.apply_file("app.py", "print('after')\n", expected_sha256=None)
+
+
+def test_repository_file_apply_can_create_a_new_text_file(tmp_path):
+    workspace = init_repo(tmp_path / "repo", {"app.py": "print('safe')\n"})
+    result = workspace.apply_file("docs/notes.md", "# Added\n", expected_sha256=None)
+    assert result["created"] is True
+    assert result["backup_path"] is None
+    assert (workspace.root / "docs" / "notes.md").read_text(encoding="utf-8") == "# Added\n"
+
+
+def test_repository_file_apply_rejects_private_traversal_and_symlink_paths(tmp_path):
+    workspace = init_repo(tmp_path / "repo", {"app.py": "print('safe')\n"})
+    with pytest.raises(WorkspaceError):
+        workspace.apply_file("../outside.py", "pass\n", expected_sha256=None)
+    with pytest.raises(WorkspaceError):
+        workspace.apply_file(".env", "TOKEN=x\n", expected_sha256=None)
+
+def test_repository_file_apply_refuses_a_symlinked_runtime_backup_directory(tmp_path):
+    root = tmp_path / "repo"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    workspace = init_repo(root, {"app.py": "print('safe')\n"})
+    original = workspace.read_file("app.py")
+    try:
+        (root / ".kaldrax").symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is not permitted on this Windows host: {exc}")
+    with pytest.raises(WorkspaceError, match="unsafe .kaldrax runtime path"):
+        workspace.apply_file("app.py", "print('changed')\n", expected_sha256=original["sha256"])
+    assert (root / "app.py").read_text(encoding="utf-8") == "print('safe')\n"
+    assert list(outside.iterdir()) == []
+
+def test_repository_file_apply_refuses_a_symlinked_backup_subdirectory(tmp_path):
+    root = tmp_path / "repo"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    workspace = init_repo(root, {"app.py": "print('safe')\n"})
+    original = workspace.read_file("app.py")
+    runtime = root / ".kaldrax"
+    runtime.mkdir()
+    try:
+        (runtime / "desktop-backups").symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is not permitted on this Windows host: {exc}")
+    with pytest.raises(WorkspaceError, match="unsafe desktop-backups path"):
+        workspace.apply_file("app.py", "print('changed')\n", expected_sha256=original["sha256"])
+    assert (root / "app.py").read_text(encoding="utf-8") == "print('safe')\n"
+    assert list(outside.iterdir()) == []

@@ -30,6 +30,7 @@ from .memory_evaluation import (
 )
 from .memory_intelligence import LLMMemoryExtractor
 from .models import Task
+from .workspace import RepositoryWorkspace, WorkspaceError
 
 
 def _memory_path(args: argparse.Namespace) -> Path:
@@ -51,6 +52,35 @@ def _memory_store(path: Path) -> SQLiteMemoryStore:
     return SQLiteMemoryStore(path, embedder=_embedding_provider())
 
 
+
+
+def _progress_sink(path: Path | None):
+    if path is None:
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    def write(event: dict[str, object]) -> None:
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(event, ensure_ascii=False) + "\n")
+            stream.flush()
+
+    return write
+
+
+def _run_event_sink(path: Path | None):
+    write = _progress_sink(path)
+    if write is None:
+        return None
+
+    def emit(event) -> None:
+        write({
+            "event_type": event.event_type,
+            "message": event.message,
+            "sequence": event.sequence,
+            "timestamp": event.timestamp,
+        })
+
+    return emit
 
 
 def _budget_from_env() -> RunBudget:
@@ -190,6 +220,8 @@ def _team(args: argparse.Namespace) -> int:
             max_cycles=args.max_cycles,
             budget=budget,
             artifact_dir=args.artifacts,
+            progress_sink=_progress_sink(args.progress_jsonl),
+            cancel_file=args.cancel_file,
         ).run(task, apply_changes=args.apply)
         payload = report.to_dict()
         print(json.dumps(payload, indent=2))
@@ -207,6 +239,7 @@ def _team(args: argparse.Namespace) -> int:
             agent_namespace=args.agent_namespace,
             budget=budget,
             artifact_dir=args.artifacts,
+            progress_sink=_progress_sink(args.progress_jsonl),
         ).run(task)
     finally:
         memory.close()
@@ -245,6 +278,7 @@ def _run_llm(args: argparse.Namespace) -> int:
             agent_id=args.agent,
             knowledge_extractor=LLMMemoryExtractor(executor_client),
             memory_limit=args.memory_limit,
+            event_sink=_run_event_sink(args.progress_jsonl),
         ).run(task)
     finally:
         memory.close()
@@ -264,6 +298,7 @@ def main() -> int:
     demo.add_argument("--artifacts", type=Path, default=Path(".kaldrax/runs"))
     demo.add_argument("--memory-db", type=Path, default=None)
     demo.add_argument("--project", default="default")
+    demo.add_argument("--progress-jsonl", type=Path, default=None)
 
     run = commands.add_parser("run", help="run an LLM-backed task with a separate model evaluator")
     run.add_argument("--objective", required=True)
@@ -274,6 +309,7 @@ def main() -> int:
     run.add_argument("--project", default="default", help="memory isolation key for this project")
     run.add_argument("--agent", default=None, help="optional agent namespace; project-shared memory remains visible")
     run.add_argument("--memory-limit", type=int, default=5)
+    run.add_argument("--progress-jsonl", type=Path, default=None)
 
     memory = commands.add_parser("memory", help="inspect or maintain persistent project memory")
     memory_actions = memory.add_subparsers(dest="memory_action", required=True)
@@ -391,6 +427,8 @@ def main() -> int:
     team.add_argument("--verify-arg", action="append", default=None, help="repeat to add a verification-module argument")
     team.add_argument("--sandbox-timeout", type=int, default=120)
     team.add_argument("--sandbox-workspace-root", type=Path, default=Path(".kaldrax/sandbox"))
+    team.add_argument("--progress-jsonl", type=Path, default=None)
+    team.add_argument("--cancel-file", type=Path, default=None)
 
     sandbox = commands.add_parser("sandbox", help="execute untrusted Python inside a Docker sandbox")
     sandbox_actions = sandbox.add_subparsers(dest="sandbox_action", required=True)
@@ -401,8 +439,52 @@ def main() -> int:
     sandbox_run.add_argument("--cpu-count", type=float, default=1.0)
     sandbox_run.add_argument("--pids-limit", type=int, default=64)
     sandbox_run.add_argument("--workspace-root", type=Path, default=Path(".kaldrax/sandbox"))
+    sandbox_run.add_argument("--cancel-file", type=Path, default=None)
+
+    repository = commands.add_parser("repo", help="inspect and explicitly edit a local Git worktree")
+    repository_actions = repository.add_subparsers(dest="repo_action", required=True)
+    repo_status = repository_actions.add_parser("status", help="inspect Git branch, HEAD and working-tree changes")
+    repo_status.add_argument("--root", type=Path, required=True)
+    repo_files = repository_actions.add_parser("files", help="list supported text files in a repository directory")
+    repo_files.add_argument("--root", type=Path, required=True)
+    repo_files.add_argument("--directory", default=".")
+    repo_files.add_argument("--limit", type=int, default=300)
+    repo_read = repository_actions.add_parser("read", help="read one bounded UTF-8 text file with a SHA-256")
+    repo_read.add_argument("--root", type=Path, required=True)
+    repo_read.add_argument("--path", required=True)
+    repo_apply = repository_actions.add_parser("apply", help="apply an explicit single-file edit with backup and hash precondition")
+    repo_apply.add_argument("--root", type=Path, required=True)
+    repo_apply.add_argument("--path", required=True)
+    repo_apply.add_argument("--content-file", type=Path, required=True)
+    repo_apply.add_argument("--expected-sha256", default=None)
 
     args = parser.parse_args()
+    if args.command == "repo":
+        try:
+            workspace = RepositoryWorkspace(args.root)
+            if args.repo_action == "status":
+                payload = workspace.status()
+            elif args.repo_action == "files":
+                payload = workspace.list_files(args.directory, limit=args.limit)
+            elif args.repo_action == "read":
+                payload = workspace.read_file(args.path)
+            elif args.repo_action == "apply":
+                content_path = args.content_file
+                if content_path.is_symlink() or not content_path.is_file():
+                    raise WorkspaceError("content file must be a regular local file")
+                if content_path.stat().st_size > RepositoryWorkspace.MAX_DESKTOP_FILE_BYTES:
+                    raise WorkspaceError("edited file exceeds the 1 MB limit")
+                content = content_path.read_text(encoding="utf-8")
+                payload = workspace.apply_file(
+                    args.path, content, expected_sha256=args.expected_sha256,
+                )
+            else:
+                raise WorkspaceError("unsupported repository operation")
+        except (WorkspaceError, OSError, ValueError) as exc:
+            parser.error(str(exc))
+        print(json.dumps(payload, indent=2))
+        return 0
+
     if args.command == "demo":
         task = Task(
             "Produce a minimal project delivery summary",
@@ -413,6 +495,7 @@ def main() -> int:
         try:
             report = RecursiveEngine(
                 ExampleExecutor(), artifact_dir=args.artifacts, memory_store=memory,
+                event_sink=_run_event_sink(args.progress_jsonl),
             ).run(task)
         finally:
             memory.close()
@@ -456,6 +539,7 @@ def main() -> int:
             result = SandboxRunner(workspace_root=args.workspace_root).run_python(
                 source, timeout_seconds=args.timeout, memory_mb=args.memory_mb,
                 cpu_count=args.cpu_count, pids_limit=args.pids_limit,
+                cancel_file=args.cancel_file,
             )
             print(json.dumps(result.to_dict(), indent=2))
             return 1 if result.timed_out or result.exit_code != 0 else 0

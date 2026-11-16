@@ -1,12 +1,12 @@
-"""Bounded recursive execution loop with persistent project memory."""
 import json
 from pathlib import Path
+from typing import Callable
 
 from .evaluation import CriteriaEvaluator, Evaluator
 from .execution import Executor
 from .memory import MemoryRecord, MemoryStore, MemoryType, WorkingMemory, extract_reusable_knowledge
 from .memory_intelligence import KnowledgeExtractor
-from .models import RunReport, RunStatus, Task
+from .models import RunEvent, RunReport, RunStatus, Task
 
 
 class RecursiveEngine:
@@ -17,6 +17,7 @@ class RecursiveEngine:
         artifact_dir: Path | None = None, memory_store: MemoryStore | None = None,
         memory_limit: int = 5, agent_id: str | None = None,
         knowledge_extractor: KnowledgeExtractor | None = None,
+        event_sink: Callable[[RunEvent], None] | None = None,
     ) -> None:
         if memory_limit < 1:
             raise ValueError("memory_limit must be at least 1")
@@ -27,10 +28,20 @@ class RecursiveEngine:
         self.memory_limit = memory_limit
         self.agent_id = agent_id
         self.knowledge_extractor = knowledge_extractor
+        self.event_sink = event_sink
+
+    def _add_event(self, report: RunReport, event_type: str, message: str) -> None:
+        report.add_event(event_type, message)
+        if self.event_sink is not None:
+            try:
+                self.event_sink(report.events[-1])
+            except Exception:
+                # Progress reporting must never change the engine's execution result.
+                pass
 
     def run(self, task: Task) -> RunReport:
         report = RunReport.new(task.objective)
-        report.add_event("run_started", "Execution started.")
+        self._add_event(report, "run_started", "Execution started.")
         working_memory = WorkingMemory(run_id=report.run_id, project_id=task.project_id)
         if self.memory_store is not None:
             try:
@@ -39,19 +50,20 @@ class RecursiveEngine:
                     query, project_id=task.project_id, limit=self.memory_limit, agent_id=self.agent_id,
                 ))
                 identifiers = ", ".join(match.record.id for match in working_memory.retrieved_memories)
-                report.add_event(
+                self._add_event(
+                    report,
                     "memory_retrieved",
                     f"Retrieved {len(working_memory.retrieved_memories)} approved memories: {identifiers}",
                 )
             except Exception as exc:
-                report.add_event("memory_read_error", f"Memory retrieval unavailable: {type(exc).__name__}.")
+                self._add_event(report, "memory_read_error", f"Memory retrieval unavailable: {type(exc).__name__}.")
 
         for iteration in range(1, task.max_iterations + 1):
             report.iterations = iteration
             working_memory.iteration = iteration
             if iteration > 1:
                 working_memory.previous_candidate = working_memory.current_candidate
-            report.add_event("iteration_started", f"Iteration {iteration} started.")
+            self._add_event(report, "iteration_started", f"Iteration {iteration} started.")
             try:
                 execute_with_memory = getattr(self.executor, "execute_with_memory", None)
                 if callable(execute_with_memory):
@@ -60,35 +72,39 @@ class RecursiveEngine:
                     candidate = self.executor.execute(task, working_memory.feedback, iteration)
             except Exception as exc:
                 report.status = RunStatus.FAILED
-                report.add_event("executor_error", f"Executor failed: {type(exc).__name__}: {exc}")
+                self._add_event(report, "executor_error", f"Executor failed: {type(exc).__name__}: {exc}")
                 break
 
             if not isinstance(candidate, str) or not candidate.strip():
                 candidate = ""
-                report.add_event("executor_warning", "Executor returned an empty or invalid candidate.")
+                self._add_event(report, "executor_warning", "Executor returned an empty or invalid candidate.")
             report.final_output = candidate
             working_memory.current_candidate = candidate
             try:
                 evaluation = self.evaluator.evaluate(task, candidate)
             except Exception as exc:
                 report.status = RunStatus.FAILED
-                report.add_event("evaluator_error", f"Evaluator failed: {type(exc).__name__}: {exc}")
+                self._add_event(report, "evaluator_error", f"Evaluator failed: {type(exc).__name__}: {exc}")
                 break
 
             report.evaluations.append(evaluation)
             if evaluation.passed:
-                report.add_event("evaluation_passed", f"All {len(evaluation.satisfied)} criteria satisfied.")
+                self._add_event(report, "evaluation_passed", f"All {len(evaluation.satisfied)} criteria satisfied.")
                 report.status = RunStatus.PASSED
-                report.add_event("run_completed", "Independent evaluation passed.")
+                self._add_event(report, "run_completed", "Independent evaluation passed.")
                 break
-            report.add_event("evaluation_failed", f"Missing criteria: {', '.join(evaluation.missing)}")
+            self._add_event(report, "evaluation_failed", f"Missing criteria: {', '.join(evaluation.missing)}")
             working_memory.feedback = evaluation.missing
         else:
             report.status = RunStatus.LIMIT_REACHED
-            report.add_event("iteration_limit_reached", f"No passing candidate after {task.max_iterations} iterations.")
+            self._add_event(
+                report,
+                "iteration_limit_reached",
+                f"No passing candidate after {task.max_iterations} iterations.",
+            )
 
         self._remember(task, report)
-        report.add_event("run_finished", f"Run finished with status: {report.status.value}.")
+        self._add_event(report, "run_finished", f"Run finished with status: {report.status.value}.")
         self._persist(report)
         return report
 
@@ -136,12 +152,17 @@ class RecursiveEngine:
                 for lesson in lessons:
                     self.memory_store.save(lesson)
                     extracted += 1
-            report.add_event(
+            self._add_event(
+                report,
                 "memory_saved",
                 f"Run episode stored; {extracted} semantic memories queued for approval.",
             )
         except Exception as exc:
-            report.add_event("memory_write_error", f"Memory persistence or extraction unavailable: {type(exc).__name__}.")
+            self._add_event(
+                report,
+                "memory_write_error",
+                f"Memory persistence or extraction unavailable: {type(exc).__name__}.",
+            )
 
     def _persist(self, report: RunReport) -> None:
         if self.artifact_dir is None:

@@ -97,6 +97,7 @@ class WorkspaceSandboxRunner(SandboxRunner):
         memory_mb: int = 512,
         cpu_count: float = 1.0,
         pids_limit: int = 128,
+        cancel_file: Path | str | None = None,
     ) -> SandboxResult:
         if module not in self.ALLOWED_MODULES:
             raise ValueError(f"module must be one of: {', '.join(sorted(self.ALLOWED_MODULES))}")
@@ -166,20 +167,42 @@ class WorkspaceSandboxRunner(SandboxRunner):
             for reader in readers:
                 reader.start()
             timed_out = False
-            try:
-                exit_code = process.wait(timeout=timeout_seconds)
-            except subprocess.TimeoutExpired:
-                timed_out = True
-                process.kill()
-                process.wait()
+            cancelled = False
+            deadline = time.monotonic() + timeout_seconds
+            cancel_path = Path(cancel_file) if cancel_file is not None else None
+            while True:
+                if cancel_path is not None and cancel_path.exists():
+                    cancelled = True
+                    process.kill()
+                    process.wait()
+                    try:
+                        self._run(
+                            [docker, "kill", name], capture_output=True, text=True,
+                            timeout=5, check=False,
+                        )
+                    except (OSError, subprocess.TimeoutExpired):
+                        pass
+                    exit_code = 130
+                    break
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    timed_out = True
+                    process.kill()
+                    process.wait()
+                    try:
+                        self._run(
+                            [docker, "kill", name], capture_output=True, text=True,
+                            timeout=5, check=False,
+                        )
+                    except (OSError, subprocess.TimeoutExpired):
+                        pass
+                    exit_code = 124
+                    break
                 try:
-                    self._run(
-                        [docker, "kill", name], capture_output=True, text=True,
-                        timeout=5, check=False,
-                    )
-                except (OSError, subprocess.TimeoutExpired):
-                    pass
-                exit_code = 124
+                    exit_code = process.wait(timeout=min(0.2, remaining))
+                    break
+                except subprocess.TimeoutExpired:
+                    time.sleep(min(0.05, remaining))
             for reader in readers:
                 reader.join(timeout=2)
             duration_ms = int((time.monotonic() - started) * 1000)
@@ -196,4 +219,5 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 timed_out=timed_out,
                 output_truncated=truncated,
                 container_image=self.image,
+                cancelled=cancelled,
             )

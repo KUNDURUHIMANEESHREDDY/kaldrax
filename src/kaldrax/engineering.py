@@ -37,6 +37,7 @@ class RepositoryTeamReport:
     trace: list[AgentTrace] = field(default_factory=list)
     events: list[str] = field(default_factory=list)
     applied: bool = False
+    cancelled: bool = False
     budget: dict[str, Any] = field(default_factory=dict)
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -68,6 +69,8 @@ class RepositoryTeamCoordinator:
         max_cycles: int = 2,
         budget: RunBudget | None = None,
         artifact_dir: Path | None = None,
+        progress_sink=None,
+        cancel_file: Path | str | None = None,
     ) -> None:
         if not 1 <= max_cycles <= 5:
             raise ValueError("max_cycles must be between 1 and 5")
@@ -87,6 +90,29 @@ class RepositoryTeamCoordinator:
         self.max_cycles = max_cycles
         self.budget = budget
         self.artifact_dir = artifact_dir
+        self.progress_sink = progress_sink
+        self.cancel_file = Path(cancel_file) if cancel_file is not None else None
+
+    def _progress(self, event_type: str, message: str, **details: Any) -> None:
+        if self.progress_sink is None:
+            return
+        try:
+            self.progress_sink({"event_type": event_type, "message": message, **details})
+        except Exception:
+            # Progress-channel errors never affect patch validation or evaluation.
+            pass
+
+    def _stop_if_cancelled(self, report: RepositoryTeamReport) -> bool:
+        if self.cancel_file is None or not self.cancel_file.exists():
+            return False
+        report.status = RunStatus.FAILED
+        report.cancelled = True
+        report.events.append("repository_team_run_cancelled")
+        self._progress(
+            "repository_team_run_cancelled",
+            "Repository team run cancelled. No further model calls or repository writes will be started.",
+        )
+        return True
 
     @staticmethod
     def _trace(report: RepositoryTeamReport, role: str, cycle: int, output: str) -> None:
@@ -161,6 +187,9 @@ class RepositoryTeamCoordinator:
             status=RunStatus.FAILED, base_commit=snapshot.head,
             events=["repository_team_run_started"],
         )
+        if self._stop_if_cancelled(report):
+            return self._finish(report)
+        self._progress("repository_team_run_started", "Repository snapshot captured; planning started.", base_commit=snapshot.head)
         plan_input = json.dumps({
             "objective": task.objective,
             "acceptance_criteria": list(task.acceptance_criteria),
@@ -179,6 +208,9 @@ class RepositoryTeamCoordinator:
             )
             self._trace(report, "planner", 0, report.plan)
             report.events.append("planner_completed")
+            self._progress("planner_completed", "Repository plan created.", role="planner")
+            if self._stop_if_cancelled(report):
+                return self._finish(report)
         except Exception as exc:
             report.events.append(f"planner_error:{type(exc).__name__}")
             return self._finish(report)
@@ -186,6 +218,9 @@ class RepositoryTeamCoordinator:
         feedback: list[str] = []
         previous_patch = ""
         for cycle in range(1, self.max_cycles + 1):
+            if self._stop_if_cancelled(report):
+                return self._finish(report)
+            self._progress("builder_started", f"Patch builder started cycle {cycle}.", role="builder", cycle=cycle)
             builder_input = json.dumps({
                 "objective": task.objective,
                 "acceptance_criteria": list(task.acceptance_criteria),
@@ -212,11 +247,14 @@ class RepositoryTeamCoordinator:
                     ),
                     user_prompt=builder_input,
                 )
+                if self._stop_if_cancelled(report):
+                    return self._finish(report)
                 summary, patch = self._parse_builder_output(raw_candidate)
                 changed = self.workspace.changed_paths(patch)
                 self._trace(report, "builder", cycle, raw_candidate)
                 report.summary, report.patch = summary, patch
                 report.changed_files = list(changed)
+                self._progress("patch_validated", f"Validated patch touching {len(changed)} file(s).", role="builder", cycle=cycle, changed_files=list(changed))
             except Exception as exc:
                 report.events.append(f"cycle_{cycle}_patch_rejected:{type(exc).__name__}:{str(exc)[:300]}")
                 feedback = [f"Return a valid, safe unified Git diff. Previous error: {type(exc).__name__}: {str(exc)[:300]}"]
@@ -226,12 +264,14 @@ class RepositoryTeamCoordinator:
 
             try:
                 with self.workspace.staged_patch(snapshot, patch) as (staged_root, changed):
-                    verification = self.sandbox.run_workspace(
-                        staged_root,
-                        module=self.verify_module,
-                        module_args=self.verify_args,
-                        timeout_seconds=self.timeout_seconds,
-                    )
+                    sandbox_options = {
+                        "module": self.verify_module,
+                        "module_args": self.verify_args,
+                        "timeout_seconds": self.timeout_seconds,
+                    }
+                    if self.cancel_file is not None:
+                        sandbox_options["cancel_file"] = self.cancel_file
+                    verification = self.sandbox.run_workspace(staged_root, **sandbox_options)
             except Exception as exc:
                 report.events.append(f"cycle_{cycle}_verification_error:{type(exc).__name__}:{str(exc)[:300]}")
                 feedback = [f"Patch staging or sandbox verification failed: {type(exc).__name__}: {str(exc)[:300]}"]
@@ -239,6 +279,11 @@ class RepositoryTeamCoordinator:
                 report.cycles.append({"cycle": cycle, "patch_valid": True, "verification_error": str(exc)[:500]})
                 continue
 
+            if verification.cancelled:
+                self._stop_if_cancelled(report)
+                return self._finish(report)
+            if self._stop_if_cancelled(report):
+                return self._finish(report)
             verification_data = verification.to_dict()
             verification_data["module"] = self.verify_module
             verification_data["module_args"] = list(self.verify_args)
@@ -252,6 +297,13 @@ class RepositoryTeamCoordinator:
             verification_data["test_count"] = test_count
             report.verification = verification_data
             self._trace(report, "sandbox", cycle, json.dumps(verification_data))
+            self._progress(
+                "verification_completed",
+                f"Sandbox verification exited with {verification.exit_code}.",
+                role="sandbox", cycle=cycle, exit_code=verification.exit_code,
+                test_count=test_count, timed_out=verification.timed_out,
+                output_truncated=verification.output_truncated,
+            )
 
             review_input = json.dumps({
                 "objective": task.objective,
@@ -284,6 +336,13 @@ class RepositoryTeamCoordinator:
             self._trace(report, "reviewer", cycle, json.dumps({
                 "approved": approved, "findings": findings, "summary": review_summary,
             }))
+            self._progress(
+                "reviewer_completed",
+                "Reviewer approved patch." if approved else "Reviewer requested changes.",
+                role="reviewer", cycle=cycle, approved=approved, findings=findings,
+            )
+            if self._stop_if_cancelled(report):
+                return self._finish(report)
 
             evidence = (
                 f"Objective: {task.objective}\nSummary: {summary}\nPatch:\n{patch[:self.MAX_REVIEW_OUTPUT]}\n"
@@ -299,6 +358,12 @@ class RepositoryTeamCoordinator:
                 evaluation = self.evaluator.evaluate(task, evidence)
                 report.evaluation = evaluation
                 self._trace(report, "evaluator", cycle, json.dumps(asdict(evaluation)))
+                self._progress(
+                    "evaluation_completed",
+                    "Independent evaluator passed." if evaluation.passed else "Independent evaluator did not pass.",
+                    role="evaluator", cycle=cycle, passed=evaluation.passed,
+                    missing_criteria=list(evaluation.missing),
+                )
             except Exception as exc:
                 report.events.append(f"cycle_{cycle}_evaluator_error:{type(exc).__name__}")
                 report.cycles.append({"cycle": cycle, "verification_exit_code": verification.exit_code,
@@ -306,6 +371,9 @@ class RepositoryTeamCoordinator:
                 feedback = [f"Independent evaluator failed: {type(exc).__name__}"]
                 previous_patch = patch
                 continue
+
+            if self._stop_if_cancelled(report):
+                return self._finish(report)
 
             tests_ran = (
                 self.verify_module not in {"unittest", "pytest"}
@@ -326,6 +394,8 @@ class RepositoryTeamCoordinator:
                 "missing_criteria": list(evaluation.missing),
             })
             if verified and approved and evaluation.passed:
+                if self._stop_if_cancelled(report):
+                    return self._finish(report)
                 if apply_changes:
                     try:
                         self.workspace.apply_patch(snapshot, patch)
@@ -339,6 +409,11 @@ class RepositoryTeamCoordinator:
                     report.events.append("patch_verified_not_applied_dry_run")
                 report.status = RunStatus.PASSED
                 report.events.append("repository_team_run_passed")
+                self._progress(
+                    "repository_team_run_passed",
+                    "Patch verified and accepted." + (" Applied to checkout." if report.applied else " Dry run; checkout unchanged."),
+                    applied=report.applied, changed_files=report.changed_files,
+                )
                 return self._finish(report)
 
             feedback = list(findings)
@@ -356,4 +431,5 @@ class RepositoryTeamCoordinator:
 
         report.status = RunStatus.LIMIT_REACHED
         report.events.append("repository_team_run_limit_reached")
+        self._progress("repository_team_run_finished", "Repository run reached its cycle limit.", status=report.status.value)
         return self._finish(report)

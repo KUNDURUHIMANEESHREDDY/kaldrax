@@ -5,7 +5,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 from .budgets import RunBudget
@@ -77,6 +77,7 @@ class MultiAgentCoordinator:
         agent_namespace: str = "team",
         budget: RunBudget | None = None,
         artifact_dir: Path | None = None,
+        progress_sink: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         if not 1 <= max_cycles <= 5:
             raise ValueError("max_cycles must be between 1 and 5")
@@ -91,6 +92,17 @@ class MultiAgentCoordinator:
         self.agent_namespace = agent_namespace.strip()
         self.budget = budget
         self.artifact_dir = artifact_dir
+        self.progress_sink = progress_sink
+
+    def _progress(self, event_type: str, message: str, **details: Any) -> None:
+        if self.progress_sink is None:
+            return
+        event = {"event_type": event_type, "message": message, **details}
+        try:
+            self.progress_sink(event)
+        except Exception:
+            # A UI progress channel must not alter the team's execution result.
+            pass
 
     def _agent_id(self, role: str) -> str:
         return f"{self.agent_namespace}:{role}"
@@ -168,6 +180,7 @@ class MultiAgentCoordinator:
             events=["team_run_started"],
         )
         terminal_error = False
+        self._progress("team_run_started", "Planner, builder, reviewer and evaluator workflow started.")
 
         planner_prompt = json.dumps({
             "objective": task.objective,
@@ -185,6 +198,7 @@ class MultiAgentCoordinator:
             )
             self._trace_call(report, "planner", 0, report.plan)
             report.events.append("planner_completed")
+            self._progress("planner_completed", "Planning agent completed.", role="planner", cycle=0)
         except Exception as exc:
             report.events.append(f"planner_error:{type(exc).__name__}")
             terminal_error = True
@@ -194,6 +208,7 @@ class MultiAgentCoordinator:
         previous_candidate = ""
         for cycle in range(1, self.max_cycles + 1):
             report.cycles = cycle
+            self._progress("builder_started", f"Builder started cycle {cycle}.", role="builder", cycle=cycle)
             builder_prompt = json.dumps({
                 "objective": task.objective,
                 "acceptance_criteria": list(task.acceptance_criteria),
@@ -217,6 +232,7 @@ class MultiAgentCoordinator:
                     raise ValueError("builder returned an empty candidate")
                 report.final_output = candidate
                 self._trace_call(report, "builder", cycle, candidate)
+                self._progress("builder_completed", f"Builder completed cycle {cycle}.", role="builder", cycle=cycle)
             except Exception as exc:
                 report.events.append(f"builder_error:{type(exc).__name__}")
                 terminal_error = True
@@ -266,6 +282,11 @@ class MultiAgentCoordinator:
             self._trace_call(report, "reviewer", cycle, json.dumps({
                 "approved": approved, "findings": findings,
             }))
+            self._progress(
+                "reviewer_completed",
+                f"Reviewer {'approved' if approved else 'requested changes'} in cycle {cycle}.",
+                role="reviewer", cycle=cycle, approved=approved, findings=findings,
+            )
             try:
                 evaluation = self.evaluator.evaluate(task, candidate)
                 report.evaluation = evaluation
@@ -287,10 +308,17 @@ class MultiAgentCoordinator:
             report.events.append(
                 f"cycle_{cycle}_evaluation_{'passed' if evaluation.passed else 'failed'}"
             )
+            self._progress(
+                "evaluation_completed",
+                f"Independent evaluator {'passed' if evaluation.passed else 'failed'} cycle {cycle}.",
+                role="evaluator", cycle=cycle, passed=evaluation.passed,
+                missing_criteria=list(evaluation.missing),
+            )
 
             if approved and evaluation.passed:
                 report.status = RunStatus.PASSED
                 report.events.append("team_run_passed")
+                self._progress("team_run_passed", "Reviewer and independent evaluator both approved the candidate.")
                 return self._finish(report)
 
             feedback = list(findings)
@@ -304,4 +332,5 @@ class MultiAgentCoordinator:
         if not terminal_error and report.status is not RunStatus.PASSED:
             report.status = RunStatus.LIMIT_REACHED
         report.events.append(f"team_run_finished:{report.status.value}")
+        self._progress("team_run_finished", f"Team run finished with status: {report.status.value}.")
         return self._finish(report)

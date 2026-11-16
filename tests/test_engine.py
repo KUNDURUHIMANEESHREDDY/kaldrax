@@ -98,3 +98,16 @@ def test_engine_persists_llm_evidence_in_report(tmp_path):
     assert saved["evaluations"][0]["evidence"] == [
         {"criterion": "unit tests pass", "quote": "unit tests pass"}
     ]
+
+
+def test_engine_progress_sink_receives_ordered_events(tmp_path):
+    task = Task("Write a delivery summary", ("Scope", "Verification"), max_iterations=2)
+    path = tmp_path / "progress.jsonl"
+    def sink(event):
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps({"sequence": event.sequence, "event_type": event.event_type}) + "\n")
+    report = RecursiveEngine(ExampleExecutor(), event_sink=sink).run(task)
+    events = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert report.status is RunStatus.PASSED
+    assert [event["sequence"] for event in events] == list(range(1, len(events) + 1))
+    assert events[-1]["event_type"] == "run_finished"

@@ -88,3 +88,38 @@ def test_sandbox_reports_missing_docker(monkeypatch, tmp_path):
     monkeypatch.setattr(shutil, "which", lambda _name: None)
     with pytest.raises(SandboxUnavailableError, match="not found"):
         SandboxRunner(workspace_root=tmp_path).run_python("print(1)")
+
+
+def test_sandbox_cancel_file_stops_named_container(monkeypatch, tmp_path):
+    monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/docker")
+    cancel_file = tmp_path / "cancel.signal"
+    commands = []
+
+    def run_factory(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    class CancelOnWait(FakeProcess):
+        def __init__(self):
+            super().__init__(timeout=False)
+            self.first = True
+
+        def wait(self, timeout=None):
+            if self.first:
+                self.first = False
+                cancel_file.write_text("cancel", encoding="utf-8")
+                raise subprocess.TimeoutExpired("docker run", timeout)
+            return super().wait(timeout)
+
+    process = CancelOnWait()
+    result = SandboxRunner(
+        workspace_root=tmp_path,
+        popen_factory=lambda command, **kwargs: process,
+        run_factory=run_factory,
+    ).run_python("while True: pass", timeout_seconds=10, cancel_file=cancel_file)
+
+    assert result.cancelled is True
+    assert result.timed_out is False
+    assert result.exit_code == 130
+    assert process.killed is True
+    assert any(command[1] == "kill" for command in commands)

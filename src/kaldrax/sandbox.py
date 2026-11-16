@@ -28,6 +28,7 @@ class SandboxResult:
     timed_out: bool
     output_truncated: bool
     container_image: str
+    cancelled: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -91,6 +92,7 @@ class SandboxRunner:
         memory_mb: int = 256,
         cpu_count: float = 1.0,
         pids_limit: int = 64,
+        cancel_file: Path | str | None = None,
     ) -> SandboxResult:
         if not isinstance(source, str):
             raise ValueError("source must be text")
@@ -159,21 +161,42 @@ class SandboxRunner:
                 reader.start()
 
             timed_out = False
-            try:
-                exit_code = process.wait(timeout=timeout_seconds)
-            except subprocess.TimeoutExpired:
-                timed_out = True
-                process.kill()
-                process.wait()
-                # Killing the Docker client can leave the container alive; stop it explicitly.
+            cancelled = False
+            deadline = time.monotonic() + timeout_seconds
+            cancel_path = Path(cancel_file) if cancel_file is not None else None
+            while True:
+                if cancel_path is not None and cancel_path.exists():
+                    cancelled = True
+                    process.kill()
+                    process.wait()
+                    try:
+                        self._run(
+                            [docker, "kill", name],
+                            capture_output=True, text=True, timeout=5, check=False,
+                        )
+                    except (OSError, subprocess.TimeoutExpired):
+                        pass
+                    exit_code = 130
+                    break
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    timed_out = True
+                    process.kill()
+                    process.wait()
+                    try:
+                        self._run(
+                            [docker, "kill", name],
+                            capture_output=True, text=True, timeout=5, check=False,
+                        )
+                    except (OSError, subprocess.TimeoutExpired):
+                        pass
+                    exit_code = 124
+                    break
                 try:
-                    self._run(
-                        [docker, "kill", name],
-                        capture_output=True, text=True, timeout=5, check=False,
-                    )
-                except (OSError, subprocess.TimeoutExpired):
-                    pass
-                exit_code = 124
+                    exit_code = process.wait(timeout=min(0.2, remaining))
+                    break
+                except subprocess.TimeoutExpired:
+                    time.sleep(min(0.05, remaining))
             for reader in readers:
                 reader.join(timeout=2)
 
@@ -193,4 +216,5 @@ class SandboxRunner:
                 timed_out=timed_out,
                 output_truncated=output_truncated,
                 container_image=self.IMAGE,
+                cancelled=cancelled,
             )

@@ -168,3 +168,25 @@ def test_planner_is_told_it_only_receives_a_file_manifest(tmp_path):
     assert "not source contents" in prompt
     assert all(set(item) == {"path", "characters"} for item in payload["workspace_manifest"]["files"])
     assert all("content" not in item for item in payload["workspace_manifest"]["files"])
+
+def test_repository_team_cancellation_after_planner_stops_before_builder(tmp_path):
+    root = tmp_path / "repo"
+    init_csv_repo(root)
+    sandbox = SuccessfulSandbox()
+    coordinator, task = make_coordinator(root, sandbox)
+    cancel_file = tmp_path / "cancel.flag"
+    coordinator.cancel_file = cancel_file
+
+    def cancel_after_planner(event):
+        if event["event_type"] == "planner_completed":
+            cancel_file.write_text("cancel", encoding="utf-8")
+
+    coordinator.progress_sink = cancel_after_planner
+    report = coordinator.run(task, apply_changes=True)
+
+    assert report.cancelled is True
+    assert report.status is RunStatus.FAILED
+    assert report.events[-1] == "repository_team_run_cancelled"
+    assert coordinator.builder.prompts == []
+    assert sandbox.calls == []
+    assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")

@@ -81,3 +81,20 @@ def test_team_memory_is_agent_scoped(tmp_path):
     assert planner_memory and planner_memory[0].record.agent_id == "team:planner"
     assert builder_memory and builder_memory[0].record.agent_id == "team:builder"
     store.close()
+
+
+def test_team_progress_sink_reports_each_role():
+    progress = []
+    report = MultiAgentCoordinator(
+        planner=SequenceClient("Plan"),
+        builder=SequenceClient("required output is complete"),
+        reviewer=SequenceClient(json.dumps({"approved": True, "findings": []})),
+        evaluator=CriteriaEvaluator(),
+        progress_sink=progress.append,
+    ).run(Task("Build feature", ("required output is complete",)))
+    types = [event["event_type"] for event in progress]
+    assert report.status is RunStatus.PASSED
+    assert "planner_completed" in types
+    assert "builder_completed" in types
+    assert "reviewer_completed" in types
+    assert types[-1] == "team_run_passed"
