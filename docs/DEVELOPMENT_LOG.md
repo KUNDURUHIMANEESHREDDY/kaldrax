@@ -269,3 +269,15 @@ This file records implementation decisions, changes, commands, verification, and
 - The default Python image ships with standard-library unittest; pytest and project-specific dependencies require a custom image pre-pulled on the host.
 - The apply flag writes a patch to the user's working tree but does not commit or push it. The user remains responsible for inspecting and committing accepted changes.
 - The multi-agent sequence remains serial. It does not dispatch independent parallel worker processes or execute arbitrary shell commands.
+
+
+### Hosted verification — repository engineering workflow
+
+- Main-branch commit [61e690c](https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/commit/61e690c0873f254f41c3ebbbd8babfaab4e2b484) passed GitHub Actions run [43841362755](https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/actions/runs/43841362755).
+- Python 3.11: 154 passed, 1 skipped; package install, both memory benchmarks, evaluator acceptance benchmark, and compilation passed.
+- Python 3.13: 154 passed, 1 skipped; package install, both memory benchmarks, evaluator acceptance benchmark, Docker single-file smoke, repository patch integration, and compilation passed.
+- The Docker-backed CSV repository integration test passed (1 passed). It exercised the actual repository coordinator and disposable Docker workspace against a real failing CSV parser fixture: preserving quoted commas, ignoring blank rows, reviewing the patch, independently evaluating the evidence pack, and applying the accepted patch to the fixture checkout.
+- The integration uses deterministic fake model responses for planner/builder/reviewer to avoid depending on API credentials. It verifies the full orchestration path and real Docker test execution, but it is not a live-provider agent quality result.
+- The optional live-provider smoke was skipped because KALDRAX_API_KEY and model variables were not configured. Live provider behavior therefore remains unverified.
+- An initial CI run exposed a CLI merge regression: the repository-workspace patch had replaced the concurrently added memory benchmark-compare command. The CLI integration was rebased onto the updated main implementation in commit 61e690c; the subsequent full matrix passed.
+- Local focused verification: 20 passed, 1 Docker integration test skipped because Docker is unavailable in the local execution environment. Hosted Python 3.13 CI ran that integration successfully.
