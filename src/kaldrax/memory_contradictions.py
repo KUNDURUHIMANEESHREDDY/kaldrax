@@ -31,10 +31,20 @@ _OPPOSITION_DIMENSIONS: dict[str, tuple[set[str], set[str]]] = {
     "strictness": ({"strict", "deny_by_default", "fail_closed"}, {"permissive", "allow_by_default", "fail_open"}),
 }
 
+_ENVIRONMENT_ALIASES = {
+    "prod": "production",
+    "stage": "staging",
+    "dev": "development",
+    "test": "testing",
+}
 _ENVIRONMENTS = {
     "production", "prod", "staging", "stage", "development", "dev",
     "testing", "test", "qa", "preview",
 }
+
+
+def _environment_scope(subject: set[str]) -> set[str]:
+    return {_ENVIRONMENT_ALIASES.get(token, token) for token in subject & _ENVIRONMENTS}
 
 
 def _tokens(text: str) -> set[str]:
@@ -115,8 +125,8 @@ def find_contradiction_candidates(
             if not oppositions:
                 continue
 
-            left_env = subjects[left_index] & _ENVIRONMENTS
-            right_env = subjects[right_index] & _ENVIRONMENTS
+            left_env = _environment_scope(subjects[left_index])
+            right_env = _environment_scope(subjects[right_index])
             if left_env and right_env and left_env.isdisjoint(right_env):
                 continue
 
