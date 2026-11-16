@@ -1,0 +1,65 @@
+{
+  "name": "kaldrax-contradiction-v1",
+  "version": 1,
+  "provenance": "synthetic_curated",
+  "annotation_status": "assistant_proposed_pending_human_review",
+  "description": "Synthetic engineering policy pairs. Proposed labels require independent human review.",
+  "cases": [
+    {
+      "id": "availability-allow-deny",
+      "category": "availability",
+      "left": "Rule: allow worker agents to access shared project artifacts",
+      "right": "Rule: deny worker agents access to shared project artifacts",
+      "expected_conflict": true
+    },
+    {
+      "id": "visibility-public-private",
+      "category": "visibility",
+      "left": "Rule: expose the tenant record endpoint to the public",
+      "right": "Rule: keep the tenant record endpoint behind an internal route",
+      "expected_conflict": true
+    },
+    {
+      "id": "location-local-cloud",
+      "category": "location",
+      "left": "Decision: store project credentials in local encrypted memory",
+      "right": "Decision: store project credentials in cloud encrypted memory",
+      "expected_conflict": true
+    },
+    {
+      "id": "execution-sync-async",
+      "category": "execution",
+      "left": "Rule: worker task processing must remain synchronous",
+      "right": "Rule: worker task processing must remain asynchronous",
+      "expected_conflict": true
+    },
+    {
+      "id": "environment-prod-stage",
+      "category": "environment-aware",
+      "left": "Rule: expose the public admin endpoint in production",
+      "right": "Rule: keep the private admin endpoint in staging",
+      "expected_conflict": false
+    },
+    {
+      "id": "unrelated-cache-email",
+      "category": "unrelated",
+      "left": "Rule: enable local cache invalidation for user profiles",
+      "right": "Rule: disable remote email delivery for notifications",
+      "expected_conflict": false
+    },
+    {
+      "id": "unrelated-retention-security",
+      "category": "unrelated",
+      "left": "Rule: retain audit events for one year",
+      "right": "Rule: encrypt API credentials at rest",
+      "expected_conflict": false
+    },
+    {
+      "id": "environment-alias",
+      "category": "environment-aware",
+      "left": "Rule: expose the public admin endpoint in production",
+      "right": "Rule: keep the private admin endpoint in prod",
+      "expected_conflict": true
+    }
+  ]
+}

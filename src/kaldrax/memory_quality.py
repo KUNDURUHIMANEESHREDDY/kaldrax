@@ -187,6 +187,18 @@ def run_extraction_benchmark(
     precision = total_matched / total_predicted if total_predicted else 0.0
     recall = total_matched / total_expected if total_expected else 0.0
     f1 = (2 * precision * recall / (precision + recall)) if precision + recall else 0.0
+    category_totals: dict[str, dict[str, int]] = {}
+    for case in case_results:
+        category = case["category"]
+        totals = category_totals.setdefault(category, {"cases": 0, "expected": 0, "predicted": 0, "true_positives": 0, "false_positives": 0, "false_negatives": 0})
+        totals["cases"] += 1
+        for key in ("expected", "predicted", "matched", "false_positives", "false_negatives"):
+            totals["true_positives" if key == "matched" else key] += case[key]
+    category_summary: dict[str, dict[str, Any]] = {}
+    for category, totals in category_totals.items():
+        p = totals["true_positives"] / totals["predicted"] if totals["predicted"] else 0.0
+        r = totals["true_positives"] / totals["expected"] if totals["expected"] else 0.0
+        category_summary[category] = {**totals, "precision": round(p, 4), "recall": round(r, 4), "f1": round(2*p*r/(p+r), 4) if p+r else 0.0}
     calibration = _calibration(confidence_labels)
     return {
         "dataset": str(dataset_path),
@@ -203,6 +215,7 @@ def run_extraction_benchmark(
         "evidence_valid_rate": round(evidence_valid / total_predicted, 4) if total_predicted else None,
         "extraction_errors": extraction_errors,
         "confidence_calibration": calibration,
+        "by_category": category_summary,
         "calibration_interpretation": (
             "Brier score and expected calibration error are descriptive estimates "
             "over this annotated sample, not proof of population calibration."

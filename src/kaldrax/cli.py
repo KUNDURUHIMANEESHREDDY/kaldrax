@@ -21,6 +21,7 @@ from .memory_benchmarks import run_retrieval_benchmark
 from .memory_benchmark_comparison import run_retrieval_comparison
 from .memory_annotation import run_annotation_review
 from .memory_quality import run_extraction_benchmark
+from .memory_contradiction_quality import run_contradiction_benchmark
 from .memory_intelligence import LLMMemoryExtractor
 from .models import Task
 
@@ -328,6 +329,10 @@ def main() -> int:
     benchmark_annotate.add_argument("--export-dir", type=Path, default=Path(".kaldrax/benchmark-exports"))
     benchmark_annotate.add_argument("--version", default="1.0.0", help="immutable export version (MAJOR.MINOR.PATCH)")
 
+    contradiction_benchmark = memory_actions.add_parser("contradiction-benchmark", help="evaluate contradiction candidates against labeled pairs")
+    contradiction_benchmark.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_contradictions_v1.json"))
+    contradiction_benchmark.add_argument("--report", type=Path, default=None)
+
     extraction_benchmark = memory_actions.add_parser(
         "extraction-benchmark", help="evaluate extraction quality and confidence calibration using the configured LLM",
     )
@@ -453,6 +458,17 @@ def main() -> int:
                 result = run_retrieval_comparison(
                     args.dataset, embedder=_embedding_provider(), k=args.k,
                 )
+            except (ValueError, TypeError, RuntimeError, OSError) as exc:
+                parser.error(str(exc))
+            print(json.dumps(result, indent=2))
+            return 0
+
+        if args.memory_action == "contradiction-benchmark":
+            try:
+                result = run_contradiction_benchmark(args.dataset, embedder=_embedding_provider())
+                if args.report:
+                    args.report.parent.mkdir(parents=True, exist_ok=True)
+                    args.report.write_text(json.dumps(result, indent=2) + "\\n", encoding="utf-8")
             except (ValueError, TypeError, RuntimeError, OSError) as exc:
                 parser.error(str(exc))
             print(json.dumps(result, indent=2))

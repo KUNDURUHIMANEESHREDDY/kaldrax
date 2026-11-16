@@ -290,3 +290,12 @@ This file records implementation decisions, changes, commands, verification, and
 - Python 3.11: full test suite, memory retrieval, lexical-versus-hybrid benchmark baseline, evaluator benchmark, and compile checks passed. Docker-only steps are intentionally limited to Python 3.13.
 - Added a regression assertion that the planner is explicitly told it receives only the manifest and cannot inspect source contents; builder remains the role with the bounded source snapshot.
 - The optional live provider job remains skipped until operator-provided API credentials and model variables are configured.
+
+
+## 2026-11-16 — Contradiction and extraction evaluation expansion
+
+- Added category-level extraction precision, recall, F1, and FP/FN counts.
+- Added a labeled contradiction-pair evaluator with TP/FP/FN/TN, precision, recall, F1, and category summaries.
+- Added a synthetic contradiction fixture covering opposing policy dimensions, environment-specific cases, and unrelated vocabulary. Labels remain assistant-proposed and exploratory-only pending human review.
+- Added `kaldrax memory contradiction-benchmark` with optional JSON report output.
+- No live Ollama or configured LLM scores are claimed; provider measurements still require a configured environment.
