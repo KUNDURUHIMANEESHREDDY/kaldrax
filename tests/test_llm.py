@@ -59,6 +59,14 @@ def test_client_validates_configuration():
         OpenAICompatibleClient(api_key="", model="model")
     with pytest.raises(ValueError):
         OpenAICompatibleClient(api_key="key", model="model", timeout=0)
+    for base_url in (
+        "http://api.example/v1",
+        "https://user:password@api.example/v1",
+        "https://api.example/v1?token=secret",
+        "https://api.example/v1#fragment",
+    ):
+        with pytest.raises(ValueError, match="HTTPS"):
+            OpenAICompatibleClient(api_key="key", model="model", base_url=base_url)
 
 
 class FakeChatClient:
