@@ -112,7 +112,44 @@ def test_memory_benchmark_cli_runs_without_external_services(monkeypatch, capsys
     assert main() == 0
     result = json.loads(capsys.readouterr().out)
     assert result["retrieval_mode"] == "lexical"
-    assert result["query_count"] == 5
+    assert result["memory_count"] == 40
+    assert result["query_count"] == 42
+    assert "by_category" in result
+
+
+def test_memory_extraction_benchmark_cli_uses_injected_extractor(tmp_path, monkeypatch, capsys):
+    import json
+    from kaldrax.memory import MemoryRecord, MemoryType
+
+    dataset = tmp_path / "extract.json"
+    dataset.write_text(json.dumps({
+        "name": "cli-test",
+        "cases": [{
+            "id": "one",
+            "objective": "Capture a durable fact",
+            "candidate": "SQLite stores local memory.",
+            "expected": [{"match_terms": ["sqlite", "memory"]}],
+        }],
+    }), encoding="utf-8")
+    record = MemoryRecord.create(
+        project_id="extraction-benchmark", memory_type=MemoryType.SEMANTIC,
+        content="Decision: SQLite stores memory", confidence=0.9,
+        metadata={"evidence_quote": "SQLite stores local memory"},
+    )
+
+    class FakeExtractor:
+        def extract(self, task, candidate, *, source_run_id, source_event_sequences, agent_id=None):
+            return [record]
+
+    monkeypatch.setattr("kaldrax.cli._memory_extractor_from_env", lambda max_memories: FakeExtractor())
+    monkeypatch.setattr("sys.argv", [
+        "kaldrax", "memory", "extraction-benchmark", "--dataset", str(dataset),
+    ])
+    assert main() == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["dataset_name"] == "cli-test"
+    assert result["precision"] == 1.0
+    assert result["confidence_calibration"]["sample_count"] == 1
 
 
 def test_provider_check_requires_real_credentials(monkeypatch):
