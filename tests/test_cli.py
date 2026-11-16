@@ -161,7 +161,7 @@ def test_memory_extraction_benchmark_cli_uses_budgeted_provider_client(tmp_path,
     assert result["confidence_calibration"]["sample_count"] == 1
     assert result["evidence_valid_rate"] == 1.0
     assert len(budgets) == 1
-    assert result["budget"]["provider_calls"] == 1
+    assert result["budget"]["calls"] == 1
 
 def test_provider_check_requires_real_credentials(monkeypatch):
     monkeypatch.delenv("KALDRAX_API_KEY", raising=False)
