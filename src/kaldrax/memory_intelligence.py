@@ -86,7 +86,7 @@ class LLMMemoryExtractor:
             content = item.get("content")
             summary = item.get("summary", "")
             evidence = item.get("evidence")
-            confidence = item.get("confidence", 0.5)
+            confidence = item.get("confidence")
             tags = item.get("tags", [])
             if not isinstance(content, str) or not content.strip() or len(content) > 800:
                 raise MemoryExtractionError("memory content must be a non-empty string of at most 800 characters")
