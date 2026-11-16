@@ -68,16 +68,19 @@ def _datasets(tmp_path):
     contradiction = _write_json(tmp_path / "contradiction.json", {
         "name": "contradiction-fixture",
         "provenance": "synthetic_curated",
-        "annotation_status": "assistant_proposed_pending_human_review",
+        "annotation_status": "human_reviewed",
+        "dataset_approval": {"status": "approved", "reviewer": "reviewer-1", "reviewed_at": "2026-11-16T00:00:00Z"},
         "cases": [
             {
                 "id": "positive",
+                "annotation_status": "human_reviewed", "review_status": "approved", "reviewer": "reviewer-1", "reviewed_at": "2026-11-16T00:00:00Z",
                 "left": "Rule: allow worker agents to access shared project artifacts",
                 "right": "Rule: deny worker agents access to shared project artifacts",
                 "expected_conflict": True,
             },
             {
                 "id": "negative",
+                "annotation_status": "human_reviewed", "review_status": "approved", "reviewer": "reviewer-1", "reviewed_at": "2026-11-16T00:00:00Z",
                 "left": "Rule: enable local cache invalidation for user profiles",
                 "right": "Rule: disable remote email delivery for notifications",
                 "expected_conflict": False,
@@ -87,8 +90,11 @@ def _datasets(tmp_path):
     extraction = _write_json(tmp_path / "extraction.json", {
         "name": "extraction-fixture",
         "provenance": "synthetic_curated",
+        "annotation_status": "human_reviewed",
+        "dataset_approval": {"status": "approved", "reviewer": "reviewer-1", "reviewed_at": "2026-11-16T00:00:00Z"},
         "cases": [{
             "id": "case-one",
+            "annotation_status": "human_reviewed", "review_status": "approved", "reviewer": "reviewer-1", "reviewed_at": "2026-11-16T00:00:00Z",
             "objective": "Extract a durable fact",
             "candidate": "SQLite stores durable project memory.",
             "expected": [{"match_terms": ["sqlite", "memory"]}],

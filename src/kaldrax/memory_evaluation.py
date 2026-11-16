@@ -70,6 +70,34 @@ def _dataset_summary(path: Path, data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _human_review_blockers(dataset: dict[str, Any], label: str) -> list[str]:
+    blockers: list[str] = []
+    if dataset.get("annotation_status") != "human_reviewed":
+        blockers.append(f"{label} dataset is not marked human-reviewed")
+    approval = dataset.get("dataset_approval")
+    if (
+        not isinstance(approval, dict) or approval.get("status") != "approved"
+        or not isinstance(approval.get("reviewer"), str) or not approval.get("reviewer", "").strip()
+        or not isinstance(approval.get("reviewed_at"), str)
+    ):
+        blockers.append(f"{label} dataset-level human approval is missing or incomplete")
+    cases = dataset.get("cases")
+    if not isinstance(cases, list) or not cases:
+        blockers.append(f"{label} dataset has no reviewable cases")
+        return blockers
+    for case in cases:
+        identifier = case.get("id", "<unknown>") if isinstance(case, dict) else "<malformed>"
+        if (
+            not isinstance(case, dict)
+            or case.get("annotation_status") != "human_reviewed"
+            or case.get("review_status") not in {"approved", "modified"}
+            or not isinstance(case.get("reviewer"), str) or not case.get("reviewer", "").strip()
+            or not isinstance(case.get("reviewed_at"), str)
+        ):
+            blockers.append(f"{label} case {identifier} lacks per-case human review provenance")
+    return blockers
+
+
 def _validated_case_ids(cases: list[Any], label: str) -> list[str]:
     """Return complete ordered case IDs, rejecting missing or duplicate identities."""
     identifiers: list[str] = []
@@ -112,6 +140,12 @@ def create_quality_review_approval(
         raise ValueError("extraction dataset must contain cases")
     contradiction_ids = _validated_case_ids(contradiction_cases, "contradiction")
     extraction_ids = _validated_case_ids(extraction_cases, "extraction")
+    review_blockers = (
+        _human_review_blockers(contradictions, "contradiction")
+        + _human_review_blockers(extraction, "extraction")
+    )
+    if review_blockers:
+        raise ValueError("cannot attest unreviewed benchmark data: " + "; ".join(review_blockers))
     for case in contradiction_cases:
         if not isinstance(case.get("expected_conflict"), bool):
             raise ValueError("every contradiction case must have a boolean expected_conflict label")
@@ -239,6 +273,7 @@ def assess_quality_review_approval(
                 if not isinstance(cases, list) or not cases:
                     raise ValueError("dataset has no cases")
                 expected_ids = _validated_case_ids(cases, name)
+                blockers.extend(_human_review_blockers(source_data, name))
             except ValueError:
                 blockers.append(f"{name} dataset case identities are invalid")
                 continue
