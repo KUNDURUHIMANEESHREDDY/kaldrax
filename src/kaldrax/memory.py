@@ -202,7 +202,7 @@ class SQLiteMemoryStore:
     By default episodic records expire after 365 days and semantic records
     after 180 days. Approval refreshes the verification timestamp and expiry.
     A configured embedding provider enables hybrid retrieval; lexical search
-    remains available when Ollama is absent or has not indexed older records.
+    remains available when a hosted embedding provider is unconfigured or has not indexed older records.
     """
 
     DEFAULT_TTL_DAYS = {MemoryType.EPISODIC: 365, MemoryType.SEMANTIC: 180}
@@ -580,7 +580,7 @@ class SQLiteMemoryStore:
 
     def reindex_embeddings(self, project_id: str | None = None, batch_size: int = 32) -> int:
         if self.embedder is None:
-            raise ValueError("configure a local embedding provider before reindexing")
+            raise ValueError("configure a hosted embedding provider before reindexing")
         if batch_size < 1:
             raise ValueError("batch_size must be positive")
         sql = "SELECT id, content, summary, tags FROM memories"
