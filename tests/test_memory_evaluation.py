@@ -41,6 +41,15 @@ def _thresholds(path, *, retrieval_floor=0.0, contradiction_floor=0.0):
             "calibration": {
                 "max_brier_score": 1.0, "max_expected_calibration_error": 1.0,
             },
+            "minimum_sample_sizes": {
+                "retrieval_queries": 2,
+                "contradiction_cases": 3,
+                "contradiction_positive_cases": 2,
+                "contradiction_negative_cases": 2,
+                "extraction_cases": 2,
+                "extraction_expected_claims": 2,
+                "extraction_confidence_samples": 1,
+            },
         },
     })
 
