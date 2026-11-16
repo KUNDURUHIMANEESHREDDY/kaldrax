@@ -122,7 +122,7 @@ $env:KALDRAX_MODEL = "extraction-model"
 kaldrax memory extraction-benchmark
 ```
 
-This makes one extraction request per case (10 by default). The report includes claim precision/recall/F1 and confidence Brier/ECE metrics. `KALDRAX_MODEL` may point at a hosted provider or a local OpenAI-compatible endpoint. The benchmark's `match_terms` are explicit annotation rules, and its confidence metrics describe this sample only.
+This makes one extraction request per case (10 by default). The report includes claim precision/recall/F1 and confidence Brier/ECE metrics. `KALDRAX_MODEL` must point at a hosted HTTPS provider endpoint. The benchmark's `match_terms` are explicit annotation rules, and its confidence metrics describe this sample only.
 
 ## Repository-grounded memory validation
 
