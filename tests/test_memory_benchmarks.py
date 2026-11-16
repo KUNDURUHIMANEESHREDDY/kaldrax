@@ -85,3 +85,23 @@ def test_retrieval_benchmark_falls_back_when_local_embedder_fails():
     assert result["embedding_model"] is None
     assert result["embedding_error"] == "RuntimeError"
     assert result["query_count"] == 42
+
+def test_retrieval_benchmark_batches_fixture_embedding_index():
+    from pathlib import Path
+
+    class CountingEmbedder:
+        model_id = "counting-test"
+
+        def __init__(self):
+            self.batch_sizes = []
+
+        def embed(self, texts):
+            self.batch_sizes.append(len(texts))
+            return [[1.0, 0.0] for _ in texts]
+
+    embedder = CountingEmbedder()
+    dataset = Path(__file__).parents[1] / "benchmarks" / "memory_retrieval_engineering_v2.json"
+    result = run_retrieval_benchmark(dataset, embedder=embedder, k=1)
+    assert result["retrieval_mode"] == "hybrid"
+    assert embedder.batch_sizes[:2] == [32, 8]
+    assert len(embedder.batch_sizes) == 2 + result["query_count"]
