@@ -10,12 +10,12 @@ KALDRAX is a local-first engineering application. Its local Python control plane
 - Bounded recursive execution with a separate evidence-backed evaluator.
 - Persistent SQLite memory scoped by project, with optional agent-private records and project-shared records.
 - Per-run working memory with retrieved context, retry feedback, and previous candidates.
-- Hybrid retrieval: local embedding cosine similarity plus lexical relevance, confidence, and freshness.
-- Optional local Ollama embeddings; no embedding SDK or hosted vector database.
+- Hybrid retrieval: embedding cosine similarity plus lexical relevance, confidence, and freshness.
+- Optional hosted OpenAI-compatible embeddings; no local model, embedding SDK, or hosted vector database.
 - Automatic episodic run memory and evidence-checked LLM knowledge extraction.
 - Human approval required before extracted semantic memories can influence future runs.
 - Confidence metadata, configurable memory lifetimes, and automatic exclusion of expired records.
-- Explainable contradiction candidates across negation, access policy, visibility, local/cloud, sync/async, retention, and other opposing concepts; optional local embeddings improve paraphrase recall. Human resolution remains mandatory.
+- Explainable contradiction candidates across negation, access policy, visibility, local/cloud, sync/async, retention, and other opposing concepts; optional hosted embeddings improve paraphrase recall. Human resolution remains mandatory.
 - Annotated engineering retrieval corpus covering 40 memories and 42 queries across 15 workload categories, with Recall@k, Precision@k, NDCG@k, MRR, top-1, and category breakdowns.
 - Extraction evaluation over 10 annotated scenarios and 30 expected claims, reporting precision, recall, F1, evidence-quote validity, Brier score, and expected calibration error.
 - Existing v0.2/v0.3 SQLite databases migrate in place.
@@ -31,20 +31,22 @@ kaldrax demo
 
 The offline demo requires no AI credentials. Reports are written under \`.kaldrax/runs/\` and persistent memory is stored at \`.kaldrax/memory.sqlite3\` by default. Runtime data is ignored by Git.
 
-## Local semantic embeddings
+## Hosted semantic embeddings
 
-KALDRAX can generate embeddings through a local Ollama process. Install Ollama, pull an embedding model, and configure:
+KALDRAX supports an OpenAI-compatible hosted embeddings API over HTTPS. No local embedding runtime or model is installed. Configure the embedding model and API credentials only when ready to use semantic retrieval:
 
-\`\`\`powershell
-ollama pull embeddinggemma
-$env:KALDRAX_EMBEDDING_MODEL = "embeddinggemma"
-$env:KALDRAX_OLLAMA_URL = "http://127.0.0.1:11434"
+```powershell
+$env:KALDRAX_EMBEDDING_MODEL = "text-embedding-3-small"
+# Optional: defaults to KALDRAX_API_KEY when unset
+$env:KALDRAX_EMBEDDING_API_KEY = "..."
+# Optional: defaults to KALDRAX_BASE_URL, then https://api.openai.com/v1
+$env:KALDRAX_EMBEDDING_BASE_URL = "https://api.openai.com/v1"
 kaldrax memory reindex --project kaldrax-core
-\`\`\`
+```
 
-The Ollama adapter only accepts loopback endpoints. It uses Ollama's local \`POST /api/embed\` endpoint and stores vectors in the local SQLite database. Set \`KALDRAX_EMBEDDING_MODEL\` to an empty value or leave it unset to use lexical retrieval only. When an embedding model is changed, run \`memory reindex\` to refresh existing vectors; records indexed with a different model are not compared against the new model's query vectors.
+The adapter calls the hosted `POST /embeddings` endpoint and stores returned vectors in the local SQLite database. It requires HTTPS and never targets a local model server. Embedding configuration is optional: when `KALDRAX_EMBEDDING_MODEL` is unset, KALDRAX uses lexical retrieval and makes no embedding requests. When the model changes, run `memory reindex`; vectors from different model or endpoint identities are not compared.
 
-Embedding requests include project memory text and remain on the local Ollama endpoint. No vector database or additional Python package is required.
+Embedding requests send project memory text to the configured provider. Do not enable hosted embeddings for projects whose memory must remain entirely on-device. No vector database or additional Python package is required.
 
 ## LLM-backed engineering runs
 
@@ -56,13 +58,13 @@ Required environment variables:
 - \`KALDRAX_MODEL\` — executor model identifier
 - \`KALDRAX_EVALUATOR_MODEL\` — a different model identifier for evaluation
 
-Optional provider variables include \`KALDRAX_BASE_URL\`, \`KALDRAX_TIMEOUT_SECONDS\`, \`KALDRAX_MAX_TOKENS\`, and \`KALDRAX_TOKEN_PARAMETER\`. Embedding variables are \`KALDRAX_EMBEDDING_MODEL\`, \`KALDRAX_OLLAMA_URL\`, and \`KALDRAX_EMBEDDING_TIMEOUT_SECONDS\`.
+Optional provider variables include `KALDRAX_BASE_URL`, `KALDRAX_TIMEOUT_SECONDS`, `KALDRAX_MAX_TOKENS`, and `KALDRAX_TOKEN_PARAMETER`. Hosted embedding variables are `KALDRAX_EMBEDDING_MODEL`, optional `KALDRAX_EMBEDDING_API_KEY`, optional `KALDRAX_EMBEDDING_BASE_URL`, and `KALDRAX_EMBEDDING_TIMEOUT_SECONDS`.
 
 \`\`\`powershell
 $env:KALDRAX_API_KEY = "..."
 $env:KALDRAX_MODEL = "executor-model"
 $env:KALDRAX_EVALUATOR_MODEL = "different-evaluator-model"
-$env:KALDRAX_EMBEDDING_MODEL = "embeddinggemma"
+$env:KALDRAX_EMBEDDING_MODEL = "text-embedding-3-small"
 kaldrax run --project kaldrax-core --agent primary --objective "Implement a CSV parser" --criterion "unit tests pass" --criterion "README documents usage" --max-iterations 3
 \`\`\`
 
@@ -110,7 +112,7 @@ Run the bundled retrieval benchmark:
 kaldrax memory benchmark
 \`\`\`
 
-The benchmark reports Recall@k, Precision@k, NDCG@k, mean reciprocal rank, top-1 accuracy, and per-category results. The default curated corpus contains 40 synthetic memories and 42 queries across engineering workloads. It uses an isolated temporary database and does not modify project memory. Configure a local embedding model to benchmark hybrid retrieval; without one it measures the lexical fallback.
+The benchmark reports Recall@k, Precision@k, NDCG@k, mean reciprocal rank, top-1 accuracy, and per-category results. The default curated corpus contains 40 synthetic memories and 42 queries across engineering workloads. It uses an isolated temporary database and does not modify project memory. Configure a hosted embedding model and API key to benchmark hybrid retrieval; without one it measures the lexical fallback.
 
 Evaluate LLM memory extraction against the 10-case, 30-claim annotated corpus:
 
@@ -124,13 +126,13 @@ This makes one extraction request per case (10 by default). The report includes 
 
 ## Repository-grounded memory validation
 
-Run the repository-specific retrieval corpus and a paired lexical-versus-local-hybrid comparison:
+Run the repository-specific retrieval corpus and a paired lexical-versus-hosted-hybrid comparison:
 
 ```powershell
 kaldrax memory benchmark-compare --k 3
 ```
 
-The source-backed draft contains 37 memories and 36 queries derived from public KALDRAX repository files at snapshot `1b50f309c7cd2f9a0dc7ec444f12fc57c25cc7d9`. Each memory includes its source path and anchor. The report carries dataset provenance, source revision, privacy-screening status, and the review status of every query. Configure `KALDRAX_EMBEDDING_MODEL` and a running loopback Ollama instance to compare the lexical baseline with local hybrid retrieval. Without a configured or working embedder, the command reports a lexical-only baseline and does not fabricate hybrid deltas.
+The source-backed draft contains 37 memories and 36 queries derived from public KALDRAX repository files at snapshot `1b50f309c7cd2f9a0dc7ec444f12fc57c25cc7d9`. Each memory includes its source path and anchor. The report carries dataset provenance, source revision, privacy-screening status, and the review status of every query. Configure `KALDRAX_EMBEDDING_MODEL` and hosted embedding API credentials to compare the lexical baseline with hosted hybrid retrieval. Without a configured or working embedder, the command reports a lexical-only baseline and does not fabricate hybrid deltas.
 
 **Review gate:** all 36 relevance judgments are currently `assistant_proposed_pending_human_review`; the privacy scope check is also pending operator sign-off. The dataset contains public repository content only. No local SQLite memory, `.kaldrax/` runtime report, private conversation, secret, or environment value was included. These scores must not be described as human-labeled or production validation until a human reviews each query's relevant IDs and rationale, and signs off the privacy scope in `benchmarks/memory_retrieval_kaldrax_v1.json`.
 
@@ -148,11 +150,11 @@ The manual GitHub Actions provider-smoke job runs the 30-case live extraction be
 - **Contradiction detection** flags explainable candidates using opposing concepts (negation, allow/deny, public/private, local/cloud, sync/async, required/optional, retention, and related dimensions), subject overlap, environment scope, and optional local embedding similarity. It remains a heuristic review aid, not general natural-language inference. A human decides which record remains active.
 - **Consolidation** merges exact normalized duplicates only and preserves contributing source run IDs and event sequences.
 
-When Ollama is not configured or temporarily unavailable, memory persistence and lexical retrieval continue to work. Contradiction detection falls back to lexical subject overlap. Semantic extraction, review, and conflict resolution do not require embeddings.
+When a hosted embedding provider is not configured or temporarily unavailable, memory persistence and lexical retrieval continue to work. Contradiction detection falls back to lexical subject overlap. Semantic extraction, review, and conflict resolution do not require embeddings.
 
 ## Local-first boundary and limitations
 
-The application, SQLite database, reports, and optional embeddings runtime are local. The bundled memory corpora are synthetic curated fixtures, not production telemetry; add project-specific gold queries and reviewer labels before making production-quality claims. LLM-backed execution can send the task and candidate to the configured model provider; use the offline demo or a local OpenAI-compatible model endpoint when task data must stay on-device. KALDRAX does not run arbitrary shell commands or generated code, spawn distributed agents, provision cloud workers, or deploy software.
+The application, SQLite database, reports, and lexical retrieval are local. Hosted LLM and embedding calls send their inputs to the configured providers. The bundled memory corpora are synthetic curated fixtures, not production telemetry; add project-specific gold queries and reviewer labels before making production-quality claims. Use the offline demo when task data must remain on-device. KALDRAX does not install or run local models. LLM-backed execution can send the task and candidate to the configured model provider; it does not run arbitrary shell commands or generated code, spawn distributed agents, provision cloud workers, or deploy software.
 
 Memory content and reports may contain proprietary information. Protect \`.kaldrax/\` and custom artifact/database paths. Memory is untrusted historical input and cannot alter evaluator policy or acceptance criteria.
 
@@ -328,7 +330,7 @@ For each contradiction case, explicitly accept or toggle the proposed conflict l
 
 **Commit the evidence used by the tag build.** Commit the approved retrieval export, both reviewed exports printed by `quality-review`, and the resulting `benchmarks/memory_quality_review_v1.json` manifest to the release candidate. Set the GitHub repository variables `KALDRAX_RETRIEVAL_DATASET`, `KALDRAX_CONTRADICTION_DATASET`, and `KALDRAX_EXTRACTION_DATASET` to those committed paths so the tag workflow evaluates exactly the reviewed datasets. If the latter two variables are unset, the workflow falls back to the original exploratory fixtures. Locally, pass the same paths to `quality-report --dataset PATH --contradiction-dataset PATH --extraction-dataset PATH`. The tag workflow checks out the tagged commit; files that exist only on a developer machine cannot satisfy the release gate. The SHA-256 digest detects accidental changes, but the reviewer field is an operator attestation, not a cryptographic identity signature.
 
-For the tag job, configure `KALDRAX_EMBEDDING_MODEL` and `KALDRAX_OLLAMA_URL` reachable from the GitHub Actions runner, plus `KALDRAX_API_KEY`, `KALDRAX_MODEL`, and `KALDRAX_BASE_URL`. The default Ollama URL points to localhost on the runner, not the developer's computer. A private local endpoint requires a reachable deployment or a runner hosted inside the same network.
+For the tag job, configure the repository variable `KALDRAX_EMBEDDING_MODEL`, optional variable `KALDRAX_EMBEDDING_BASE_URL`, and secret `KALDRAX_EMBEDDING_API_KEY` (or reuse `KALDRAX_API_KEY`), plus `KALDRAX_API_KEY`, `KALDRAX_MODEL`, and `KALDRAX_BASE_URL`. The embedding endpoint must be a public HTTPS API reachable from the GitHub Actions runner.
 
 A release candidate must then pass:
 
@@ -336,7 +338,7 @@ A release candidate must then pass:
 python -m kaldrax.cli memory quality-report --profile release --live-extraction
 ```
 
-The release profile requires a validated retrieval export with privacy sign-off, a real Ollama hybrid run, a live extraction run using the configured provider, a matching human label-review attestation, minimum sample sizes, and every release threshold. Initial minimums are 36 retrieval queries, 50 contradiction pairs (at least 20 positive and 20 negative), 30 extraction cases, 60 expected extraction claims, and 30 confidence observations. The expanded candidate fixtures now meet the numerical size floors: 50 contradiction pairs balanced 25/25, and 30 extraction cases with 70 proposed expected claims. However, the expanded and pre-existing labels are assistant-proposed and remain pending human review; sample-size compliance does not make them validated evidence. These are initial policy floors and should be recalibrated as the held-out corpus grows. A green regular CI run does not mean v0.6 is release-ready.
+The release profile requires a validated retrieval export with privacy sign-off, a real hosted-embedding hybrid run, a live extraction run using the configured provider, a matching human label-review attestation, minimum sample sizes, and every release threshold. Initial minimums are 36 retrieval queries, 50 contradiction pairs (at least 20 positive and 20 negative), 30 extraction cases, 60 expected extraction claims, and 30 confidence observations. The expanded candidate fixtures now meet the numerical size floors: 50 contradiction pairs balanced 25/25, and 30 extraction cases with 70 proposed expected claims. However, the expanded and pre-existing labels are assistant-proposed and remain pending human review; sample-size compliance does not make them validated evidence. These are initial policy floors and should be recalibrated as the held-out corpus grows. A green regular CI run does not mean v0.6 is release-ready.
 
 
 **Repository enforcement:** configure a GitHub tag/release ruleset for `v0.6.*` that requires the `v0.6 memory evidence and release thresholds` check. The workflow fails closed, but without a repository ruleset an administrator may still create a tag or release while its check is failing or skipped.
