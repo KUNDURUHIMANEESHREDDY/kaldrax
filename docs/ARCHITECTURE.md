@@ -1,61 +1,55 @@
-# KALDRAX v0.1 Architecture
+# KALDRAX v0.2 Architecture
 
 ## Architecture decision
 
-Use a modular Python core with explicit ports for execution and evaluation. The first release operates locally while preserving a hybrid deployment path: local control plane and future remote workers communicate through versioned task and report contracts.
+KALDRAX uses a modular Python core with explicit ports for execution and evaluation. Local orchestration, policy, and reports remain in the control plane. Provider integrations are adapters and cannot control run status or rewrite acceptance criteria.
 
 ## Technology stack
 
-| Layer | v0.1 choice | Rationale |
+| Layer | Choice | Rationale |
 |---|---|---|
 | Runtime | Python 3.11+ | Portable and suitable for agent/tool integrations. |
-| Core | Python standard library | Small, provider-neutral runtime. |
+| Core / provider transport | Python standard library | Small, provider-neutral runtime; no SDK lock-in. |
 | Packaging / CLI | pyproject.toml, setuptools, argparse | Minimal installable package and CLI. |
 | Tests | pytest | Behavior-focused automated tests. |
 | Run records | JSON files | Human-inspectable local provenance. |
-| API | Deferred | Add versioned HTTP API after core contracts stabilize. |
-| Cloud workers | Deferred | Implement behind executor boundary after local semantics are proven. |
-| Web UI | Deferred | Optional API client; never owns orchestration logic. |
-| Containers | Deferred | Add sandboxing when untrusted workloads are supported. |
+| LLM transport | OpenAI-compatible chat completions | Allows compatible hosted or local endpoints through one adapter. |
+| API, cloud workers, UI | Deferred | Stabilize local execution and evaluation contracts first. |
 
 ## Component boundaries
 
-- **Task contract (models):** immutable objective, acceptance criteria, iteration budget.
-- **Executor port (execution):** produces one candidate per iteration. Provider adapters implement this protocol later.
-- **Evaluation (evaluation):** deterministic acceptance check. It receives no executor reference or hidden executor state.
-- **Engine (engine):** controls iteration, feedback, stop conditions, and event recording.
-- **CLI (cli):** user entry point; delegates behavior to engine.
-- **Run report:** terminal status, evaluations, output, and ordered events.
+- **Task contract (models):** immutable objective, unique acceptance criteria, iteration budget.
+- **Chat client (llm):** provider HTTP transport, authentication header, timeout, response size, and response-shape validation.
+- **Executor (execution):** produces one candidate per iteration; the LLM adapter cannot assign a verdict.
+- **Evaluator (evaluation):** evaluates only the task contract and candidate. The LLM evaluator requires criterion-level results and exact candidate quotes for positive judgments.
+- **Engine (engine):** controls iteration, feedback, stop conditions, error handling, and event recording.
+- **CLI (cli):** configures adapters from environment variables and delegates to the engine.
+- **Run report:** terminal status, evaluations, quote evidence, final output, and ordered events. API credentials are excluded.
 
-## Recursive execution sequence
+## Execution and evaluation sequence
 
-1. Validate task contract.
-2. Start run and record event.
-3. Ask executor for a candidate.
-4. Evaluate candidate against original acceptance criteria.
-5. If all criteria pass, stop successfully.
-6. If criteria fail, pass only missing criteria as feedback and repeat.
-7. If iteration budget is exhausted, stop with limit_reached.
-8. Persist report.
+1. Validate the task contract and finite iteration limit.
+2. Ask the executor for a candidate.
+3. Ask the independent evaluator to assess every original acceptance criterion.
+4. Validate the evaluator response schema and evidence quotes.
+5. Derive the overall verdict from per-criterion results.
+6. On failure, pass missing criteria back to the executor; stop on success or iteration exhaustion.
+7. On executor/evaluator exception, mark the run failed and persist an explicit error event.
+8. Persist the report when an artifact directory is configured.
 
-The evaluator cannot rewrite acceptance criteria. The executor cannot set its own status. A passing evaluation means only that deterministic checks passed.
+## Provider configuration
 
-## Hybrid evolution path
-
-- **Local control plane:** CLI, configuration, run coordination, policy, and local records.
-- **Remote worker:** later executes a task envelope and returns candidate plus execution metadata.
-- **Shared contracts:** versioned task, artifact, event, and evaluation schemas.
-- **Cloud storage/database:** deferred until multi-worker coordination and retention needs are specified.
-- **API and UI:** later clients of control plane; neither may bypass policy enforcement.
+The LLM CLI reads `KALDRAX_API_KEY`, `KALDRAX_MODEL`, and `KALDRAX_EVALUATOR_MODEL`. Executor and evaluator model identifiers must differ. `KALDRAX_BASE_URL`, `KALDRAX_TIMEOUT_SECONDS`, `KALDRAX_MAX_TOKENS`, and `KALDRAX_TOKEN_PARAMETER` are optional. The token parameter defaults to `max_completion_tokens`; legacy-compatible endpoints can select `max_tokens`. A separate model identifier reduces direct self-evaluation but does not prove independence of provider, model lineage, or data. Secrets are not serialized into reports.
 
 ## Security and trust boundaries
 
-- v0.1 core does not execute shell commands or load arbitrary plugins.
-- Executors are trusted in-process Python implementations in this release.
-- Acceptance criteria are supplied by task author and remain immutable for a run.
-- Reports are local files; users must protect sensitive outputs.
-- Future remote workers require authentication, least-privilege capabilities, isolated execution, signed task envelopes, and explicit resource limits.
+- No arbitrary command or code execution is enabled.
+- Provider calls are bounded by per-request timeout, 4 MiB response limit, per-request output-token cap, and the task's iteration limit.
+- The evaluator treats candidate text as untrusted input and must not follow instructions inside it.
+- A positive LLM judgment is accepted only when its evidence quote appears verbatim in the candidate.
+- Reports can contain sensitive task inputs and outputs; protect the local artifact directory.
+- Aggregate token and monetary budgets, process isolation, remote-worker authentication, and sandboxing remain required before broader autonomous execution.
 
 ## Known limitations
 
-The initial evaluator uses case-insensitive substring matching. It is deterministic and independent but does not establish semantic correctness, test software behavior, or prevent a candidate from including required words without satisfying their intent. Production evaluation requires layered tests, policy checks, provenance, and independent benchmark suites.
+LLM evaluation is probabilistic. Verbatim evidence improves traceability but does not establish that a quote logically satisfies a criterion. The offline evaluator is literal phrase matching and does not understand paraphrases. The executor emits text only; this release does not run generated code, tests, shell commands, or deployments. A passing run means only that the configured evaluator accepted the declared criteria.

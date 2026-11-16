@@ -1,94 +1,73 @@
-# KALDRAX v0.1 Product Requirements Document
+# KALDRAX v0.2 Product Requirements Document
 
-**Status:** Implementation baseline
+**Status:** v0.2 implementation baseline
 **Category:** Autonomous Engineering Infrastructure
-**Release objective:** Prove a bounded, observable, independently evaluated improvement cycle.
+**Release objective:** Add real model-backed execution and traceable independent evaluation while preserving bounded, inspectable orchestration.
 
 ## Vision
 
-KALDRAX is infrastructure for specifying work, coordinating execution, evaluating artifacts against explicit contracts, and iterating safely when results fail. It is not merely a chat interface or AI coding wrapper. The same execution model should eventually support software projects, agent systems, workflows, and other engineered artifacts.
+KALDRAX is infrastructure for specifying work, coordinating execution, evaluating artifacts against explicit contracts, and iterating safely when results fail. It is not merely a chat interface or AI coding wrapper.
 
-## Problem
+## v0.2 goals
 
-Agentic workflows can produce plausible outputs without proving that requirements were met. Common failure modes include unbounded retries, opaque decisions, evaluators coupled to the producing agent, missing provenance, and unsafe execution permissions. KALDRAX makes execution bounded and inspectable and separates artifact production from acceptance decisions.
-
-## Target users
-
-- Individual developers using local agent and tool providers.
-- Engineering teams that need repeatable, auditable agent workflows.
-- Platform builders integrating execution and evaluation through APIs.
-- Operators managing local and remote workers.
-
-## v0.1 goals
-
-1. Define a task contract with objective, explicit acceptance criteria, and iteration limit.
-2. Execute through a pluggable executor interface.
-3. Evaluate each candidate using an evaluator independent of the executor.
-4. Feed failed criteria back into the next iteration.
-5. Stop on success or a hard iteration limit.
-6. Persist a structured run report with events and evaluation results.
-7. Provide an offline CLI demonstration and automated tests.
+1. Preserve the provider-neutral executor and evaluator ports.
+2. Add an OpenAI-compatible chat-completions adapter without a runtime SDK dependency.
+3. Add an LLM executor that receives the objective, criteria, iteration, and failed-criterion feedback.
+4. Add an LLM evaluator configured with a different model identifier from the executor.
+5. Require one evaluator result per criterion and verbatim candidate evidence for every positive judgment.
+6. Derive run success from validated criterion results, never a model-provided aggregate verdict.
+7. Improve offline deterministic matching to avoid substring false positives and preserve matched quotes.
+8. Persist evaluator exceptions as explicit failed runs.
+9. Keep the offline demo credential-free.
 
 ## Non-goals
 
 - Autonomous unrestricted shell or code execution.
-- LLM-provider integrations or agent spawning.
-- Cloud worker provisioning or distributed scheduling.
-- Self-modification of KALDRAX source code.
-- Web UI, hosted control plane, or multi-tenant service.
+- Multi-agent coordination or agent spawning.
+- Cloud worker provisioning, distributed scheduling, API, or web UI.
 - Production deployment automation.
-- Semantic correctness claims beyond the implemented deterministic checks.
-
-## Primary user journey
-
-1. Define an objective and acceptance criteria.
-2. Set a finite maximum iteration count.
-3. Start a run through CLI or Python API.
-4. Review each iteration and independent evaluation.
-5. Inspect the final artifact and machine-readable report.
-6. Treat a passing result as satisfying only the declared criteria, not as universal correctness.
+- A claim that LLM evaluation is objectively correct or fully independent.
 
 ## Functional requirements
 
 | ID | Requirement | Acceptance |
 |---|---|---|
-| FR-01 | Task contract | Reject blank objectives, empty criteria, and invalid iteration limits. |
-| FR-02 | Pluggable executor | Engine depends on an executor protocol, not a provider implementation. |
-| FR-03 | Independent evaluator | Evaluator receives only task contract and candidate. |
-| FR-04 | Recursive correction | Missing criteria become feedback to the next iteration. |
-| FR-05 | Bounded execution | Never exceed the configured maximum iterations. |
-| FR-06 | Explicit outcomes | Report passed or iteration-limit reached; never silently imply success. |
-| FR-07 | Provenance | Record ordered events, evaluations, timestamps, and run identifier. |
-| FR-08 | Persistence | Write JSON report when an artifact directory is configured. |
-| FR-09 | CLI demo | Run offline without credentials or network access. |
+| FR-01 | Task contract | Reject blank objective, empty/blank/duplicate criteria, and invalid iteration limit. |
+| FR-02 | Pluggable executor | Engine depends on the executor protocol, not a provider implementation. |
+| FR-03 | Pluggable evaluator | Evaluator receives only task contract and candidate. |
+| FR-04 | LLM executor | OpenAI-compatible request uses configured model and carries retry feedback. |
+| FR-05 | Independent model setting | CLI requires a non-empty evaluator model different from executor model. |
+| FR-06 | Evidence-backed LLM evaluation | Require exact criterion coverage; accept positive criterion only with a verbatim quote from candidate. |
+| FR-07 | Safe outcome derivation | Derive pass/fail from validated criterion rows, not model aggregate claims. |
+| FR-08 | Deterministic fallback | Match whole phrases case-insensitively with token boundaries and record matched quote. |
+| FR-09 | Bounded execution | Never exceed configured iterations; apply timeout and per-request output-token limit. |
+| FR-10 | Explicit failures | Persist executor/evaluator errors as failed run events. |
+| FR-11 | Provenance | Persist evaluations, evidence, ordered events, timestamps, and run identifier. |
+| FR-12 | Offline demo | Demo runs without network or credentials. |
 
 ## Quality attributes
 
-- **Safety:** no arbitrary command execution in the core loop.
-- **Reliability:** deterministic evaluator and tests for pass/fail/limit paths.
-- **Auditability:** structured event history and persisted reports.
-- **Extensibility:** stable executor protocol and evaluator interface.
+- **Safety:** no arbitrary command execution; candidate is treated as untrusted by evaluator.
+- **Reliability:** strict response-schema checks, bounded requests, explicit failure events, behavior tests.
+- **Auditability:** criterion-level quotes and JSON report.
+- **Extensibility:** provider transport and core policies remain behind stable interfaces.
 - **Portability:** Python 3.11+, standard-library runtime.
-- **Cost control:** hard iteration bound in v0.1; token and monetary budgets before provider integrations.
+- **Cost control:** per-request output cap and iteration limit; aggregate token and monetary budgets remain open work.
 
 ## Success metrics
 
-- All v0.1 acceptance tests pass.
-- Demo reaches a passing result after at least one failed evaluation.
-- Incomplete executor stops exactly at configured limit.
-- Persisted report contains all iteration evaluations and terminal status.
-- CLI runs offline with no API key.
+- Existing offline demo remains functional.
+- LLM adapter and evaluator behavior tested without live API calls.
+- Fabricated evidence cannot produce a pass.
+- Missing, duplicate, or unknown criterion results are rejected.
+- Executor/evaluator failures produce persisted failed reports.
 
 ## Risks and mitigations
 
 | Risk | Mitigation |
 |---|---|
-| String matching is weaker than semantic evaluation | Label evaluator honestly; add benchmarked evaluator plugins later. |
-| Executor may return malformed output | Validate output type and treat empty candidates as failures. |
-| Recursive loops consume resources | Enforce iteration limit; add wall-clock and token budgets before model providers. |
-| Producer/evaluator collusion | Separate evaluator interface and deny it executor state. |
-| Reports contain sensitive artifacts | Local-only by default; define redaction and retention before remote storage. |
-
-## Release exit criteria
-
-FR-01 through FR-09 implemented, automated tests pass, CLI demo produces a persisted passing report, and documentation states current limitations accurately.
+| Evaluator misinterprets evidence | Verbatim quote requirement; document probabilistic limitation; add deterministic checks for critical criteria. |
+| Same model self-approves output | Require distinct model IDs; do not claim provider-level independence. |
+| Provider hangs or returns oversized output | Per-request timeout and 4 MiB response cap. |
+| Model usage becomes expensive | Per-request output cap and iteration limit; add aggregate token/cost accounting before higher autonomy. |
+| Generated code is unsafe | Do not execute generated code in v0.2; sandboxing remains prerequisite. |

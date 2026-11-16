@@ -2,45 +2,38 @@
 
 This file records implementation decisions, changes, commands, verification, and outstanding risks. Append an entry for every meaningful engineering session.
 
-## 2026-11-16 â€” v0.1 core engine baseline
+## 2026-11-16 — v0.2 LLM executor and evidence evaluator
 
 ### Decisions
-- Work directly on GitHub main; no feature branches or pull requests unless project owner changes this rule.
-- Python 3.11+ with standard-library runtime; pytest for development tests.
-- Keep executor and evaluator behind separate interfaces.
-- Bound every recursive run with an explicit iteration limit.
-- Persist inspectable JSON run reports locally.
-- Defer API, UI, provider integrations, cloud workers, and arbitrary sandboxed execution until core contracts are proven.
+- Continue working directly on GitHub `main`; no feature branches or pull requests.
+- Preserve the executor/evaluator ports and the Python 3.11+ standard-library runtime.
+- Use an OpenAI-compatible chat-completions transport so provider SDKs do not enter the core dependency set.
+- Configure executor and evaluator with different model identifiers; document that this is not proof of provider-level independence.
+- Require complete criterion coverage and verbatim candidate quotes for positive LLM evaluator results.
+- Derive the verdict from validated per-criterion results; never trust a model-supplied aggregate verdict.
+- Keep the offline evaluator literal and deterministic, but use phrase boundaries and quote provenance.
+- Record evaluator exceptions as failed runs and persist the run report.
 
 ### Changes
-- Added complete v0.1 PRD and architecture baseline.
-- Added accepted ADR for the Python/provider-neutral core stack.
-- Established src-layout package, CLI, tests, docs, and future integration directories.
-- Added task, evaluation, event, and run-report domain models.
-- Added pluggable executor protocol and offline example executor.
-- Added independent deterministic acceptance-criteria evaluator.
-- Added bounded recursive engine, JSON report persistence, and CLI demo.
-- Added explicit executor-exception reporting and persistence.
-- Added tests for retry-to-pass, iteration exhaustion, evaluator behavior, invalid task contracts, and executor errors.
+- Added `llm.py` with HTTP authentication, configurable endpoint/model, timeout, output-token cap (`max_completion_tokens` by default, optional legacy `max_tokens`), response size limit, response validation, and API-key redaction in HTTP errors.
+- Added `LLMExecutor` that sends objective, acceptance criteria, iteration number, and previous evaluator feedback as structured JSON.
+- Added `LLMEvaluator` with strict result-shape validation, exact criterion coverage, and verbatim quote enforcement.
+- Upgraded `CriteriaEvaluator` to whole-phrase boundaries and evidence quotes.
+- Added criterion-evidence records to evaluation reports and rejected duplicate task criteria.
+- Updated the engine to persist evaluator failures as explicit failed runs.
+- Added `kaldrax run` with required environment configuration and distinct executor/evaluator model IDs; kept `kaldrax demo` offline.
+- Added `.env.example`, v0.2 documentation, and ADR 0002.
 
 ### Commands and results
-- python --version â€” Python 3.11.9
-- python -m pytest --version â€” pytest 9.1.1
-- python -m pytest -q â€” 5 passed
-- python -m pip install -e . --no-deps â€” succeeded
-- kaldrax demo --artifacts .kaldrax\verification-run-final â€” passed in 2 iterations; JSON report persisted
-- git diff --check â€” passed
-
-### Demo evidence
-- First demo run ID: e7028e2b-54e9-475a-a3df-98f68b69fdd0
-- Final verification run ID: 66391915-7f9d-4b92-8642-35f50a6c6b5a
-- First iteration failed all three declared criteria.
-- Second iteration satisfied all three criteria.
-- Terminal status: passed.
+- `PYTHONPATH=src python -m pytest -q` — 26 passed (final verification).
+- `PYTHONPATH=src python -m kaldrax.cli demo --artifacts /tmp/kaldrax-demo-report` — passed in 2 iterations; JSON report persisted.
+- `python -m compileall -q src tests` — passed.
+- `python -m pip install -e . --no-deps --no-build-isolation` — succeeded using the environment-installed setuptools 82.0.1. (The default isolated install could not download build requirements because this runner has no network access.)
+- `kaldrax --help` — succeeded.
+- `kaldrax demo --artifacts /tmp/kaldrax-installed-demo` — passed; installed CLI produced a persisted JSON report.
 
 ### Risks / follow-up
-- Substring evaluator is basic and must not be marketed as semantic verification.
-- Add wall-clock, token, and monetary budgets before connecting paid model providers.
-- Add process isolation before supporting untrusted code execution.
-- Define versioned worker protocol before cloud execution.
-- Current execution adapter is an offline example, not a real model-backed agent.
+- LLM evaluator judgments remain probabilistic; verbatim quotes establish traceability, not semantic truth.
+- Same provider key/endpoint may serve both models; separate model IDs do not guarantee independent training data or provider behavior.
+- Aggregate token and monetary accounting is not implemented; only per-request output caps and iteration bounds exist.
+- The executor produces text only. Do not execute generated code until an isolated sandbox, resource limits, and explicit command policy exist.

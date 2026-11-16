@@ -1,14 +1,16 @@
 """Bounded recursive execution loop."""
 import json
 from pathlib import Path
-from .evaluation import CriteriaEvaluator
+
+from .evaluation import CriteriaEvaluator, Evaluator
 from .execution import Executor
 from .models import RunReport, RunStatus, Task
+
 
 class RecursiveEngine:
     """Execute, independently evaluate, feed failures back, and stop safely."""
 
-    def __init__(self, executor: Executor, evaluator: CriteriaEvaluator | None = None,
+    def __init__(self, executor: Executor, evaluator: Evaluator | None = None,
                  artifact_dir: Path | None = None) -> None:
         self.executor = executor
         self.evaluator = evaluator or CriteriaEvaluator()
@@ -31,9 +33,15 @@ class RecursiveEngine:
             if not isinstance(candidate, str) or not candidate.strip():
                 candidate = ""
                 report.add_event("executor_warning", "Executor returned an empty or invalid candidate.")
-            evaluation = self.evaluator.evaluate(task, candidate)
-            report.evaluations.append(evaluation)
             report.final_output = candidate
+            try:
+                evaluation = self.evaluator.evaluate(task, candidate)
+            except Exception as exc:
+                report.status = RunStatus.FAILED
+                report.add_event("evaluator_error", f"Evaluator failed: {type(exc).__name__}: {exc}")
+                break
+
+            report.evaluations.append(evaluation)
             if evaluation.passed:
                 report.add_event("evaluation_passed", f"All {len(evaluation.satisfied)} criteria satisfied.")
                 report.status = RunStatus.PASSED

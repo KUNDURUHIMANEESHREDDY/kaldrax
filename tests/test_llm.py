@@ -1,0 +1,133 @@
+import io
+import json
+from urllib.error import HTTPError
+
+import pytest
+
+from kaldrax.execution import LLMExecutor
+from kaldrax.llm import LLMProviderError, OpenAICompatibleClient
+from kaldrax.models import Task
+
+
+class FakeResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def read(self, limit=-1):
+        return self.payload[:limit]
+
+
+def test_openai_compatible_client_sends_auth_model_and_messages():
+    seen = {}
+
+    def opener(request, timeout):
+        seen["url"] = request.full_url
+        seen["authorization"] = request.get_header("Authorization")
+        seen["timeout"] = timeout
+        seen["payload"] = json.loads(request.data)
+        return FakeResponse(json.dumps({"choices": [{"message": {"content": "candidate"}}]}).encode())
+
+    client = OpenAICompatibleClient(
+        api_key="secret", model="executor-model", base_url="https://example.test/v1",
+        timeout=12, max_tokens=500, opener=opener,
+    )
+    assert client.complete(system_prompt="system", user_prompt="user") == "candidate"
+    assert seen["url"] == "https://example.test/v1/chat/completions"
+    assert seen["authorization"] == "Bearer secret"
+    assert seen["timeout"] == 12
+    assert seen["payload"]["model"] == "executor-model"
+    assert seen["payload"]["max_completion_tokens"] == 500
+    assert seen["payload"]["messages"][1]["content"] == "user"
+
+
+def test_openai_compatible_client_rejects_invalid_response():
+    client = OpenAICompatibleClient(
+        api_key="secret", model="model", opener=lambda *_args, **_kwargs: FakeResponse(b"{}")
+    )
+    with pytest.raises(LLMProviderError, match="invalid chat-completions"):
+        client.complete(system_prompt="s", user_prompt="u")
+
+
+def test_client_validates_configuration():
+    with pytest.raises(ValueError):
+        OpenAICompatibleClient(api_key="", model="model")
+    with pytest.raises(ValueError):
+        OpenAICompatibleClient(api_key="key", model="model", timeout=0)
+
+
+class FakeChatClient:
+    def __init__(self, output):
+        self.output = output
+        self.prompts = None
+
+    def complete(self, *, system_prompt, user_prompt):
+        self.prompts = (system_prompt, user_prompt)
+        return self.output
+
+
+def test_llm_executor_passes_task_and_retry_feedback_as_json():
+    client = FakeChatClient("implementation candidate")
+    executor = LLMExecutor(client)
+    task = Task("Implement feature", ("unit tests", "documentation"), max_iterations=4)
+    result = executor.execute(task, ("documentation",), 2)
+    assert result == "implementation candidate"
+    prompt = json.loads(client.prompts[1])
+    assert prompt["objective"] == "Implement feature"
+    assert prompt["acceptance_criteria"] == ["unit tests", "documentation"]
+    assert prompt["previous_evaluation_feedback"] == ["documentation"]
+    assert prompt["iteration"] == 2
+
+
+def test_provider_error_redacts_api_key():
+    def opener(*_args, **_kwargs):
+        raise HTTPError(
+            "https://provider.test", 401, "unauthorized", {},
+            io.BytesIO(b"credential secret was rejected"),
+        )
+
+    client = OpenAICompatibleClient(api_key="secret", model="model", opener=opener)
+    with pytest.raises(LLMProviderError) as exc:
+        client.complete(system_prompt="s", user_prompt="u")
+    assert "401" in str(exc.value)
+    assert "secret" not in str(exc.value)
+    assert "[REDACTED]" in str(exc.value)
+
+
+def test_client_rejects_oversized_response():
+    client = OpenAICompatibleClient(
+        api_key="secret", model="model",
+        opener=lambda *_args, **_kwargs: FakeResponse(b"x" * (4 * 1024 * 1024 + 1)),
+    )
+    with pytest.raises(LLMProviderError, match="4 MiB"):
+        client.complete(system_prompt="s", user_prompt="u")
+
+
+def test_client_rejects_empty_completion():
+    body = json.dumps({"choices": [{"message": {"content": " "}}]}).encode()
+    client = OpenAICompatibleClient(
+        api_key="secret", model="model",
+        opener=lambda *_args, **_kwargs: FakeResponse(body),
+    )
+    with pytest.raises(LLMProviderError, match="empty"):
+        client.complete(system_prompt="s", user_prompt="u")
+
+
+def test_client_supports_legacy_token_parameter_for_compatible_endpoints():
+    seen = {}
+
+    def opener(request, timeout):
+        seen.update(json.loads(request.data))
+        return FakeResponse(json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode())
+
+    client = OpenAICompatibleClient(
+        api_key="secret", model="model", token_parameter="max_tokens", opener=opener
+    )
+    assert client.complete(system_prompt="s", user_prompt="u") == "ok"
+    assert seen["max_tokens"] == 2048
+    assert "max_completion_tokens" not in seen

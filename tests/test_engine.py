@@ -40,6 +40,8 @@ def test_task_rejects_invalid_contracts():
         Task("objective", ())
     with pytest.raises(ValueError):
         Task("objective", ("criterion",), max_iterations=0)
+    with pytest.raises(ValueError):
+        Task("objective", ("same", "same"))
 
 class ExplodingExecutor:
     def execute(self, task, feedback, iteration):
@@ -52,3 +54,47 @@ def test_executor_error_is_reported_and_persisted(tmp_path):
     assert report.iterations == 1
     assert report.events[-2].event_type == "executor_error"
     assert json.loads((tmp_path / f"{report.run_id}.json").read_text())["status"] == "failed"
+
+class ExplodingEvaluator:
+    def evaluate(self, task, candidate):
+        raise RuntimeError("judge unavailable")
+
+def test_evaluator_error_is_reported_and_persisted(tmp_path):
+    task = Task("Do work", ("result",), max_iterations=2)
+    report = RecursiveEngine(ExampleExecutor(), evaluator=ExplodingEvaluator(), artifact_dir=tmp_path).run(task)
+    assert report.status is RunStatus.FAILED
+    assert report.iterations == 1
+    assert report.events[-2].event_type == "evaluator_error"
+    saved = json.loads((tmp_path / f"{report.run_id}.json").read_text())
+    assert saved["status"] == "failed"
+    assert saved["events"][-2]["event_type"] == "evaluator_error"
+
+
+def test_engine_persists_llm_evidence_in_report(tmp_path):
+    import json
+    from kaldrax.evaluation import LLMEvaluator
+
+    class StaticExecutor:
+        def execute(self, task, feedback, iteration):
+            return "The unit tests pass."
+
+    class StaticJudge:
+        def complete(self, *, system_prompt, user_prompt):
+            return json.dumps({
+                "criteria": [{
+                    "criterion": "unit tests pass",
+                    "passed": True,
+                    "evidence": "unit tests pass",
+                }]
+            })
+
+    task = Task("Verify implementation", ("unit tests pass",))
+    report = RecursiveEngine(
+        StaticExecutor(), evaluator=LLMEvaluator(StaticJudge()), artifact_dir=tmp_path
+    ).run(task)
+
+    assert report.status is RunStatus.PASSED
+    saved = json.loads((tmp_path / f"{report.run_id}.json").read_text())
+    assert saved["evaluations"][0]["evidence"] == [
+        {"criterion": "unit tests pass", "quote": "unit tests pass"}
+    ]
