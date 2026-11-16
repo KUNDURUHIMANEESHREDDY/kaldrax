@@ -5,7 +5,7 @@
 
 KALDRAX is a local-first engineering application. Its local Python control plane runs bounded engineering tasks, independently evaluates candidate artifacts, and preserves project knowledge between runs. AI providers are adapters; local SQLite storage and the offline demo do not require a hosted KALDRAX service.
 
-## v0.4 capabilities
+## Core capabilities (v0.5)
 
 - Bounded recursive execution with a separate evidence-backed evaluator.
 - Persistent SQLite memory scoped by project, with optional agent-private records and project-shared records.
@@ -15,8 +15,9 @@ KALDRAX is a local-first engineering application. Its local Python control plane
 - Automatic episodic run memory and evidence-checked LLM knowledge extraction.
 - Human approval required before extracted semantic memories can influence future runs.
 - Confidence metadata, configurable memory lifetimes, and automatic exclusion of expired records.
-- Conservative contradiction detection and operator-controlled conflict resolution.
-- Reproducible retrieval benchmark with Recall@k, mean reciprocal rank, and top-1 accuracy.
+- Explainable contradiction candidates across negation, access policy, visibility, local/cloud, sync/async, retention, and other opposing concepts; optional local embeddings improve paraphrase recall. Human resolution remains mandatory.
+- Annotated engineering retrieval corpus covering 40 memories and 42 queries across 14 workload categories, with Recall@k, Precision@k, NDCG@k, MRR, top-1, and category breakdowns.
+- Extraction evaluation over 10 annotated scenarios and 30 expected claims, reporting precision, recall, F1, evidence-quote validity, Brier score, and expected calibration error.
 - Existing v0.2/v0.3 SQLite databases migrate in place.
 
 ## Quick start
@@ -109,7 +110,17 @@ Run the bundled retrieval benchmark:
 kaldrax memory benchmark
 \`\`\`
 
-The benchmark reports Recall@k, mean reciprocal rank, and top-1 accuracy. It uses an isolated temporary database and does not modify project memory. Configure a local embedding model to benchmark hybrid retrieval; without one it measures the lexical fallback.
+The benchmark reports Recall@k, Precision@k, NDCG@k, mean reciprocal rank, top-1 accuracy, and per-category results. The default curated corpus contains 40 synthetic memories and 42 queries across engineering workloads. It uses an isolated temporary database and does not modify project memory. Configure a local embedding model to benchmark hybrid retrieval; without one it measures the lexical fallback.
+
+Evaluate LLM memory extraction against the 10-case, 30-claim annotated corpus:
+
+```powershell
+$env:KALDRAX_API_KEY = "..."
+$env:KALDRAX_MODEL = "extraction-model"
+kaldrax memory extraction-benchmark
+```
+
+This makes one extraction request per case (10 by default). The report includes claim precision/recall/F1 and confidence Brier/ECE metrics. `KALDRAX_MODEL` may point at a hosted provider or a local OpenAI-compatible endpoint. The benchmark's `match_terms` are explicit annotation rules, and its confidence metrics describe this sample only.
 
 ## Memory model and guarantees
 
@@ -117,17 +128,17 @@ The benchmark reports Recall@k, mean reciprocal rank, and top-1 accuracy. It use
 - **Episodic memory** records passed, failed, and iteration-limit runs with source run/event provenance.
 - **Semantic memory** stores reusable knowledge proposals with supporting candidate quotes.
 - **Approval state** separates pending, active, rejected, contested, superseded, and expired records. Only active records are retrieved by default.
-- **Confidence** influences ranking but is not a calibrated probability. Human approval raises confidence and refreshes verification time.
+- **Confidence** influences ranking. Extractors are prompted to report estimated correctness probabilities, but scores remain uncalibrated until measured. The extraction benchmark reports sample Brier score and expected calibration error; human approval remains a separate state and confidence floor.
 - **Freshness** decays ranking as records age. Episodic records default to a 365-day lifetime and semantic records to 180 days; expired records are excluded even before the maintenance command marks their status.
 - **Hybrid retrieval** combines local embedding cosine similarity and lexical overlap, then adjusts ranking by confidence and freshness.
-- **Contradiction detection** flags high-overlap statements with explicit opposing polarity. It is a review aid, not a general natural-language logic engine. A human decides which record remains active.
+- **Contradiction detection** flags explainable candidates using opposing concepts (negation, allow/deny, public/private, local/cloud, sync/async, required/optional, retention, and related dimensions), subject overlap, environment scope, and optional local embedding similarity. It remains a heuristic review aid, not general natural-language inference. A human decides which record remains active.
 - **Consolidation** merges exact normalized duplicates only and preserves contributing source run IDs and event sequences.
 
-When Ollama is not configured or temporarily unavailable, memory persistence and lexical retrieval continue to work. Semantic extraction, conflict detection, and approval workflows do not require embeddings.
+When Ollama is not configured or temporarily unavailable, memory persistence and lexical retrieval continue to work. Contradiction detection falls back to lexical subject overlap. Semantic extraction, review, and conflict resolution do not require embeddings.
 
 ## Local-first boundary and limitations
 
-The application, SQLite database, reports, and optional embeddings runtime are local. LLM-backed execution can send the task and candidate to the configured model provider; use the offline demo or a local OpenAI-compatible model endpoint when task data must stay on-device. KALDRAX does not run arbitrary shell commands or generated code, spawn distributed agents, provision cloud workers, or deploy software.
+The application, SQLite database, reports, and optional embeddings runtime are local. The bundled memory corpora are synthetic curated fixtures, not production telemetry; add project-specific gold queries and reviewer labels before making production-quality claims. LLM-backed execution can send the task and candidate to the configured model provider; use the offline demo or a local OpenAI-compatible model endpoint when task data must stay on-device. KALDRAX does not run arbitrary shell commands or generated code, spawn distributed agents, provision cloud workers, or deploy software.
 
 Memory content and reports may contain proprietary information. Protect \`.kaldrax/\` and custom artifact/database paths. Memory is untrusted historical input and cannot alter evaluator policy or acceptance criteria.
 
@@ -229,4 +240,5 @@ The GitHub Actions matrix runs on Python 3.11 and 3.13, executes the full test s
 - [ADR 0003: Persistent project memory](docs/adr/0003-persistent-project-memory.md)
 - [ADR 0004: Memory intelligence](docs/adr/0004-memory-intelligence.md)
 - [ADR 0005: Budgeted sandbox and agent runtime](docs/adr/0005-budgeted-sandbox-agent-runtime.md)
+- [ADR 0006: Memory quality and contradiction evaluation](docs/adr/0006-memory-quality-evaluation.md)
 - [Repository structure](docs/REPOSITORY_STRUCTURE.md)
