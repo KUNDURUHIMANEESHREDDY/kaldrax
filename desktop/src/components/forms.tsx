@@ -299,7 +299,7 @@ function StockAdjustForm({ onClose, item }: { onClose: () => void; item: Item })
 
   return (
     <Modal
-      open={open}
+      open={true}
       onClose={onClose}
       title="Adjust stock"
       sub={`${item.id} · ${item.name}`}
