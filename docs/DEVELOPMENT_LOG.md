@@ -503,17 +503,46 @@ This file records implementation decisions, changes, commands, verification, and
 - Added `src/kaldrax/orchestration.py`: strict task graph validation, bounded LLM decomposition, dependency-aware parallel scheduling, per-task attempts and outputs, retry classification/backoff, failure escalation, progress events, and atomic checkpoint persistence/resumption.
 - Added `kaldrax orchestrate` with worker/attempt bounds, checkpoint selection, fresh-run and retry-failed controls, artifact output, and JSONL progress events.
 - Dependent workers receive completed outputs from their prerequisite tasks. Independent tasks run concurrently; failures do not cancel unrelated work.
-- Added `tests/test_orchestration.py` for malformed graphs/planner output, dependency cycles, concurrency, dependency blocking, transient retries, escalation, checkpoint resume, graph mismatch, and explicit failed-task retry.
+- Once every graph node succeeds, task outputs are aggregated in graph order and passed through the independent reviewer and evidence-backed LLM evaluator. The CLI reports success only when task execution, reviewer approval, and evaluator acceptance all pass.
+- Added `tests/test_orchestration.py` for malformed graphs/planner output, dependency cycles, concurrency, dependency blocking, transient retries, escalation, checkpoint resume, graph mismatch, explicit failed-task retry, and the final reviewer/evaluator gate.
 - Documented the new workflow and its boundaries in README.md.
 
 ### Verification
-- Focused orchestration, existing agent, and repository-engineering tests: 25 passed.
-- Full local suite on the connected Windows device after rebasing onto the latest `origin/main`: 196 passed, 4 skipped.
-- `kaldrax orchestrate --help` rendered successfully.
-- `python -m compileall -q src tests` and `git diff --check` passed after the final edits and remote rebase.
+- Focused orchestration, existing agent, and repository-engineering tests after the final reviewer/evaluator integration: 26 passed.
+- Full local suite on the connected Windows device after rebasing onto the latest `origin/main` and before the final reviewer/evaluator integration: 196 passed, 4 skipped.
+- The final full-suite rerun is currently blocked during collection by a separate, uncommitted live-validation change in the working tree: `src/kaldrax/live_validation.py` imports `OllamaEmbeddingProvider`, which is not exported by the current `src/kaldrax/embeddings.py`. The concurrent live-validation files and edits were left untouched and excluded from this commit.
+- `python -m compileall -q src/kaldrax/orchestration.py src/kaldrax/cli.py tests/test_orchestration.py` and `git diff --check` passed.
 - Live provider calls were not run. Hosted CI, Docker-backed integration, and live provider behavior remain separate verification layers.
 
 ### Limitations and risks
-- The new DAG runner produces per-task artifacts; it does not yet synthesize those outputs into a repository patch or run the existing independent evaluator over a final aggregate. Use `kaldrax team --workspace ...` for the established repository patch/review/sandbox/evaluator/apply gates.
+- The DAG runner aggregates task outputs and runs the separate reviewer and evidence-backed independent evaluator, but does not synthesize or apply repository patches or run sandbox verification over a repository checkout. Use `kaldrax team --workspace ...` for the established repository patch/review/sandbox/evaluator/apply gates.
 - A resumed run invokes decomposition again; if the planner produces a different graph, the checkpoint fingerprint check fails closed rather than mixing work. Use `--fresh` to intentionally start over.
 - Interrupted in-flight provider requests have unknown completion/billing state. Resume is at-least-once for those tasks, within the remaining attempt and shared run budgets.
+
+## 2026-11-16 — Live-provider validation harness
+
+### Decisions
+- Keep live provider validation opt-in and credential-gated; ordinary CI remains deterministic and does not require paid API access.
+- Require distinct planner, builder, reviewer, and evaluator model identifiers for the full Team Run.
+- Apply provider-generated patches only to a disposable temporary Git fixture. Never use the user's working checkout as the live-validation target.
+- Keep local SQLite retrieval and Docker availability checks independent of provider credentials so blocked live-provider runs still produce useful infrastructure evidence.
+- Record provider role/model, per-call latency, failure type, token usage, shared budget, reviewer/evaluator decisions, changed paths, and Docker verification output. Never record API keys, prompts, or completions.
+
+### Changes
+- Added `kaldrax validate-live` and `src/kaldrax/live_validation.py`.
+- The command validates all four role configurations, checks SQLite Memory persistence/retrieval and project isolation, and validates Docker daemon availability.
+- With credentials configured, it executes a real planner → builder → reviewer → independent evaluator repository task, applies the patch to a disposable Git fixture, and requires Docker test success before reporting PASS.
+- If hosted embeddings are configured, the Memory preflight also requires a successful semantic embedding/retrieval round trip; otherwise it explicitly reports lexical retrieval.
+- Added regression coverage for provider telemetry, secret redaction, missing/duplicate configuration, and a Docker-backed end-to-end harness test using deterministic fake model responses.
+- Updated `.env.example`, README instructions, and the manual GitHub Actions provider workflow to run the full validation and upload its JSON evidence when all four model variables and the API secret are configured.
+
+### Verification
+- Full local Python suite with `KALDRAX_RUN_DOCKER_INTEGRATION=1`: **199 passed, 3 skipped**.
+- The Docker-backed repository engineering integration passed; the new full validation-harness integration also passed using deterministic fake provider responses and the actual Docker sandbox.
+- Python source/test compilation passed.
+- Local Docker Desktop Linux engine was reachable (server 29.9.2). Pulled `python:3.13-slim` for the isolated workspace tests (image digest `sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90`).
+- `kaldrax validate-live` passed the local Docker preflight and SQLite lexical retrieval/project-isolation checks, then correctly returned **BLOCKED (exit 2)** because no `KALDRAX_API_KEY` or four role model variables are configured in this Windows environment. No live provider requests were made and no provider spend occurred.
+- `git diff --check` passed.
+
+### Remaining gate
+- Configure `KALDRAX_API_KEY`, `KALDRAX_PLANNER_MODEL`, `KALDRAX_MODEL`, `KALDRAX_REVIEWER_MODEL`, and `KALDRAX_EVALUATOR_MODEL`, then run `kaldrax validate-live` to obtain the first genuine live-provider Team Run result. A passing fake-provider integration test is not live-provider evidence.

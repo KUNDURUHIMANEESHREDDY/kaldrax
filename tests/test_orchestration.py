@@ -209,3 +209,62 @@ def test_checkpointed_running_task_resumes_with_remaining_attempt_budget(tmp_pat
     ).run(graph, lambda task: "resumed", checkpoint_store=store)
     assert report.passed
     assert report.attempts["a"] == 2
+
+
+
+def test_cli_orchestration_requires_final_reviewer_and_independent_evaluator(tmp_path, monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    import kaldrax.cli as cli
+    from kaldrax.budgets import RunBudget
+
+    class RoleClient:
+        def __init__(self, role):
+            self.role = role
+            self.calls = 0
+
+        def complete(self, *, system_prompt, user_prompt):
+            self.calls += 1
+            if self.role == "planner":
+                return json.dumps({"tasks": [{
+                    "id": "core", "description": "Implement core",
+                    "depends_on": [], "acceptance_criteria": ["alpha delivered"],
+                }]})
+            if self.role == "builder":
+                return "alpha delivered"
+            if self.role == "reviewer":
+                return json.dumps({
+                    "approved": True, "findings": [], "summary": "Aggregate is sound.",
+                })
+            if self.role == "evaluator":
+                return json.dumps({"criteria": [{
+                    "criterion": "alpha delivered", "passed": True,
+                    "evidence": "alpha delivered",
+                }]})
+            raise AssertionError(self.role)
+
+    clients = {role: RoleClient(role) for role in ("planner", "builder", "reviewer", "evaluator")}
+    monkeypatch.setenv("KALDRAX_API_KEY", "test-key")
+    monkeypatch.setenv("KALDRAX_PLANNER_MODEL", "planner-model")
+    monkeypatch.setenv("KALDRAX_MODEL", "builder-model")
+    monkeypatch.setenv("KALDRAX_REVIEWER_MODEL", "reviewer-model")
+    monkeypatch.setenv("KALDRAX_EVALUATOR_MODEL", "evaluator-model")
+    monkeypatch.setattr(cli, "_budget_from_env", RunBudget)
+    monkeypatch.setattr(cli, "_client", lambda model, budget: clients[model.removesuffix("-model")])
+
+    args = SimpleNamespace(
+        objective="Build core", criterion=["alpha delivered"],
+        max_workers=2, max_attempts=2, checkpoint=tmp_path / "checkpoint.json",
+        fresh=True, retry_failed=False, progress_jsonl=None,
+        artifact=tmp_path / "report.json",
+    )
+    assert cli._orchestrate(args) == 0
+    report = json.loads(args.artifact.read_text(encoding="utf-8"))
+    assert report["task_graph_passed"] is True
+    assert report["reviewer_approved"] is True
+    assert report["evaluation"]["passed"] is True
+    assert report["passed"] is True
+    assert clients["reviewer"].calls == 1
+    assert clients["evaluator"].calls == 1
+    assert "final_review_completed" in [event["event"] for event in report["events"]]
+    capsys.readouterr()
