@@ -3,7 +3,9 @@
 \`\`\`text
 kaldrax/
 ├── benchmarks/
-│   └── memory_retrieval.json
+│   ├── memory_retrieval.json
+│   ├── memory_retrieval_engineering_v2.json
+│   └── memory_extraction_v1.json
 ├── src/kaldrax/data/
 │   └── evaluator_cases.json
 ├── docs/
@@ -11,7 +13,9 @@ kaldrax/
 │   │   ├── 0001-core-stack.md
 │   │   ├── 0002-llm-executor-and-evidence-evaluator.md
 │   │   ├── 0003-persistent-project-memory.md
-│   │   └── 0004-memory-intelligence.md
+│   │   ├── 0004-memory-intelligence.md
+│   │   ├── 0005-budgeted-sandbox-agent-runtime.md
+│   │   └── 0006-memory-quality-evaluation.md
 │   ├── PRD.md
 │   ├── ARCHITECTURE.md
 │   ├── DEVELOPMENT_LOG.md
@@ -30,7 +34,9 @@ kaldrax/
 │   ├── llm.py
 │   ├── memory.py
 │   ├── memory_benchmarks.py
+│   ├── memory_contradictions.py
 │   ├── memory_intelligence.py
+│   ├── memory_quality.py
 │   └── models.py
 ├── tests/
 │   ├── test_agents.py
@@ -44,7 +50,9 @@ kaldrax/
 │   ├── test_llm.py
 │   ├── test_memory.py
 │   ├── test_memory_benchmarks.py
-│   └── test_memory_intelligence.py
+│   ├── test_memory_contradictions.py
+│   ├── test_memory_intelligence.py
+│   └── test_memory_quality.py
 ├── .env.example
 ├── .gitignore
 ├── .python-version
@@ -55,7 +63,7 @@ Runtime files are stored under .kaldrax by default: SQLite project memory and JS
 
 ## Dependency direction
 
-The engine depends on domain models and the executor/evaluator/memory interfaces. Embedding and LLM transports are injected adapters. The CLI configures local storage and optional providers. Benchmark execution uses an isolated temporary database and does not mutate user project memory.
+The engine depends on domain models and the executor/evaluator/memory interfaces. Embedding and LLM transports are injected adapters. The CLI configures local storage and optional providers. Memory retrieval and extraction benchmarks use isolated datasets and temporary storage and do not mutate user project memory. Retrieval uses synthetic-curated relevance judgments; extraction uses an annotated match-term rubric.
 
 
 GitHub Actions additionally runs evaluator acceptance regression tests, the existing memory retrieval benchmark, and a Docker sandbox smoke case. The optional provider-smoke job requires manually configured repository secrets and variables.
