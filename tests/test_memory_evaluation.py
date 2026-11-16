@@ -246,3 +246,24 @@ def test_markdown_summary_includes_metric_table_and_release_blockers(tmp_path):
     assert "# KALDRAX Memory Evaluation" in markdown
     assert "Contradiction detection" in markdown
     assert "Release blockers" in markdown
+
+
+def test_quality_review_approval_refuses_datasets_without_per_case_review(tmp_path):
+    retrieval, contradiction, extraction = _datasets(tmp_path)
+    data = json.loads(contradiction.read_text(encoding="utf-8"))
+    data["cases"][0].pop("reviewer")
+    contradiction.write_text(json.dumps(data), encoding="utf-8")
+    try:
+        create_quality_review_approval(
+            retrieval_dataset=retrieval,
+            contradiction_dataset=contradiction,
+            extraction_dataset=extraction,
+            approval_path=tmp_path / "approval.json",
+            reviewer="reviewer-1",
+            contradiction_labels_reviewed=True,
+            extraction_labels_reviewed=True,
+        )
+    except ValueError as exc:
+        assert "per-case human review provenance" in str(exc)
+    else:
+        raise AssertionError("approval must reject datasets without case-level review provenance")
