@@ -422,3 +422,22 @@ This file records implementation decisions, changes, commands, verification, and
 - Live provider execution remains unverified until the operator configures `KALDRAX_API_KEY`, `KALDRAX_MODEL`, and `KALDRAX_EVALUATOR_MODEL` and dispatches the provider workflow.
 - The last recorded desktop lint run had 0 errors and 22 warnings, primarily React Fast Refresh/export warnings and effect-driven screen-loading warnings. Desktop lint is not currently a GitHub Actions step, so the warning count has not been freshly rechecked by hosted CI.
 - A green regular CI run is not v0.6 release approval. Human dataset review/privacy approval, live-provider evidence, hybrid retrieval measurements, and confidence-calibration evidence remain separate release gates.
+
+
+## 2026-11-16 — Hosted embeddings; no local model runtime
+
+### Decision
+- KALDRAX will not install, download, launch, or depend on local language or embedding models. Hosted model APIs are configured later, after API-independent implementation and verification are complete.
+- Keep SQLite local and preserve lexical retrieval when hosted embedding credentials/model settings are absent.
+- Use an OpenAI-compatible HTTPS embeddings endpoint as the first hosted embedding adapter. The embedding API key can be dedicated or fall back to the existing KALDRAX_API_KEY.
+
+### Changes
+- Replaced the loopback-only Ollama embedding adapter with a standard-library hosted POST /embeddings adapter.
+- Require HTTPS, reject URL credentials/query/fragment, redact API keys from HTTP error details, bound response size, and validate vector count, indices, numeric values, finiteness, and consistent dimensions.
+- Wired KALDRAX_EMBEDDING_MODEL, KALDRAX_EMBEDDING_API_KEY, KALDRAX_EMBEDDING_BASE_URL, and timeout configuration into the CLI.
+- Updated environment examples, user documentation, memory error messages, and the release workflow to use hosted embedding configuration.
+- Kept embedding use opt-in; no API key is needed for lexical retrieval, the offline demo, or mocked adapter tests.
+
+### Verification
+- Added deterministic fake-HTTP tests for authentication headers, request payloads, result ordering, HTTPS enforcement, empty inputs, malformed vectors, response dimensions, duplicate indices, and API-key redaction.
+- Live provider requests and hosted hybrid retrieval measurements remain unperformed until the operator configures credentials and dispatches the provider workflow.
