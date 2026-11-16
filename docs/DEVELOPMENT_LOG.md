@@ -384,3 +384,24 @@ This file records implementation decisions, changes, commands, verification, and
 - Human review is still an operator action; no labels were reviewed or approved during implementation.
 - Reviewed exports are generated only when an operator runs the command and completes every case and dataset approval.
 - Hosted CI is the authoritative verification for this change.
+
+
+## 2026-11-16 — Contradiction and extraction candidate corpus expansion
+
+### Decisions
+- Meet the strict release sample-size floors with a balanced contradiction candidate corpus and a larger extraction candidate corpus.
+- Keep every existing and newly generated label explicitly pending human review. Corpus growth must not create or imply reviewer approval.
+- Treat the generated examples as synthetic candidate data, not production observations or independent evaluation evidence.
+- Increase only the explicitly invoked provider-smoke and strict release budgets to accommodate 30 extraction cases at the existing 1,024-token per-completion cap.
+
+### Changes
+- Expanded contradiction candidates from 8 to 50 pairs, balanced at 25 proposed conflicts and 25 proposed non-conflicts. Added 42 assistant-generated synthetic pairs with distinct case IDs and case-level pending-review metadata.
+- Expanded extraction candidates from 10 to 30 cases and from 30 to 70 proposed expected claims. Added 20 assistant-generated synthetic candidates, each with two source-grounded proposed claims.
+- Added dataset-level expansion provenance and explicit pending status to every case in both corpora. No reviewer identity, timestamp, dataset approval, or human-reviewed status was added.
+- Added corpus regression tests for sample counts, contradiction class balance, unique IDs, pending-review provenance, and extraction-label term grounding.
+- Raised the manually dispatched provider-smoke and tag-only release budgets to 40 provider calls, 36,000 completion tokens, and 100,000 total tokens so the 30-case extraction benchmark can run without silently exceeding its bounded budget.
+
+### Verification and limitations
+- Candidate counts and structural invariants are checked in the new regression tests; hosted CI is required to verify the complete repository test matrix and Docker integration.
+- No human reviewed these labels during generation. The contradiction and extraction datasets remain ineligible for release until every case and expected claim is reviewed and immutable reviewed exports plus a hash-bound approval manifest are committed.
+- No live provider requests, Ollama measurements, extraction metrics, or confidence-calibration measurements were performed by this change.
