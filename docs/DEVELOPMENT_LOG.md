@@ -180,3 +180,26 @@ This file records implementation decisions, changes, commands, verification, and
 - Batch fixture embedding indexing in groups of 32, fall back to lexical scoring if local embedding initialization/indexing fails, and keep fixture IDs out of retrieval text.
 - Normalize environment aliases (for example, prod/production) and add parameterized tests for all 13 opposition dimensions.
 - Final GitHub Actions result for the newest main-branch commit remains unverified in this session; keep this milestone marked pending until the push-triggered workflow result is checked.
+
+
+## 2026-11-16 — Repository-grounded memory validation
+
+### Decisions
+- Use only the public KALDRAX repository snapshot as the initial real-project dataset. Do not collect local SQLite records, runtime reports, secrets, shell environment values, private conversation content, or other private repositories.
+- Keep assistant-proposed relevance judgments and privacy-screening state visibly pending. Do not call the dataset human-verified until a human reviews every query label and approves the source scope.
+- Compare lexical and local-hybrid retrieval on the same judged queries. Emit paired deltas only when embedding indexing and query embedding both succeed; unavailable embeddings produce a lexical-only report.
+- Keep ordinary CI credential-free. Extend only the existing manually dispatched, secret-gated provider job with live extraction evaluation.
+
+### Changes
+- Added `benchmarks/memory_retrieval_kaldrax_v1.json`: 37 source-backed memories and 36 query proposals, each with source or rationale provenance, pinned to public repository snapshot `1b50f309c7cd2f9a0dc7ec444f12fc57c25cc7d9`.
+- Added `memory_benchmark_comparison.py` and `kaldrax memory benchmark-compare` with lexical baseline, optional hybrid run, aggregate/per-category/per-query deltas, and explicit unavailable states.
+- Preserved source revision, annotation status, privacy-screening status, and per-query annotation rationale in benchmark reports.
+- Added comparison unit tests and a corpus guard that verifies source paths and pending-review metadata.
+- Added the lexical comparison baseline to regular CI and the 10-request live extraction benchmark to the manual secret-gated provider job. The manual extraction step caps each completion at 1,024 tokens and uses the shared run budget.
+- Updated README, PRD, architecture, and ADR 0006.
+
+### Verification and limitations
+- GitHub source edits were committed to `main`; the newest commit still requires hosted Actions verification.
+- Direct repository cloning was unavailable in this execution environment, so a local pytest/compile run could not be performed here.
+- No local Ollama service or user-configured model endpoint was accessed from this session; hybrid scores and live extraction scores remain unmeasured here.
+- The new dataset is public-repository-derived, but its 36 relevance labels are assistant proposals and the privacy scope is pending operator sign-off. These are not yet human-verified data.
