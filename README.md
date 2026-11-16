@@ -122,6 +122,20 @@ kaldrax memory extraction-benchmark
 
 This makes one extraction request per case (10 by default). The report includes claim precision/recall/F1 and confidence Brier/ECE metrics. `KALDRAX_MODEL` may point at a hosted provider or a local OpenAI-compatible endpoint. The benchmark's `match_terms` are explicit annotation rules, and its confidence metrics describe this sample only.
 
+## Repository-grounded memory validation
+
+Run the repository-specific retrieval corpus and a paired lexical-versus-local-hybrid comparison:
+
+```powershell
+kaldrax memory benchmark-compare --k 3
+```
+
+The source-backed draft contains 37 memories and 36 queries derived from public KALDRAX repository files at snapshot `1b50f309c7cd2f9a0dc7ec444f12fc57c25cc7d9`. Each memory includes its source path and anchor. The report carries dataset provenance, source revision, privacy-screening status, and the review status of every query. Configure `KALDRAX_EMBEDDING_MODEL` and a running loopback Ollama instance to compare the lexical baseline with local hybrid retrieval. Without a configured or working embedder, the command reports a lexical-only baseline and does not fabricate hybrid deltas.
+
+**Review gate:** all 36 relevance judgments are currently `assistant_proposed_pending_human_review`; the privacy scope check is also pending operator sign-off. The dataset contains public repository content only. No local SQLite memory, `.kaldrax/` runtime report, private conversation, secret, or environment value was included. These scores must not be described as human-labeled or production validation until a human reviews each query's relevant IDs and rationale, and signs off the privacy scope in `benchmarks/memory_retrieval_kaldrax_v1.json`.
+
+The manual GitHub Actions provider-smoke job now also runs the 10-case live extraction benchmark when the API key and model repository variables are configured. That adds up to 10 model requests, uses the shared run budget, and caps each completion at 1,024 tokens. Ordinary push and pull-request CI remains credential-free. The manual job has not been executed as part of this repository change.
+
 ## Memory model and guarantees
 
 - **Working memory** is transient and scoped to one engine run.
