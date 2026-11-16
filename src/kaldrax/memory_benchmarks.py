@@ -77,7 +77,7 @@ def run_retrieval_benchmark(
             raise ValueError(f"benchmark query references unknown memory IDs: {sorted(unknown)}")
 
     with tempfile.TemporaryDirectory(prefix="kaldrax-memory-benchmark-") as directory:
-        store = SQLiteMemoryStore(Path(directory) / "benchmark.sqlite3", embedder=embedder)
+        store = SQLiteMemoryStore(Path(directory) / "benchmark.sqlite3")
         try:
             for item in dataset["memories"]:
                 identifier = item["id"]
@@ -91,6 +91,12 @@ def run_retrieval_benchmark(
                     expires_at=None,
                 )
                 store.save(record)
+
+            if embedder is not None:
+                # Index the fixture in batches instead of one provider request
+                # per record; this keeps local model overhead predictable.
+                store.embedder = embedder
+                store.reindex_embeddings(project_id="benchmark", batch_size=32)
 
             case_results: list[dict[str, Any]] = []
             by_category: dict[str, list[dict[str, float]]] = defaultdict(list)
