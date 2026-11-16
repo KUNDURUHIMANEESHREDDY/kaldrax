@@ -86,8 +86,12 @@ def run_retrieval_benchmark(
                     memory_type=MemoryType.SEMANTIC,
                     content=item["content"],
                     summary=str(item.get("summary", "")),
-                    tags=tuple(item.get("tags", [])) + (f"benchmark-id:{identifier}",),
-                    metadata={"benchmark_fixture": True, "category": str(item.get("category", "uncategorized"))},
+                    tags=tuple(item.get("tags", [])),
+                    metadata={
+                        "benchmark_fixture": True,
+                        "benchmark_id": identifier,
+                        "category": str(item.get("category", "uncategorized")),
+                    },
                     expires_at=None,
                 )
                 store.save(record)
@@ -118,7 +122,7 @@ def run_retrieval_benchmark(
                 relevant = set(case["relevant"])
                 matches = store.search(case["query"], project_id="benchmark", limit=k)
                 ranked = [
-                    next((tag.split(":", 1)[1] for tag in match.record.tags if tag.startswith("benchmark-id:")), "")
+                    str(match.record.metadata.get("benchmark_id", ""))
                     for match in matches
                 ]
                 hits = [identifier for identifier in ranked if identifier in relevant]
