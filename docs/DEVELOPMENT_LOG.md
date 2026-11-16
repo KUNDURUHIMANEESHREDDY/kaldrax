@@ -553,3 +553,28 @@ This file records implementation decisions, changes, commands, verification, and
 - Python 3.11 and 3.13 jobs passed. The Python 3.13 job ran the Docker-backed repository-engineering and live-validation-harness integration tests successfully.
 - Desktop lint and production build passed.
 - The optional live-provider job was skipped because the workflow was push-triggered, not manually dispatched. No live provider quality result is claimed.
+
+
+## 2026-11-16 — Hosted embeddings import repair and DAG-to-repository handoff
+
+### First blocker — repaired and verified
+- Confirmed the active embeddings adapter is `HostedEmbeddingProvider` in `src/kaldrax/embeddings.py` and `live_validation.py` imports that hosted adapter; it no longer imports the obsolete `OllamaEmbeddingProvider` symbol.
+- Full local suite on the connected Windows device: **197 passed, 5 skipped**. The live-validation import/collection failure is resolved on current `main`.
+
+### DAG repository handoff
+- Extended `kaldrax orchestrate` with `--workspace` to pass the validated task graph and completed task outputs into the existing `RepositoryTeamCoordinator`.
+- Added bounded, untrusted task-graph context adapters for repository planner, patch builder, and reviewer. Aggregate task output context is capped at 30,000 characters to keep repository prompts bounded.
+- Repository mode generates a unified Git patch from the captured workspace snapshot, validates its paths and diff, stages it against the immutable clean HEAD, and verifies it in the existing disposable network-isolated Docker workspace.
+- Patch acceptance still requires non-zero test discovery where applicable, successful sandbox exit, independent reviewer approval, and evidence-backed evaluation. `--apply` is opt-in and uses the existing clean-worktree and stale-HEAD checks. Default repository mode is a verified dry run.
+- Added `--max-cycles`, `--verify-module`, repeatable `--verify-arg`, `--sandbox-timeout`, and `--sandbox-workspace-root` controls to the orchestration CLI.
+- Added a CLI integration test using a temporary clean Git repository and a fake sandbox to verify graph-output handoff, patch creation, review/evaluation, and gated application. Added a guard test that rejects `--apply` without `--workspace`.
+- Updated README with dry-run and explicit-apply usage and the clean-checkout requirement.
+
+### Verification and limitations
+- Focused orchestration, repository-engineering, and repository integration tests: **23 passed, 1 skipped**.
+- The sandbox in the new CLI integration test is a deterministic fake; the repository coordinator's existing Docker integration test was skipped in this local environment because Docker was unavailable. Hosted Docker integration remains a separate CI verification.
+- The actual KALDRAX checkout was not used as the patch target: it contains a pre-existing modified `desktop/src-tauri/tauri.conf.json` and untracked desktop screenshots. Those files remain untouched. The repository coordinator correctly requires a clean target checkout before capturing a patch snapshot.
+- No live provider calls or real patch application against the user's KALDRAX checkout were performed. The `--apply` path was verified only against the disposable temporary Git fixture.
+
+
+- Final post-handoff verification update: full local suite **199 passed, 5 skipped**; `python -m compileall -q src tests`, `kaldrax orchestrate --help`, and `git diff --check` passed.

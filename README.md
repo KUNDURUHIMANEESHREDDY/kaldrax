@@ -430,4 +430,14 @@ Each task has a bounded retry policy (default three attempts) with exponential b
 
 A graph-fingerprint-bound atomic JSON checkpoint is written under `.kaldrax/checkpoints/` by default. Re-running the same objective resumes successful work and retries interrupted work within its remaining attempt budget. Use `--retry-failed` to explicitly reset failed tasks, `--fresh` to ignore a prior checkpoint, `--checkpoint PATH` to select a checkpoint, and `--progress-jsonl PATH` to stream task events. A changed decomposition is rejected against an existing checkpoint rather than mixing results from different graphs.
 
-This DAG runner is an additional workflow; the existing planner → builder → reviewer → independent evaluator and repository patch-verification workflows remain available. It does not itself synthesize or apply repository patches, or run sandbox verification over a repository checkout. Use `kaldrax team --workspace ...` for the established repository patch/review/sandbox/evaluator/apply gates. No local LLM runtime is used; planning, workers, final review, evaluation, and escalation use the configured hosted provider.
+To carry completed task outputs into actual repository changes, pass a clean Git repository root:
+
+```powershell
+kaldrax orchestrate --objective "Implement a CSV import feature" --criterion "CSV tests pass" --workspace "C:/work/my-repo" --verify-module pytest
+```
+
+With `--workspace`, KALDRAX feeds the task graph and completed deliverables into the repository planner and patch builder. It validates the unified diff, stages it against an immutable clean-HEAD snapshot, executes the selected verification command in a disposable, network-isolated Docker workspace, then requires repository reviewer approval and independent evidence-backed evaluation. This mode is a dry run by default: it reports a verified patch without changing the checkout.
+
+Add `--apply` to apply the patch to the selected checkout only after all gates pass. The apply operation rechecks that the checkout is still clean and its HEAD still matches the original snapshot. Never use `--apply` on a checkout containing unrelated work; commit or move unrelated changes first. The default maximum is two patch/review/verification cycles. `--max-cycles`, `--sandbox-timeout`, `--verify-module`, and repeated `--verify-arg` options configure that stage. A failed or dirty-workspace gate is recorded in the orchestration report and never applies the patch.
+
+Without `--workspace`, the DAG workflow returns and evaluates task deliverables without modifying a repository. No local LLM runtime is used; planning, workers, patch generation, reviewer, evaluator, and escalation calls use the configured hosted provider.

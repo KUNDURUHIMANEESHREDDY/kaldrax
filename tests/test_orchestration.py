@@ -268,3 +268,180 @@ def test_cli_orchestration_requires_final_reviewer_and_independent_evaluator(tmp
     assert clients["evaluator"].calls == 1
     assert "final_review_completed" in [event["event"] for event in report["events"]]
     capsys.readouterr()
+
+
+
+def test_cli_orchestration_passes_task_outputs_through_repository_patch_and_apply(
+    tmp_path, monkeypatch, capsys,
+):
+    import subprocess
+    from types import SimpleNamespace
+
+    import kaldrax.cli as cli
+    from kaldrax.budgets import RunBudget
+    from kaldrax.sandbox import SandboxResult
+
+    root = tmp_path / "repo"
+    (root / "src").mkdir(parents=True)
+    (root / "tests").mkdir()
+    (root / "src" / "operations.py").write_text(
+        "def subtract(left: int, right: int) -> int:\n"
+        "    raise NotImplementedError\n",
+        encoding="utf-8",
+    )
+    (root / "tests" / "test_operations.py").write_text(
+        "import unittest\n"
+        "from src.operations import subtract\n\n"
+        "class SubtractTests(unittest.TestCase):\n"
+        "    def test_subtract(self):\n"
+        "        self.assertEqual(subtract(9, 4), 5)\n",
+        encoding="utf-8",
+    )
+
+    def git(*args):
+        subprocess.run(
+            ["git", "-C", str(root), *args],
+            check=True, capture_output=True, text=True,
+        )
+
+    git("init", "-q")
+    git("config", "user.name", "KALDRAX Tests")
+    git("config", "user.email", "tests@kaldrax.invalid")
+    git("add", "--all")
+    git("commit", "-qm", "baseline")
+
+    patch = """diff --git a/src/operations.py b/src/operations.py
+--- a/src/operations.py
++++ b/src/operations.py
+@@ -1,2 +1,2 @@
+ def subtract(left: int, right: int) -> int:
+-    raise NotImplementedError
++    return left - right
+"""
+
+    class RoleClient:
+        def __init__(self, role):
+            self.role = role
+            self.calls = []
+
+        def complete(self, *, system_prompt, user_prompt):
+            payload = json.loads(user_prompt)
+            self.calls.append((system_prompt, payload))
+            if self.role == "planner":
+                if "task decomposition planner" in system_prompt:
+                    return json.dumps({"tasks": [{
+                        "id": "implement-subtract",
+                        "description": "Implement integer subtraction",
+                        "depends_on": [],
+                        "acceptance_criteria": ["subtraction is implemented"],
+                    }]})
+                assert "task_graph_context" in payload
+                return "Inspect the subtraction module and produce the safe patch."
+            if self.role == "builder":
+                if "focused KALDRAX implementation worker" in system_prompt:
+                    return "Deliverable: implement subtract(left, right)."
+                assert payload["task_graph_context"]["task_outputs"]["implement-subtract"]
+                return json.dumps({
+                    "summary": "Implement integer subtraction instead of raising NotImplementedError.",
+                    "patch": patch,
+                })
+            if self.role == "reviewer":
+                assert payload["task_graph_context"]["tasks"][0]["id"] == "implement-subtract"
+                assert "patch" in payload
+                return json.dumps({
+                    "approved": True,
+                    "findings": [],
+                    "summary": "Patch implements the task-graph deliverable.",
+                })
+            if self.role == "evaluator":
+                candidate = payload["candidate"]
+                return json.dumps({"criteria": [{
+                    "criterion": criterion,
+                    "passed": criterion in candidate,
+                    "evidence": criterion if criterion in candidate else "",
+                } for criterion in payload["acceptance_criteria"]]})
+            raise AssertionError(self.role)
+
+    clients = {
+        role: RoleClient(role)
+        for role in ("planner", "builder", "reviewer", "evaluator")
+    }
+
+    class SuccessfulSandbox:
+        def __init__(self, **kwargs):
+            self.calls = []
+
+        def run_workspace(self, workspace, *, module, module_args, timeout_seconds):
+            self.calls.append((workspace, module, module_args, timeout_seconds))
+            staged_source = (workspace / "src" / "operations.py").read_text(encoding="utf-8")
+            assert "return left - right" in staged_source
+            return SandboxResult(
+                exit_code=0,
+                stdout="Ran 1 test in 0.001s\nOK",
+                stderr="",
+                duration_ms=10,
+                timed_out=False,
+                output_truncated=False,
+                container_image="fake:latest",
+            )
+
+    monkeypatch.setenv("KALDRAX_API_KEY", "test-key")
+    monkeypatch.setenv("KALDRAX_PLANNER_MODEL", "planner-model")
+    monkeypatch.setenv("KALDRAX_MODEL", "builder-model")
+    monkeypatch.setenv("KALDRAX_REVIEWER_MODEL", "reviewer-model")
+    monkeypatch.setenv("KALDRAX_EVALUATOR_MODEL", "evaluator-model")
+    monkeypatch.setattr(cli, "_budget_from_env", RunBudget)
+    monkeypatch.setattr(
+        cli, "_client",
+        lambda model, budget: clients[model.removesuffix("-model")],
+    )
+    monkeypatch.setattr(cli, "WorkspaceSandboxRunner", SuccessfulSandbox)
+
+    artifact = tmp_path / "runs" / "orchestration.json"
+    args = SimpleNamespace(
+        objective="Implement subtraction in the repository",
+        criterion=["Sandbox verification exit code: 0"],
+        max_workers=2,
+        max_attempts=2,
+        checkpoint=tmp_path / "checkpoint.json",
+        fresh=True,
+        retry_failed=False,
+        progress_jsonl=None,
+        artifact=artifact,
+        workspace=root,
+        apply=True,
+        max_cycles=1,
+        verify_module="unittest",
+        verify_arg=None,
+        sandbox_timeout=30,
+        sandbox_workspace_root=tmp_path / "sandbox",
+    )
+
+    assert cli._orchestrate(args) == 0
+    payload = json.loads(artifact.read_text(encoding="utf-8"))
+    assert payload["task_graph_passed"] is True
+    assert payload["repository"]["status"] == "passed"
+    assert payload["repository"]["reviewer_approved"] is True
+    assert payload["repository"]["verification"]["exit_code"] == 0
+    assert payload["applied"] is True
+    assert payload["passed"] is True
+    assert "return left - right" in (root / "src" / "operations.py").read_text(encoding="utf-8")
+    assert any("repository_patch_gate_completed" == item["event"] for item in payload["events"])
+    capsys.readouterr()
+
+
+def test_cli_orchestration_refuses_apply_without_workspace(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    import kaldrax.cli as cli
+
+    monkeypatch.setenv("KALDRAX_API_KEY", "test-key")
+    monkeypatch.setenv("KALDRAX_PLANNER_MODEL", "planner-model")
+    monkeypatch.setenv("KALDRAX_MODEL", "builder-model")
+    monkeypatch.setenv("KALDRAX_REVIEWER_MODEL", "reviewer-model")
+    monkeypatch.setenv("KALDRAX_EVALUATOR_MODEL", "evaluator-model")
+    args = SimpleNamespace(
+        objective="Build", criterion=["works"], apply=True, workspace=None,
+    )
+    with pytest.raises(ValueError, match="--apply requires --workspace"):
+        cli._orchestrate(args)
