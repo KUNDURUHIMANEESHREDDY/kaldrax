@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass
 from typing import Callable, Protocol
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from .budgets import BudgetExceeded, BudgetReservation, RunBudget
@@ -54,8 +55,16 @@ class OpenAICompatibleClient:
             raise ValueError("api_key must not be empty")
         if not model.strip():
             raise ValueError("model must not be empty")
-        if not base_url.startswith(("https://", "http://")):
-            raise ValueError("base_url must be an HTTP(S) URL")
+        parsed = urlsplit(base_url)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("base_url must be an HTTPS URL without credentials, query, or fragment")
         if timeout <= 0:
             raise ValueError("timeout must be greater than zero")
         if max_tokens < 1:
