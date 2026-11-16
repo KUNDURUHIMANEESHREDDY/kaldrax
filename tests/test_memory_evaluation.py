@@ -1,3 +1,4 @@
+import hashlib
 import json
 
 from kaldrax.memory_evaluation import (
@@ -174,6 +175,40 @@ def test_label_review_approval_is_hash_bound_and_write_once(tmp_path):
         assert "write-once" in str(exc)
     else:
         raise AssertionError("an existing approval must not be overwritten")
+
+
+def test_label_review_must_cover_every_case_even_with_recomputed_digest(tmp_path):
+    retrieval, contradiction, extraction = _datasets(tmp_path)
+    approval_path = tmp_path / "approval.json"
+    create_quality_review_approval(
+        retrieval_dataset=retrieval,
+        contradiction_dataset=contradiction,
+        extraction_dataset=extraction,
+        approval_path=approval_path,
+        reviewer="reviewer-1",
+        contradiction_labels_reviewed=True,
+        extraction_labels_reviewed=True,
+    )
+    manifest = json.loads(approval_path.read_text(encoding="utf-8"))
+    manifest["label_reviews"]["contradiction"]["case_ids"] = ["positive"]
+    payload = dict(manifest)
+    payload.pop("integrity", None)
+    manifest["integrity"]["digest"] = hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    approval_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    assessment = assess_quality_review_approval(
+        approval_path,
+        retrieval_dataset=retrieval,
+        contradiction_dataset=contradiction,
+        extraction_dataset=extraction,
+    )
+    assert assessment["validated"] is False
+    assert any(
+        "exact ordered case IDs" in reason
+        for reason in assessment["blocking_reasons"]
+    )
 
 
 def test_markdown_summary_includes_metric_table_and_release_blockers(tmp_path):

@@ -322,7 +322,11 @@ Before a v0.6 release candidate, complete the existing query-by-query review and
 python -m kaldrax.cli memory quality-approve --reviewer "reviewer-id"
 ```
 
-The command prints the labels for inspection and requires the exact confirmation `REVIEWED` for both datasets. The approval is write-once; any change to a bound benchmark file requires a new versioned approval file and a fresh review.
+The command prints every labeled case for inspection and requires the exact confirmation `REVIEWED` for both datasets. Correct any proposed labels in the benchmark JSON before running approval. The manifest records the exact ordered case IDs and SHA-256 hashes of all three datasets; incomplete case coverage, changed data, or a modified manifest fails validation. The file is write-once; use a new versioned approval path after any re-review.
+
+**Commit the evidence used by the tag build.** Pass the approved retrieval export to both `quality-approve --retrieval-dataset PATH` and `quality-report --dataset PATH`. Commit that export, any corrected contradiction/extraction dataset files, and the resulting `benchmarks/memory_quality_review_v1.json` manifest to the release candidate. The tag workflow checks out the tagged commit; files that exist only on a developer machine cannot satisfy the release gate. The SHA-256 digest detects accidental changes, but the reviewer field is an operator attestation, not a cryptographic identity signature.
+
+For the tag job, configure `KALDRAX_EMBEDDING_MODEL` and an `KALDRAX_OLLAMA_URL` reachable from the GitHub Actions runner, plus `KALDRAX_API_KEY`, `KALDRAX_MODEL`, and `KALDRAX_BASE_URL`. The default Ollama URL points to localhost on the runner, not the developer's computer. A private local endpoint requires a reachable deployment or a runner hosted inside the same network.
 
 A release candidate must then pass:
 
@@ -331,3 +335,6 @@ python -m kaldrax.cli memory quality-report --profile release --live-extraction
 ```
 
 The release profile requires a validated retrieval export with privacy sign-off, a real Ollama hybrid run, a live extraction run using the configured provider, a matching human label-review attestation, and every release threshold. A green regular CI run does not mean v0.6 is release-ready.
+
+
+**Repository enforcement:** configure a GitHub tag/release ruleset for `v0.6.*` that requires the `v0.6 memory evidence and release thresholds` check. The workflow fails closed, but without a repository ruleset an administrator may still create a tag or release while its check is failing or skipped.

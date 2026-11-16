@@ -322,3 +322,10 @@ This file records implementation decisions, changes, commands, verification, and
 - Push-triggered hosted CI is the authoritative test run; local repository cloning is unavailable in this execution environment.
 - Release readiness remains blocked until an operator completes the retrieval annotation/privacy workflow, reviews contradiction and extraction labels using `quality-approve`, configures Ollama embeddings and the live extraction provider, and records reports passing the release thresholds.
 - A tag job reports and fails closed on missing evidence, but repository tag/release protection must require the named release-gate check to prevent an administrator from bypassing the workflow.
+
+
+### Release evidence integrity follow-up
+- Strengthened quality-review approval validation to require unique, non-empty case IDs and exact ordered coverage of every contradiction and extraction case, even if an edited manifest is rehashed.
+- Require a timezone-aware review timestamp.
+- Documented that the approved retrieval export and the hash-bound review manifest must be committed to the tagged revision; local-only files cannot satisfy a hosted release check.
+- Documented the need for a runner-reachable Ollama endpoint and a GitHub tag/release ruleset. The GitHub ruleset listing returned no rulesets; branch-protection details were inaccessible to the connected integration, so repository enforcement settings were not changed.

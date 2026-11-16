@@ -70,6 +70,21 @@ def _dataset_summary(path: Path, data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _validated_case_ids(cases: list[Any], label: str) -> list[str]:
+    """Return complete ordered case IDs, rejecting missing or duplicate identities."""
+    identifiers: list[str] = []
+    for case in cases:
+        if not isinstance(case, dict):
+            raise ValueError(f"every {label} case must be an object")
+        identifier = case.get("id")
+        if not isinstance(identifier, str) or not identifier.strip():
+            raise ValueError(f"every {label} case requires a non-empty id")
+        identifiers.append(identifier)
+    if len(set(identifiers)) != len(identifiers):
+        raise ValueError(f"{label} case IDs must be unique")
+    return identifiers
+
+
 def create_quality_review_approval(
     *,
     retrieval_dataset: str | Path = DEFAULT_RETRIEVAL_DATASET,
@@ -95,11 +110,13 @@ def create_quality_review_approval(
         raise ValueError("contradiction dataset must contain cases")
     if not isinstance(extraction_cases, list) or not extraction_cases:
         raise ValueError("extraction dataset must contain cases")
+    contradiction_ids = _validated_case_ids(contradiction_cases, "contradiction")
+    extraction_ids = _validated_case_ids(extraction_cases, "extraction")
     for case in contradiction_cases:
-        if not isinstance(case, dict) or not isinstance(case.get("expected_conflict"), bool):
+        if not isinstance(case.get("expected_conflict"), bool):
             raise ValueError("every contradiction case must have a boolean expected_conflict label")
     for case in extraction_cases:
-        if not isinstance(case, dict) or not isinstance(case.get("expected"), list):
+        if not isinstance(case.get("expected"), list):
             raise ValueError("every extraction case must have an expected claims list")
 
     manifest: dict[str, Any] = {
@@ -109,11 +126,11 @@ def create_quality_review_approval(
         "label_reviews": {
             "contradiction": {
                 "status": "approved",
-                "case_ids": [str(case.get("id", "")) for case in contradiction_cases],
+                "case_ids": contradiction_ids,
             },
             "extraction": {
                 "status": "approved",
-                "case_ids": [str(case.get("id", "")) for case in extraction_cases],
+                "case_ids": extraction_ids,
             },
         },
         "datasets": {
@@ -175,7 +192,9 @@ def assess_quality_review_approval(
         blockers.append("quality review approval lacks a review timestamp")
     else:
         try:
-            datetime.fromisoformat(reviewed_at.replace("Z", "+00:00"))
+            parsed_reviewed_at = datetime.fromisoformat(reviewed_at.replace("Z", "+00:00"))
+            if parsed_reviewed_at.tzinfo is None or parsed_reviewed_at.utcoffset() is None:
+                raise ValueError("review timestamp must include a timezone")
         except ValueError:
             blockers.append("quality review approval timestamp is invalid")
 
@@ -212,6 +231,23 @@ def assess_quality_review_approval(
             actual_hash = None
         if not isinstance(recorded, dict) or recorded.get("sha256") != actual_hash:
             blockers.append(f"{name} dataset changed or does not match the reviewed file hash")
+            continue
+        if name in {"contradiction", "extraction"}:
+            try:
+                source_data = _read_json(source, f"{name} dataset")
+                cases = source_data.get("cases")
+                if not isinstance(cases, list) or not cases:
+                    raise ValueError("dataset has no cases")
+                expected_ids = _validated_case_ids(cases, name)
+            except ValueError:
+                blockers.append(f"{name} dataset case identities are invalid")
+                continue
+            review_item = label_reviews.get(name) if isinstance(label_reviews, dict) else None
+            reviewed_ids = review_item.get("case_ids") if isinstance(review_item, dict) else None
+            if reviewed_ids != expected_ids:
+                blockers.append(
+                    f"{name} review does not cover the exact ordered case IDs in the dataset"
+                )
 
     return {
         "status": "validated" if not blockers else "invalid",
