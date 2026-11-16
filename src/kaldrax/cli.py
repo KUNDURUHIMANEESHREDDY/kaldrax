@@ -11,7 +11,7 @@ from .sandbox import SandboxRunner
 from .engineering import RepositoryTeamCoordinator
 from .workspace_sandbox import WorkspaceSandboxRunner
 
-from .embeddings import OllamaEmbeddingProvider
+from .embeddings import HostedEmbeddingProvider
 from .engine import RecursiveEngine
 from .evaluation import CriteriaEvaluator, LLMEvaluator
 from .execution import ExampleExecutor, LLMExecutor
@@ -38,13 +38,28 @@ def _memory_path(args: argparse.Namespace) -> Path:
     return args.memory_db or Path(".kaldrax/memory.sqlite3")
 
 
-def _embedding_provider() -> OllamaEmbeddingProvider | None:
+def _embedding_provider() -> HostedEmbeddingProvider | None:
     model = os.getenv("KALDRAX_EMBEDDING_MODEL", "").strip()
     if not model:
         return None
-    return OllamaEmbeddingProvider(
+    api_key = (
+        os.getenv("KALDRAX_EMBEDDING_API_KEY", "").strip()
+        or os.getenv("KALDRAX_API_KEY", "").strip()
+    )
+    if not api_key:
+        raise ValueError(
+            "KALDRAX_EMBEDDING_API_KEY or KALDRAX_API_KEY is required "
+            "when KALDRAX_EMBEDDING_MODEL is configured"
+        )
+    base_url = (
+        os.getenv("KALDRAX_EMBEDDING_BASE_URL")
+        or os.getenv("KALDRAX_BASE_URL")
+        or "https://api.openai.com/v1"
+    )
+    return HostedEmbeddingProvider(
+        api_key=api_key,
         model=model,
-        base_url=os.getenv("KALDRAX_OLLAMA_URL", "http://127.0.0.1:11434"),
+        base_url=base_url,
         timeout=float(os.getenv("KALDRAX_EMBEDDING_TIMEOUT_SECONDS", "30")),
     )
 
