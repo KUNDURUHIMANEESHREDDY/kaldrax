@@ -407,3 +407,18 @@ This file records implementation decisions, changes, commands, verification, and
 - Every sample-size check passed: 50 contradiction pairs (25 positive, 25 negative), 30 extraction cases, and 70 expected claims. The unreviewed contradiction benchmark reported 23 true positives, 0 false positives, and 2 false negatives (precision 1.0, recall 0.92, F1 0.9583); the two missed candidates are search-index-execution and customer-session-retention. This remains exploratory-only because labels are pending human review.
 - The overall CI-profile report passed, while release readiness remained false. Human retrieval/privacy approval, contradiction/extraction label review, hybrid retrieval evidence, live extraction, and 30 confidence observations remain outstanding.
 - The optional live-provider smoke and tag-only release gate were skipped; no live provider requests, Ollama measurements, extraction metrics, or confidence-calibration measurements were performed by this change.
+
+
+## 2026-11-16 — Hosted Docker verification refresh
+
+### Verification
+- GitHub Actions run [43871052469](https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/actions/runs/43871052469) passed on current main commit `4a9dcb3`.
+- Python 3.11 completed the full Python suite, retrieval benchmark, source-backed lexical/hybrid comparison, evaluator benchmark, and compile check. Docker-specific steps and the CI-profile memory report were skipped for Python 3.11 by the workflow matrix conditions.
+- Python 3.13 completed the full Python suite, retrieval and evaluator benchmarks, Docker sandbox smoke test, repository patch/Docker integration test, compile check, and CI-profile memory quality report.
+- The provider smoke job was skipped because this was a push event, not a manually dispatched workflow. The v0.6 release gate was skipped because this was not a v0.6 tag.
+
+### Updated environmental status
+- Docker sandbox execution and repository-team patch verification are now proven on the hosted Ubuntu runner. The local Windows Docker Desktop Linux engine remains unavailable, so local Docker execution and a complete native desktop end-to-end click-through remain unverified.
+- Live provider execution remains unverified until the operator configures `KALDRAX_API_KEY`, `KALDRAX_MODEL`, and `KALDRAX_EVALUATOR_MODEL` and dispatches the provider workflow.
+- The last recorded desktop lint run had 0 errors and 22 warnings, primarily React Fast Refresh/export warnings and effect-driven screen-loading warnings. Desktop lint is not currently a GitHub Actions step, so the warning count has not been freshly rechecked by hosted CI.
+- A green regular CI run is not v0.6 release approval. Human dataset review/privacy approval, live-provider evidence, hybrid retrieval measurements, and confidence-calibration evidence remain separate release gates.
