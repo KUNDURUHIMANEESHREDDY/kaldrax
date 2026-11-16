@@ -114,3 +114,39 @@ This file records implementation decisions, changes, commands, verification, and
 - Evaluator benchmark cases are a small regression corpus and expose known negation false positives.
 - Docker tag is mutable and not digest-pinned; operators should verify image provenance or use an immutable digest before high-assurance use.
 - Team agents currently produce candidate artifacts and traces but do not patch repositories or automatically invoke the sandbox.
+
+## 2026-11-16 — v0.5 memory quality and contradiction analysis
+
+### Decisions
+- Keep benchmark evaluation isolated from the operator's runtime SQLite database.
+- Use manually annotated synthetic engineering workloads as a deterministic regression baseline; do not describe synthetic results as production performance.
+- Expand contradiction detection with explicit opposing policy dimensions, lexical subject overlap, environment scoping, and optional same-batch local embedding similarity.
+- Keep every detected contradiction as a human-reviewed candidate. No automatic activation, superseding, or resolution.
+- Define extractor confidence as a conservative estimated probability of a correct, supported, durable claim; preserve the model-reported value and evaluate it rather than treating it as calibrated.
+- Keep live LLM extraction benchmarking optional and separate from credential-free CI.
+
+### Changes
+- Added `memory_contradictions.py` and connected its explainable candidate results to the existing conflict-review workflow.
+- Added opposition dimensions for allow/deny, public/private, local/cloud, online/offline, sync/async, mutable/immutable, retain/delete, include/exclude, required/optional, accept/reject, automatic/manual, encrypted/plaintext, and strict/fail-open policies.
+- Added subject Jaccard and optional local-embedding similarity checks, with lexical fallback and disjoint-environment filtering.
+- Added `memory_retrieval_engineering_v2.json`: 40 annotated memory records and 42 queries across 15 synthetic engineering categories.
+- Expanded retrieval reporting to Precision@k, NDCG@k, category aggregates, in addition to Recall@k, MRR, and top-1. Added corpus-reference validation.
+- Added `memory_extraction_v1.json`: 10 annotated extraction cases and 30 expected claims.
+- Added `memory_quality.py` with one-to-one annotated claim matching, precision/recall/F1, false-positive/negative counts, exact-evidence quote validity, Brier score, and five-bin ECE.
+- Strengthened extraction evidence minimums and defined/persisted confidence semantics.
+- Added CLI support for `kaldrax memory extraction-benchmark`; the default retrieval benchmark now uses the broader engineering corpus.
+- Added contradiction, extraction quality/calibration, retrieval corpus, and CLI regression tests.
+- Updated README, PRD, architecture, repository map, and ADR 0006.
+
+### Verification
+- GitHub Actions verification is pending for the final main-branch head. Do not treat this implementation as verified until the workflow completes.
+- The retrieval benchmark and deterministic extraction evaluator have not yet been measured with a live Ollama/LLM provider in this session.
+- The extraction benchmark is opt-in and makes one configured provider request per case; its default dataset has 10 cases.
+- No project memory database schema changes were introduced in this track.
+
+### Risks / follow-up
+- Both datasets are synthetic curated fixtures; representative production evaluation still requires privacy-reviewed project traces and human relevance/claim labels.
+- Extraction matching is deterministic and term-based, not a full semantic equivalence judge.
+- Brier/ECE over 30 expected claims are sample diagnostics, not calibrated guarantees.
+- Contradiction dimensions and thresholds are heuristic; nuanced scope, time, exception, and domain logic may be missed or over-flagged.
+- Embedding assistance for contradiction detection requires the existing local Ollama embedding configuration.
