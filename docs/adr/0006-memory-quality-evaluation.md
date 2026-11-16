@@ -54,3 +54,13 @@ These capabilities need evaluation without introducing hosted vector infrastruct
 - The extraction benchmark quantifies quality against an explicit, inspectable matching rubric. The rubric may miss valid paraphrases or produce broad matches; human-reviewed project data is still required.
 - Brier and ECE calculated over 30 expected claims are descriptive sample estimates and cannot establish model-wide calibration.
 - No database schema migration is required; conflict data continues to use the existing `memory_conflicts` table. Benchmark datasets and reports are separate from runtime project memory.
+
+
+## Repository-grounded validation follow-up
+
+- Add a second, source-backed retrieval dataset from the public KALDRAX main-branch snapshot `1b50f309c7cd2f9a0dc7ec444f12fc57c25cc7d9`, with 37 memories and 36 proposed queries.
+- Preserve a source path and anchor for every memory. Exclude local SQLite data, runtime reports, credentials, environment values, private conversations, and private repositories.
+- Mark every query judgment `assistant_proposed_pending_human_review` and privacy scope `pending_operator_signoff`. Assistant-created judgments are not human labels. A human must review every relevant-ID set and approve the source scope before any human-labeled or production claim.
+- Add paired lexical-versus-hybrid evaluation on the exact same queries. Publish paired deltas only when local embedding indexing and query vectors succeed; a failed or absent provider must never be presented as a hybrid result.
+- Run the repository corpus's lexical baseline in ordinary credential-free CI. Add the 10-case live extraction benchmark to the existing manual secret-gated provider job, with a 1,024-token completion cap and the shared run budget.
+- The live provider job has not been dispatched as part of this decision; provider extraction results remain unmeasured until a configured manual run completes.
