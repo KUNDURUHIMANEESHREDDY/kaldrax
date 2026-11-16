@@ -346,21 +346,21 @@ This file records implementation decisions, changes, commands, verification, and
 ### Delivered
 - Added repository CLI commands for Git status, bounded text-file listing, UTF-8 file read with SHA-256, and explicit single-file apply using a hash precondition.
 - Repository file access excludes private/runtime/build paths, rejects traversal and symlink components, and caps inspection/edits at 1 MB.
-- Existing-file replacement creates a backup under \`.kaldrax/desktop-backups/\`, checks both runtime and backup roots against symlinks, writes a sibling temporary file, fsyncs, then atomically replaces the target.
+- Existing-file replacement creates a backup under `.kaldrax/desktop-backups/`, checks both runtime and backup roots against symlinks, writes a sibling temporary file, fsyncs, then atomically replaces the target.
 - Added repository-aware team operation progress and cancellation. Cancellation is checked after each model role and immediately before patch application; the Docker workspace runner kills the active container when the cancellation file appears.
-- Repository team reports include an explicit \`cancelled\` marker. Dry-run remains the default; apply still requires disposable Docker verification, reviewer approval, independent evaluation pass, and a clean/base-commit recheck. The engine does not commit or push.
-- Added CLI \`--cancel-file\` support for team and single-file sandbox operations.
+- Repository team reports include an explicit `cancelled` marker. Dry-run remains the default; apply still requires disposable Docker verification, reviewer approval, independent evaluation pass, and a clean/base-commit recheck. The engine does not commit or push.
+- Added CLI `--cancel-file` support for team and single-file sandbox operations.
 - Connected the desktop Memory, Team Runs, Sandbox and Repository screens to named Tauri commands. The team UI exposes the opt-in repository workflow and distinguishes cancelled repository-team results.
 - Updated desktop README, design/UX contracts and integration record. The Downloads desktop directory is not a Git repository, so its source and built installers remain local files.
 
 ### Verification
 - Python test suite: **170 passed, 4 skipped**. Windows symlink-permission guards skip when symlink creation is unavailable.
-- \`git diff --check\` and staged diff whitespace checks passed.
+- `git diff --check` and staged diff whitespace checks passed.
 - Direct repository CLI smoke passed in a disposable temporary Git repository: status, file listing, SHA-256 read, hash-guarded edit, backup existence and dirty status were verified.
-- CLI help confirmed \`--cancel-file\` on team and sandbox commands.
+- CLI help confirmed `--cancel-file` on team and sandbox commands.
 - Desktop TypeScript/Vite production build passed.
 - Oxlint passed with 0 errors; 22 warnings remain, largely existing template React effect/Fast Refresh warnings and effect-driven screen loading warnings.
-- Rust \`cargo fmt --check\` and \`cargo check\` passed.
+- Rust `cargo fmt --check` and `cargo check` passed.
 - Windows Tauri release build passed. MSI: 3.14 MiB. NSIS installer: 2.12 MiB.
 
 ### Boundaries and remaining risks
@@ -369,3 +369,18 @@ This file records implementation decisions, changes, commands, verification, and
 - Repository edits are local, single-file, explicit and hash-preconditioned. Repository-team patch application is also local and explicit, after all verification/review/evaluation gates.
 - A provider request already submitted before cancellation may still finish or incur provider cost; cancellation prevents later role calls and patch application.
 - Browser interaction QA performed earlier used mocked Tauri IPC. A complete native end-to-end UI click-through with a configured live LLM provider and Docker daemon remains unverified.
+
+## 2026-11-16 — Resumable contradiction and extraction label review
+
+### Changes
+- Added `kaldrax memory quality-review` for per-case human review of contradiction and extraction labels.
+- Contradiction reviewers can accept or toggle each proposed conflict label; extraction reviewers can accept or replace each expected-claims list.
+- Persisted review progress in a source-hash-bound local session, with reviewer identity and timestamps per case. A changed source dataset invalidates the session.
+- Require separate explicit dataset approvals before creating immutable, SHA-256-addressed reviewed exports.
+- Automatically create the hash-bound review manifest against the exact reviewed exports and retrieval dataset path.
+
+### Verification and limitations
+- Added tests for label corrections, export metadata, resumable sessions, and changed-source rejection.
+- Human review is still an operator action; no labels were reviewed or approved during implementation.
+- Reviewed exports are generated only when an operator runs the command and completes every case and dataset approval.
+- Hosted CI is the authoritative verification for this change.

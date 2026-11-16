@@ -68,16 +68,19 @@ def _datasets(tmp_path):
     contradiction = _write_json(tmp_path / "contradiction.json", {
         "name": "contradiction-fixture",
         "provenance": "synthetic_curated",
-        "annotation_status": "assistant_proposed_pending_human_review",
+        "annotation_status": "human_reviewed",
+        "dataset_approval": {"status": "approved", "reviewer": "reviewer-1", "reviewed_at": "2026-11-16T00:00:00Z"},
         "cases": [
             {
                 "id": "positive",
+                "annotation_status": "human_reviewed", "review_status": "approved", "reviewer": "reviewer-1", "reviewed_at": "2026-11-16T00:00:00Z",
                 "left": "Rule: allow worker agents to access shared project artifacts",
                 "right": "Rule: deny worker agents access to shared project artifacts",
                 "expected_conflict": True,
             },
             {
                 "id": "negative",
+                "annotation_status": "human_reviewed", "review_status": "approved", "reviewer": "reviewer-1", "reviewed_at": "2026-11-16T00:00:00Z",
                 "left": "Rule: enable local cache invalidation for user profiles",
                 "right": "Rule: disable remote email delivery for notifications",
                 "expected_conflict": False,
@@ -87,8 +90,11 @@ def _datasets(tmp_path):
     extraction = _write_json(tmp_path / "extraction.json", {
         "name": "extraction-fixture",
         "provenance": "synthetic_curated",
+        "annotation_status": "human_reviewed",
+        "dataset_approval": {"status": "approved", "reviewer": "reviewer-1", "reviewed_at": "2026-11-16T00:00:00Z"},
         "cases": [{
             "id": "case-one",
+            "annotation_status": "human_reviewed", "review_status": "approved", "reviewer": "reviewer-1", "reviewed_at": "2026-11-16T00:00:00Z",
             "objective": "Extract a durable fact",
             "candidate": "SQLite stores durable project memory.",
             "expected": [{"match_terms": ["sqlite", "memory"]}],
@@ -240,3 +246,24 @@ def test_markdown_summary_includes_metric_table_and_release_blockers(tmp_path):
     assert "# KALDRAX Memory Evaluation" in markdown
     assert "Contradiction detection" in markdown
     assert "Release blockers" in markdown
+
+
+def test_quality_review_approval_refuses_datasets_without_per_case_review(tmp_path):
+    retrieval, contradiction, extraction = _datasets(tmp_path)
+    data = json.loads(contradiction.read_text(encoding="utf-8"))
+    data["cases"][0].pop("reviewer")
+    contradiction.write_text(json.dumps(data), encoding="utf-8")
+    try:
+        create_quality_review_approval(
+            retrieval_dataset=retrieval,
+            contradiction_dataset=contradiction,
+            extraction_dataset=extraction,
+            approval_path=tmp_path / "approval.json",
+            reviewer="reviewer-1",
+            contradiction_labels_reviewed=True,
+            extraction_labels_reviewed=True,
+        )
+    except ValueError as exc:
+        assert "per-case human review provenance" in str(exc)
+    else:
+        raise AssertionError("approval must reject datasets without case-level review provenance")
