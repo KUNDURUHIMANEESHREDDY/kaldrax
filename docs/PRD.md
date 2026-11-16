@@ -151,7 +151,7 @@ KALDRAX is a local-first engineering application that learns from previous proje
 | MEM-30 | Human resolution | All detected pairs remain review candidates; no automated conflict resolution or approval. |
 | MEM-31 | Extraction benchmark | Score predictions against one-to-one annotated expected claims and report precision, recall, F1, FP/FN, and evidence validity. |
 | MEM-32 | Confidence calibration | Report Brier score, ECE, and bin-level empirical accuracy on annotated extraction results. |
-| MEM-33 | Evidence quality | Require extraction evidence to be an exact candidate substring of at least 12 characters and three tokens. |
+| MEM-33 | Evidence quality | Require extraction evidence to be an exact candidate substring of at least 12 characters and three meaningful tokens. |
 | MEM-34 | Confidence semantics | Prompt the extractor for a conservative claim-correctness probability and preserve the model-reported value as provenance; approval remains a separate state. |
 
 ### Success criteria
