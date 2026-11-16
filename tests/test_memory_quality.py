@@ -74,6 +74,7 @@ def test_extraction_benchmark_counts_extractor_failures_as_missed_claims(tmp_pat
     assert result["false_negatives"] == 1
     assert result["recall"] == 0.0
     assert result["confidence_calibration"]["sample_count"] == 0
+    assert result["evidence_valid_rate"] is None
 
 
 def test_extraction_benchmark_validates_dataset_match_terms(tmp_path):
