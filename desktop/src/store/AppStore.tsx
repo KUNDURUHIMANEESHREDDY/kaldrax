@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -186,7 +187,10 @@ const StoreContext = createContext<StoreApi | null>(null);
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(loadState);
   const stateRef = useRef(state);
-  stateRef.current = state;
+
+  useLayoutEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   useEffect(() => {
     try {

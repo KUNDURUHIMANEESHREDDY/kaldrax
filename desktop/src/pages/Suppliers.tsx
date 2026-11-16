@@ -42,6 +42,10 @@ export default function Suppliers() {
   const [editing, setEditing] = useState<Supplier | undefined>();
   const [deleteFor, setDeleteFor] = useState<Supplier | undefined>();
   const [detailId, setDetailId] = useState<string | undefined>();
+  const supplierSinceLabel = useMemo(
+    () => dateShort(new Date(Date.now() - 1000 * 60 * 60 * 24 * 420).toISOString()),
+    []
+  );
 
   const canEdit = canManageInventory(role);
   const canDelete = canDeleteRecords(role);
@@ -540,7 +544,7 @@ export default function Suppliers() {
             </div>
 
             <p className="report-note">
-              Supplier since {dateShort(new Date(Date.now() - 1000 * 60 * 60 * 24 * 420).toISOString())} · performance
+              Supplier since {supplierSinceLabel} · performance
               reviewed monthly by the lab administrator.
             </p>
           </div>

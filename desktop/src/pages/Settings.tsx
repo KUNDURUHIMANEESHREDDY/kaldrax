@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useApp } from "../store/AppStore";
 import { usePageTitle } from "../components/Layout";
@@ -49,6 +49,11 @@ type BooleanSetting =
   | "allowStudentRequests";
 
 export default function Settings() {
+  const { state } = useApp();
+  return <SettingsContent key={JSON.stringify(state.settings)} />;
+}
+
+function SettingsContent() {
   usePageTitle("Settings");
   const { state, role, actorName, updateSettings, resetData, exportState, setRole } = useApp();
   const toast = useToast();
@@ -56,22 +61,13 @@ export default function Settings() {
   const active = params.get("tab") ?? "organisation";
   const allowed = canManageSettings(role);
 
-  const [org, setOrg] = useState({
+  const [org, setOrg] = useState(() => ({
     orgName: state.settings.orgName,
     campus: state.settings.campus,
     semester: state.settings.semester,
-  });
-  const [threshold, setThreshold] = useState(String(state.settings.defaultMinThreshold));
+  }));
+  const [threshold, setThreshold] = useState(() => String(state.settings.defaultMinThreshold));
   const [resetOpen, setResetOpen] = useState(false);
-
-  useEffect(() => {
-    setOrg({
-      orgName: state.settings.orgName,
-      campus: state.settings.campus,
-      semester: state.settings.semester,
-    });
-    setThreshold(String(state.settings.defaultMinThreshold));
-  }, [state.settings]);
 
   const counts = useMemo(
     () => ({

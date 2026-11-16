@@ -169,15 +169,14 @@ function RejectModal({
   onClose: () => void;
   request?: MaterialRequest;
 }) {
+  if (!open || !request) return null;
+  return <RejectForm key={request.id} onClose={onClose} request={request} />;
+}
+
+function RejectForm({ onClose, request }: { onClose: () => void; request: MaterialRequest }) {
   const { rejectRequest } = useApp();
   const toast = useToast();
   const [reason, setReason] = useState("");
-
-  useEffect(() => {
-    if (open) setReason("");
-  }, [open]);
-
-  if (!request) return null;
 
   const submit = () => {
     const result = rejectRequest(request.id, reason);
@@ -191,7 +190,7 @@ function RejectModal({
 
   return (
     <Modal
-      open={open}
+      open={true}
       onClose={onClose}
       title={`Reject ${request.id}?`}
       sub={`${request.requestedBy} · ${request.lines.length} line item${request.lines.length === 1 ? "" : "s"}`}

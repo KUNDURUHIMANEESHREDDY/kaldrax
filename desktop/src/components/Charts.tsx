@@ -239,14 +239,17 @@ export function DonutChart({
   const c = 2 * Math.PI * r;
   const gap = data.length > 1 ? 2.5 : 0;
 
-  let offset = 0;
-  const segments = data.map((d) => {
-    const frac = total > 0 ? d.value / total : 0;
-    const len = Math.max(0, frac * c - gap);
-    const seg = { ...d, len, offset };
-    offset += frac * c;
-    return seg;
-  });
+  const segments = data.reduce(
+    (result, datum) => {
+      const fraction = total > 0 ? datum.value / total : 0;
+      const arcLength = fraction * c;
+      return {
+        offset: result.offset + arcLength,
+        segments: [...result.segments, { ...datum, len: Math.max(0, arcLength - gap), offset: result.offset }],
+      };
+    },
+    { offset: 0, segments: [] as Array<DonutDatum & { len: number; offset: number }> }
+  ).segments;
 
   return (
     <div className="donut__figure" style={{ width: size, height: size }}>

@@ -273,22 +273,17 @@ export function StockAdjustModal({
   onClose: () => void;
   item?: Item;
 }) {
+  if (!open || !item) return null;
+  return <StockAdjustForm key={item.id} onClose={onClose} item={item} />;
+}
+
+function StockAdjustForm({ onClose, item }: { onClose: () => void; item: Item }) {
   const { adjustStock } = useApp();
   const toast = useToast();
   const [mode, setMode] = useState<"set" | "add" | "remove">("set");
-  const [qty, setQty] = useState(0);
+  const [qty, setQty] = useState(item.qty);
   const [reason, setReason] = useState(ADJUST_REASONS[0]);
   const [note, setNote] = useState("");
-
-  useEffect(() => {
-    if (!open) return;
-    setMode("set");
-    setQty(item?.qty ?? 0);
-    setReason(ADJUST_REASONS[0]);
-    setNote("");
-  }, [open, item]);
-
-  if (!item) return null;
 
   const projected = mode === "set" ? qty : mode === "add" ? item.qty + qty : item.qty - qty;
 

@@ -110,8 +110,32 @@ export function MemoryPage({ settings }: Pick<WorkflowProps, "settings">) {
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setBusy(false); }
   }, [settings.enginePath, settings.pythonExecutable, settings.projectId]);
-  useEffect(() => { void search(); }, [search]);
-  useEffect(() => { if (activeTab === "conflicts") void loadConflicts(); }, [activeTab, loadConflicts]);
+  useEffect(() => {
+    let cancelled = false;
+    void memorySearch({
+      enginePath: settings.enginePath, pythonExecutable: settings.pythonExecutable,
+      projectId: settings.projectId, query, limit: 30, includePending,
+    }).then((result) => {
+      if (!cancelled) setItems(result);
+    }).catch((reason: unknown) => {
+      if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
+    });
+    return () => { cancelled = true; };
+  }, [settings.enginePath, settings.pythonExecutable, settings.projectId, query, includePending]);
+
+  useEffect(() => {
+    if (activeTab !== "conflicts") return;
+    let cancelled = false;
+    void memoryConflicts({
+      enginePath: settings.enginePath, pythonExecutable: settings.pythonExecutable,
+      projectId: settings.projectId,
+    }).then((result) => {
+      if (!cancelled) setConflicts(result);
+    }).catch((reason: unknown) => {
+      if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
+    });
+    return () => { cancelled = true; };
+  }, [activeTab, settings.enginePath, settings.pythonExecutable, settings.projectId]);
   const review = async (item: MemoryItem, decision: "approve" | "reject") => {
     if (!window.confirm(`${decision === "approve" ? "Approve" : "Reject"} this pending memory? This changes future retrieval eligibility.`)) return;
     setBusy(true); setError(""); setNotice("");
@@ -188,12 +212,15 @@ export function TeamRunsPage({ settings, apiKey, operation, onOperationStarted }
     (!useRepository || settings.repositoryPath.trim()) &&
     sandboxTimeout >= 1 && sandboxTimeout <= 120
   );
-  const refresh = useCallback(async () => {
-    try {
-      setReports(await listTeamRuns(settings.enginePath));
-    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
-  }, [settings.enginePath]);
-  useEffect(() => { void refresh(); }, [refresh, settings.pythonExecutable, operation?.status]);
+  useEffect(() => {
+    let cancelled = false;
+    void listTeamRuns(settings.enginePath).then((result) => {
+      if (!cancelled) setReports(result);
+    }).catch((reason: unknown) => {
+      if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
+    });
+    return () => { cancelled = true; };
+  }, [settings.enginePath, settings.pythonExecutable, operation?.status]);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (applyChanges && !window.confirm(
@@ -324,19 +351,31 @@ export function RepositoryPage({ settings, onSettingsChange }: Pick<WorkflowProp
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const dirty = Boolean(selected && editedContent !== selected.content);
+  const readStatus = useCallback((repoPath: string) => Promise.all([
+    repositoryStatus({ enginePath: settings.enginePath, pythonExecutable: settings.pythonExecutable, repositoryPath: repoPath }),
+    repositoryFiles({ enginePath: settings.enginePath, pythonExecutable: settings.pythonExecutable, repositoryPath: repoPath, directory: ".", limit: 300 }),
+  ]), [settings.enginePath, settings.pythonExecutable]);
+
   const loadStatus = useCallback(async (repoPath = settings.repositoryPath) => {
     if (!repoPath.trim()) return;
     setBusy(true); setError("");
     try {
-      const [snapshot, listing] = await Promise.all([
-        repositoryStatus({ enginePath: settings.enginePath, pythonExecutable: settings.pythonExecutable, repositoryPath: repoPath }),
-        repositoryFiles({ enginePath: settings.enginePath, pythonExecutable: settings.pythonExecutable, repositoryPath: repoPath, directory: ".", limit: 300 }),
-      ]);
+      const [snapshot, listing] = await readStatus(repoPath);
       setStatus(snapshot); setFiles(listing);
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setBusy(false); }
-  }, [settings.enginePath, settings.pythonExecutable, settings.repositoryPath]);
-  useEffect(() => { if (settings.repositoryPath) void loadStatus(); }, [loadStatus, settings.repositoryPath]);
+  }, [readStatus, settings.repositoryPath]);
+
+  useEffect(() => {
+    if (!settings.repositoryPath.trim()) return;
+    let cancelled = false;
+    void readStatus(settings.repositoryPath).then(([snapshot, listing]) => {
+      if (!cancelled) { setStatus(snapshot); setFiles(listing); }
+    }).catch((reason: unknown) => {
+      if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
+    });
+    return () => { cancelled = true; };
+  }, [readStatus, settings.repositoryPath]);
   const chooseRepository = async () => {
     const selectedPath = await open({ directory: true, multiple: false, title: "Select Git repository" });
     if (typeof selectedPath === "string") {

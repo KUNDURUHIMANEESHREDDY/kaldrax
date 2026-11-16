@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../store/AppStore";
 import { usePageTitle } from "../components/Layout";
@@ -58,18 +58,17 @@ function ConsumeModal({
   project?: Project;
   item?: Item;
 }) {
+  if (!open || !project || !item) return null;
+  return <ConsumeForm key={`${project.id}:${item.id}`} onClose={onClose} project={project} item={item} />;
+}
+
+function ConsumeForm({ onClose, project, item }: { onClose: () => void; project: Project; item: Item }) {
   const { consumeMaterial } = useApp();
   const toast = useToast();
   const [qty, setQty] = useState(1);
 
-  const allocation = project && item ? project.allocations.find((a) => a.itemId === item.id) : undefined;
+  const allocation = project.allocations.find((allocation) => allocation.itemId === item.id);
   const inUse = allocation ? allocation.issued - allocation.consumed - allocation.returned : 0;
-
-  useEffect(() => {
-    if (open) setQty(1);
-  }, [open]);
-
-  if (!project || !item) return null;
 
   const submit = () => {
     const result = consumeMaterial({ projectId: project.id, itemId: item.id, qty });
@@ -83,7 +82,7 @@ function ConsumeModal({
 
   return (
     <Modal
-      open={open}
+      open={true}
       onClose={onClose}
       title="Record consumption"
       sub={`${item.name} · ${project.id}`}
@@ -190,7 +189,8 @@ export default function ProjectDetail() {
     return Boolean(allocation && allocation.issued > 0);
   }).length;
 
-  const daysLeft = daysBetween(new Date().toISOString(), project.endDate);
+  const today = useMemo(() => new Date().toISOString(), []);
+  const daysLeft = daysBetween(today, project.endDate);
   const openRequests = requests.filter((r) => r.status === "pending" || r.status === "approved");
 
   const handleDelete = () => {

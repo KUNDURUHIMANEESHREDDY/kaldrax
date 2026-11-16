@@ -43,6 +43,7 @@ export default function Overview() {
   const navigate = useNavigate();
   const [days, setDays] = useState(30);
   const [addOpen, setAddOpen] = useState(false);
+  const now = useMemo(() => new Date(), []);
 
   const summary = useMemo(() => stockSummary(state), [state]);
   const cats = useMemo(() => categoryStats(state), [state]);
@@ -56,13 +57,13 @@ export default function Overview() {
     .filter((c) => c.count > 0)
     .map((c) => ({ label: c.category.name, value: c.count, color: c.category.color }));
 
-  const dateLabel = new Date().toLocaleDateString("en-IN", {
+  const dateLabel = now.toLocaleDateString("en-IN", {
     weekday: "long",
     day: "numeric",
     month: "long",
   });
 
-  const hour = new Date().getHours();
+  const hour = now.getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   const downloadSnapshot = () => {
