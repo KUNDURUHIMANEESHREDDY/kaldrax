@@ -115,7 +115,7 @@ This file records implementation decisions, changes, commands, verification, and
 - Docker tag is mutable and not digest-pinned; operators should verify image provenance or use an immutable digest before high-assurance use.
 - Team agents currently produce candidate artifacts and traces but do not patch repositories or automatically invoke the sandbox.
 
-## 2026-11-16 — v0.5 memory quality and contradiction analysis
+## 2026-11-15 — v0.5 memory quality and contradiction analysis
 
 ### Decisions
 - Keep benchmark evaluation isolated from the operator's runtime SQLite database.
