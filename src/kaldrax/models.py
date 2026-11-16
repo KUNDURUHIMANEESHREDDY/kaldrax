@@ -17,6 +17,7 @@ class Task:
     objective: str
     acceptance_criteria: tuple[str, ...]
     max_iterations: int = 3
+    project_id: str = "default"
 
     def __post_init__(self) -> None:
         if not self.objective.strip():
@@ -27,6 +28,8 @@ class Task:
             raise ValueError("acceptance criteria must be unique")
         if self.max_iterations < 1:
             raise ValueError("max_iterations must be at least 1")
+        if not self.project_id.strip():
+            raise ValueError("project_id must not be empty")
 
 
 @dataclass(frozen=True)
