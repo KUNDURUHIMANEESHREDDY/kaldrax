@@ -69,3 +69,19 @@ def test_benchmark_rejects_relevance_ids_not_in_the_corpus(tmp_path):
     }), encoding="utf-8")
     with pytest.raises(ValueError, match="unknown memory IDs"):
         run_retrieval_benchmark(dataset)
+
+def test_retrieval_benchmark_falls_back_when_local_embedder_fails():
+    from pathlib import Path
+
+    class BrokenEmbedder:
+        model_id = "unavailable-local-model"
+
+        def embed(self, texts):
+            raise RuntimeError("Ollama offline")
+
+    dataset = Path(__file__).parents[1] / "benchmarks" / "memory_retrieval_engineering_v2.json"
+    result = run_retrieval_benchmark(dataset, embedder=BrokenEmbedder(), k=3)
+    assert result["retrieval_mode"] == "lexical"
+    assert result["embedding_model"] is None
+    assert result["embedding_error"] == "RuntimeError"
+    assert result["query_count"] == 42
