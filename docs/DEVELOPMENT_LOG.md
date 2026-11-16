@@ -281,3 +281,12 @@ This file records implementation decisions, changes, commands, verification, and
 - The optional live-provider smoke was skipped because KALDRAX_API_KEY and model variables were not configured. Live provider behavior therefore remains unverified.
 - An initial CI run exposed a CLI merge regression: the repository-workspace patch had replaced the concurrently added memory benchmark-compare command. The CLI integration was rebased onto the updated main implementation in commit 61e690c; the subsequent full matrix passed.
 - Local focused verification: 20 passed, 1 Docker integration test skipped because Docker is unavailable in the local execution environment. Hosted Python 3.13 CI ran that integration successfully.
+
+
+### Final CI after planner-boundary regression test
+
+- Commit [abf04ae](https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/commit/abf04ae2f02ced1ea7207484add48051a523386e) completed workflow [43841989514](https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/actions/runs/43841989514) successfully.
+- Python 3.13: 155 passed, 1 skipped. Docker single-file smoke passed. The repository engineering integration test passed separately (1 passed), and source/test compilation passed.
+- Python 3.11: full test suite, memory retrieval, lexical-versus-hybrid benchmark baseline, evaluator benchmark, and compile checks passed. Docker-only steps are intentionally limited to Python 3.13.
+- Added a regression assertion that the planner is explicitly told it receives only the manifest and cannot inspect source contents; builder remains the role with the bounded source snapshot.
+- The optional live provider job remains skipped until operator-provided API credentials and model variables are configured.
