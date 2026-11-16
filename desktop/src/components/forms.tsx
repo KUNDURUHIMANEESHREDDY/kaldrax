@@ -1413,15 +1413,3 @@ export function CategoryFormModal({
 /* Small shared helpers                                                */
 /* ------------------------------------------------------------------ */
 
-export function useItemOptions() {
-  const { state } = useApp();
-  return useMemo(
-    () =>
-      state.items.map((i) => ({
-        value: i.id,
-        label: `${i.name} · ${num(i.qty)} ${i.unit}`,
-        status: itemStatus(i),
-      })),
-    [state.items]
-  );
-}

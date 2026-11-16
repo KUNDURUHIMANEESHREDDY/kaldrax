@@ -14,19 +14,13 @@ import {
 import { createPortal } from "react-dom";
 import { NavLink } from "react-router-dom";
 import { Icon, type IconName } from "./Icons";
+import { avatarTone, buttonClass } from "./ui-helpers";
 import { initials, stockLabel, stockTone } from "../lib/format";
 import type { Category, ItemStatus } from "../lib/types";
 
 /* ------------------------------------------------------------------ */
 /* Button                                                              */
 /* ------------------------------------------------------------------ */
-
-type Variant = "primary" | "secondary" | "ghost" | "soft" | "danger" | "danger-soft";
-type Size = "sm" | "md" | "lg";
-
-export function buttonClass(variant: Variant = "secondary", size: Size = "md", extra = ""): string {
-  return ["btn", `btn--${variant}`, size !== "md" ? `btn--${size}` : "", extra].filter(Boolean).join(" ");
-}
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
@@ -636,14 +630,6 @@ export function RowMenu({
 /* Misc display                                                        */
 /* ------------------------------------------------------------------ */
 
-const AVATAR_TONES = ["olive", "sand", "blue", "rose", "violet", "slate"];
-
-export function avatarTone(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) % 997;
-  return AVATAR_TONES[hash % AVATAR_TONES.length];
-}
-
 export function Avatar({ name, size, tone }: { name: string; size?: "sm" | "lg"; tone?: string }) {
   return (
     <span className={`avatar avatar--${tone ?? avatarTone(name)}${size ? ` avatar--${size}` : ""}`} title={name}>
@@ -926,22 +912,3 @@ export function SortTh({
 /* Popover shell (search / notifications)                              */
 /* ------------------------------------------------------------------ */
 
-export function useOutsideClose(active: boolean, onClose: () => void) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!active) return;
-    const onDoc = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onClose();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [active, onClose]);
-  return ref;
-}
