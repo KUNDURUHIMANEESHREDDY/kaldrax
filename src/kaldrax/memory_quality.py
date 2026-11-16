@@ -200,7 +200,7 @@ def run_extraction_benchmark(
         "precision": round(precision, 4),
         "recall": round(recall, 4),
         "f1": round(f1, 4),
-        "evidence_valid_rate": round(evidence_valid / total_predicted, 4) if total_predicted else 1.0,
+        "evidence_valid_rate": round(evidence_valid / total_predicted, 4) if total_predicted else None,
         "extraction_errors": extraction_errors,
         "confidence_calibration": calibration,
         "calibration_interpretation": (
