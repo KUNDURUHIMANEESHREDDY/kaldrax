@@ -47,8 +47,13 @@ class LLMMemoryExtractor:
             "deployments, or commands ran unless the candidate contains evidence. Return "
             "JSON only: {\"memories\":[{\"content\":string,\"summary\":string,"
             "\"evidence\":string,\"confidence\":number,\"tags\":[string]}]}. "
+            "Confidence must be your conservative estimated probability from 0.0 to 1.0 "
+            "that the entire extracted claim is accurate, candidate-supported, and durable. "
+            "Do not use confidence to express importance or writing quality, and do not "
+            "inflate it. It is a prediction to be evaluated, not an approval state. "
             f"Return at most {self.max_memories} distinct records. Every evidence value "
-            "must be a short exact substring copied verbatim from the candidate. "
+            "must be an exact candidate substring of at least 12 characters and at least "
+            "three meaningful words; it must support the whole claim, not merely share a topic. "
             "Return an empty memories array when nothing is durable or reusable."
         )
         user_prompt = json.dumps({
@@ -80,8 +85,14 @@ class LLMMemoryExtractor:
                 raise MemoryExtractionError("memory content must be a non-empty string of at most 800 characters")
             if not isinstance(summary, str) or len(summary) > 300:
                 raise MemoryExtractionError("memory summary must be a string of at most 300 characters")
-            if not isinstance(evidence, str) or not evidence.strip() or evidence not in candidate:
-                raise MemoryExtractionError("memory evidence must be an exact non-empty quote from the candidate")
+            if (
+                not isinstance(evidence, str) or len(evidence.strip()) < 12
+                or len(re.findall(r"[a-zA-Z0-9_]{2,}", evidence)) < 3
+                or evidence not in candidate
+            ):
+                raise MemoryExtractionError(
+                    "memory evidence must be an exact candidate quote of at least 12 characters and three words"
+                )
             if isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not 0 <= confidence <= 1:
                 raise MemoryExtractionError("memory confidence must be between 0 and 1")
             if not isinstance(tags, list) or any(not isinstance(tag, str) or not tag.strip() for tag in tags):
@@ -104,6 +115,8 @@ class LLMMemoryExtractor:
                 metadata={
                     "extraction_method": self.name,
                     "evidence_quote": evidence,
+                    "model_reported_confidence": float(confidence),
+                    "confidence_semantics": "estimated probability of an accurate, supported, durable claim; not assumed calibrated",
                     "approval_required": True,
                 },
             ))
