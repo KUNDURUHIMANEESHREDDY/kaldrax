@@ -13,6 +13,7 @@ from typing import Any, Iterable, Protocol
 from uuid import uuid4
 
 from .embeddings import EmbeddingProvider
+from .memory_contradictions import find_contradiction_candidates
 
 
 class MemoryType(StrEnum):
@@ -482,6 +483,7 @@ class SQLiteMemoryStore:
         return updated
 
     def detect_conflicts(self, project_id: str) -> list[MemoryConflict]:
+        """Persist explainable contradiction candidates for human review."""
         if not project_id.strip():
             raise ValueError("project_id must not be empty")
         rows = self._connection.execute(
@@ -490,46 +492,23 @@ class SQLiteMemoryStore:
             (project_id,),
         ).fetchall()
         records = [self._from_row(row) for row in rows]
+        candidates = find_contradiction_candidates(records, embedder=self.embedder)
         detected: list[MemoryConflict] = []
-        for index, left in enumerate(records):
-            left_tokens = _tokens(left.content)
-            left_polarity = any(token in _NEGATIONS for token in left_tokens)
-            left_subject = set(left_tokens) - _NEGATIONS - _LABELS
-            if len(left_subject) < 3:
-                continue
-            for right in records[index + 1:]:
-                if left.agent_id is not None and right.agent_id is not None and left.agent_id != right.agent_id:
-                    continue
-                right_tokens = _tokens(right.content)
-                right_polarity = any(token in _NEGATIONS for token in right_tokens)
-                if left_polarity == right_polarity:
-                    continue
-                right_subject = set(right_tokens) - _NEGATIONS - _LABELS
-                if len(right_subject) < 3:
-                    continue
-                union = left_subject | right_subject
-                similarity = len(left_subject & right_subject) / max(len(union), 1)
-                if similarity < 0.85:
-                    continue
-                left_id, right_id = sorted((left.id, right.id))
-                conflict_id = str(uuid4())
-                reason = (
-                    f"Explicit positive/negative polarity conflict; normalized subject similarity "
-                    f"{similarity:.2f}. Review both statements before approval."
+        for left, right, reason in candidates:
+            left_id, right_id = sorted((left.id, right.id))
+            with self._connection:
+                self._connection.execute(
+                    """INSERT OR IGNORE INTO memory_conflicts (
+                        id, project_id, left_memory_id, right_memory_id, reason, status, created_at
+                    ) VALUES (?, ?, ?, ?, ?, 'open', ?)""",
+                    (str(uuid4()), project_id, left_id, right_id, reason, _utc_now()),
                 )
-                with self._connection:
-                    self._connection.execute(
-                        """INSERT OR IGNORE INTO memory_conflicts (
-                            id, project_id, left_memory_id, right_memory_id, reason, status, created_at
-                        ) VALUES (?, ?, ?, ?, ?, 'open', ?)""",
-                        (conflict_id, project_id, left_id, right_id, reason, _utc_now()),
-                    )
-                row = self._connection.execute(
-                    "SELECT * FROM memory_conflicts WHERE left_memory_id = ? AND right_memory_id = ?",
-                    (left_id, right_id),
-                ).fetchone()
-                if row:
-                    detected.append(self._conflict_from_row(row))
+            row = self._connection.execute(
+                "SELECT * FROM memory_conflicts WHERE left_memory_id = ? AND right_memory_id = ?",
+                (left_id, right_id),
+            ).fetchone()
+            if row:
+                detected.append(self._conflict_from_row(row))
         return detected
 
     def list_conflicts(self, project_id: str, include_resolved: bool = False) -> list[MemoryConflict]:
