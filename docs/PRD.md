@@ -1,6 +1,6 @@
-# KALDRAX v0.4 Product Requirements Document
+# KALDRAX Product Requirements Document
 
-**Status:** v0.4 implementation baseline
+**Status:** v0.5 implementation baseline; memory-quality track added
 **Category:** Local-first Autonomous Engineering Infrastructure
 **Release objective:** Improve project-memory retrieval, quality controls, and human oversight without introducing hosted infrastructure.
 
@@ -13,11 +13,11 @@ KALDRAX is a local-first engineering application that learns from previous proje
 1. Add a pluggable embedding interface and optional loopback-only Ollama adapter.
 2. Persist vectors and model identity in SQLite and support explicit reindexing after model changes.
 3. Combine semantic cosine similarity and lexical relevance, then adjust by confidence and freshness.
-4. Benchmark retrieval using Recall@k, mean reciprocal rank, and top-1 accuracy.
+4. Benchmark retrieval using Recall@k, Precision@k, NDCG@k, mean reciprocal rank, and top-1 accuracy.
 5. Add confidence, verification timestamp, expiry timestamp, and review status to memory records.
 6. Require human approval before extracted semantic memories become active retrieval context.
 7. Extract additional candidate-backed knowledge through a strict optional LLM extractor.
-8. Detect explicit positive/negative contradictions and prevent approval until a human resolves them.
+8. Detect explainable contradiction candidates across opposing policy concepts and prevent approval until a human resolves them.
 9. Provide local CLI commands to inspect, approve, reject, resolve, reindex, expire, benchmark, and consolidate memory.
 10. Migrate existing v0.3 SQLite databases in place.
 
@@ -125,3 +125,49 @@ KALDRAX is a local-first engineering application that learns from previous proje
 - The evaluator fixture is small and intentionally reveals known deterministic false positives; broader domain-specific benchmark sets remain necessary.
 - The sandbox executes a single Python file and relies on Docker plus the host kernel; repository patching, dependency provisioning, and whole-project test execution are not integrated yet.
 - Team orchestration is local and sequential, not a distributed multi-agent scheduler.
+
+## v0.5 memory-quality track
+
+### Goals
+
+1. Replace the five-query retrieval regression sample as the default with a curated engineering corpus of 40 memories and 42 relevance-judged queries, split across 15 engineering workload categories.
+2. Report Recall@k, Precision@k, NDCG@k, MRR, top-1 accuracy, and category-level breakdowns from an isolated temporary SQLite database.
+3. Reject malformed benchmark references, duplicate memory IDs, and relevance judgments pointing to memories absent from the corpus.
+4. Detect contradiction candidates beyond negation using opposing policy dimensions such as allow/deny, public/private, local/cloud, sync/async, required/optional, retain/delete, and encrypted/plaintext.
+5. Apply subject-overlap and environment-scope checks; optionally use a configured local embedding provider to discover paraphrased candidates, with lexical fallback when embeddings fail.
+6. Preserve human review as the sole conflict-resolution authority. Detection must never automatically supersede or activate a memory.
+7. Evaluate extraction on 10 annotated engineering scenarios with 30 expected claims, reporting precision, recall, F1, false positives, false negatives, and evidence-quote validity.
+8. Treat extractor confidence as a reported probability estimate and measure sample calibration using Brier score and expected calibration error (ECE).
+9. Keep benchmarks offline and credential-free except for the optional live extraction benchmark, which makes one configured model request per case.
+
+### Functional requirements
+
+| ID | Requirement | Acceptance |
+|---|---|---|
+| MEM-26 | Engineering retrieval corpus | Versioned synthetic-curated corpus includes at least 35 memories and 40 annotated queries across at least 10 workload categories. |
+| MEM-27 | Retrieval metrics | Report Recall@k, Precision@k, NDCG@k, MRR, top-1, and category breakdowns; reject unknown relevance IDs. |
+| MEM-28 | Opposition-aware conflict candidates | Detect supported opposite-polarity dimensions beyond negation and preserve project/agent/environment scoping. |
+| MEM-29 | Semantic conflict recall | When a local embedding provider is configured, permit semantically similar paraphrases to enter candidate review; provider failure falls back to lexical matching. |
+| MEM-30 | Human resolution | All detected pairs remain review candidates; no automated conflict resolution or approval. |
+| MEM-31 | Extraction benchmark | Score predictions against one-to-one annotated expected claims and report precision, recall, F1, FP/FN, and evidence validity. |
+| MEM-32 | Confidence calibration | Report Brier score, ECE, and bin-level empirical accuracy on annotated extraction results. |
+| MEM-33 | Evidence quality | Require extraction evidence to be an exact candidate substring of at least 12 characters and three tokens. |
+| MEM-34 | Confidence semantics | Prompt the extractor for a conservative claim-correctness probability and preserve the model-reported value as provenance; approval remains a separate state. |
+
+### Success criteria
+
+- The 40-memory/42-query retrieval corpus validates and produces repeatable ranking metrics using only local SQLite and optional local Ollama.
+- Query categories are separately measurable so weak workload groups are visible rather than hidden by one overall average.
+- A set of explicit opposing-policy examples and paraphrased examples are caught as candidate conflicts, while unrelated statements and disjoint environment scopes are not paired by tests.
+- Conflict detection remains a review gate: no automatic resolution is introduced.
+- The extraction benchmark can quantify missing claims, unsupported extractions, weak evidence quotes, and over/under-confidence against its annotated cases.
+- Existing memory migration, approval, retrieval, CLI, evaluator, budget, and sandbox tests remain green.
+
+### Evaluation boundaries and risks
+
+- Both bundled memory-quality datasets are synthetic, manually curated fixtures, not production engineering traces or telemetry.
+- Extraction matching uses explicit `match_terms` annotations. It is inspectable and deterministic but can miss valid paraphrases or overstate a match if annotations are too broad.
+- Brier score and ECE describe only the evaluated sample. Ten cases and 30 expected claims do not establish population calibration.
+- Contradiction detection remains heuristic. The dimensions are not a natural-language inference model and can miss context, exceptions, temporal changes, or domain-specific definitions.
+- Embedding-based similarity can increase false positives as well as recall. Every pair still requires human inspection.
+- Live extraction benchmarking sends each candidate to the configured LLM provider and incurs provider cost. It is opt-in and separate from CI.
