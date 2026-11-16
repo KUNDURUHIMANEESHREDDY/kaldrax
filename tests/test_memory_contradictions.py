@@ -82,3 +82,29 @@ def test_conflicts_remain_project_and_agent_scoped(tmp_path):
 
     assert store.detect_conflicts("project") == []
     store.close()
+
+def test_environment_aliases_refer_to_the_same_scope(tmp_path):
+    store = SQLiteMemoryStore(tmp_path / "memory.sqlite3")
+    store.save(_record("Rule: expose the public admin endpoint in production"))
+    store.save(_record("Rule: keep the private admin endpoint in prod"))
+
+    conflicts = store.detect_conflicts("project")
+    assert len(conflicts) == 1
+    store.close()
+
+
+def test_embedding_provider_failure_falls_back_to_lexical_conflicts(tmp_path):
+    class BrokenEmbedder:
+        model_id = "broken"
+
+        def embed(self, texts):
+            raise RuntimeError("local model is unavailable")
+
+    store = SQLiteMemoryStore(tmp_path / "memory.sqlite3", embedder=BrokenEmbedder())
+    store.save(_record("Rule: allow worker agents to access shared project artifacts"))
+    store.save(_record("Rule: deny worker agents access to shared project artifacts"))
+
+    conflicts = store.detect_conflicts("project")
+    assert len(conflicts) == 1
+    assert "semantic similarity=unavailable" in conflicts[0].reason
+    store.close()
