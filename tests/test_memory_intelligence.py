@@ -43,6 +43,8 @@ def test_llm_extractor_requires_candidate_backed_quotes_and_queues_for_review():
     assert record.source_event_sequences == (1, 2)
     assert record.metadata["evidence_quote"] in candidate
     assert record.metadata["approval_required"] is True
+    assert record.metadata["model_reported_confidence"] == 0.82
+    assert "not assumed calibrated" in record.metadata["confidence_semantics"]
 
 
 @pytest.mark.parametrize("payload", [
