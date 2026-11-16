@@ -299,3 +299,26 @@ This file records implementation decisions, changes, commands, verification, and
 - Added a synthetic contradiction fixture covering opposing policy dimensions, environment-specific cases, and unrelated vocabulary. Labels remain assistant-proposed and exploratory-only pending human review.
 - Added `kaldrax memory contradiction-benchmark` with optional JSON report output.
 - No live Ollama or configured LLM scores are claimed; provider measurements still require a configured environment.
+
+
+## 2026-11-16 — Automated memory evaluation report and v0.6 release gate
+
+### Decisions
+- Keep ordinary CI deterministic, credential-free, and exploratory with respect to unreviewed human labels.
+- Make release eligibility a separate strict profile; a green regular CI run is not a v0.6 release approval.
+- Require a validated source-backed retrieval export, a real local-hybrid comparison, live extraction metrics, and hash-bound human review of contradiction/extraction labels for release.
+- Keep release thresholds in a versioned JSON file and include its SHA-256 plus benchmark dataset SHA-256 values in every report.
+- Treat human review as an explicit operator attestation; never upgrade assistant-proposed labels automatically.
+
+### Changes
+- Added `kaldrax memory quality-report` to aggregate lexical/hybrid retrieval, contradiction detection, live extraction, confidence calibration, dataset provenance, fingerprints, reproducibility metadata, and threshold results into JSON and Markdown.
+- Added separate CI and release threshold profiles. Regular CI enforces deterministic retrieval and contradiction regression floors. The release profile requires stronger metrics and complete evidence.
+- Added `kaldrax memory quality-approve`, an interactive, write-once human attestation for contradiction and extraction labels. The approval is bound to exact retrieval, contradiction, and extraction dataset hashes; changed data invalidates it.
+- Extended CI to publish the machine-readable and human-readable evaluation report as an Actions artifact.
+- Added a v0.6 tag-only release job that requires hybrid retrieval, configured live extraction, reviewed source-backed retrieval labels/privacy scope, hash-bound label review, and release thresholds.
+- No human approvals, provider runs, or hybrid measurements were manufactured during implementation.
+
+### Verification and remaining gates
+- Push-triggered hosted CI is the authoritative test run; local repository cloning is unavailable in this execution environment.
+- Release readiness remains blocked until an operator completes the retrieval annotation/privacy workflow, reviews contradiction and extraction labels using `quality-approve`, configures Ollama embeddings and the live extraction provider, and records reports passing the release thresholds.
+- A tag job reports and fails closed on missing evidence, but repository tag/release protection must require the named release-gate check to prevent an administrator from bypassing the workflow.

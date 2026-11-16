@@ -304,3 +304,30 @@ Supported verification modules are unittest, pytest, and compileall. The default
 The snapshot is bounded to 240 files, 48 KB per file, and 45 KB total. Source and test paths take priority over docs and examples. Common credential locations, environment files (except the example file), key/certificate/database files, Git metadata, and KALDRAX runtime state are excluded or rejected. A repository that is dirty, has unsupported submodules/symlinks in touched paths, or changes HEAD during the run is refused.
 
 The sandbox disables networking, uses an unprivileged UID, drops capabilities, applies CPU/memory/PID/time/output limits, and mounts only a disposable copy (never the operator's checkout). Docker and its host kernel remain trusted; this is not a VM boundary. The workspace is a bounded snapshot, not an unrestricted clone: omitted files are unavailable to the model and may make a patch unverifiable.
+
+
+## Memory evaluation and v0.6 release gate
+
+Generate the full deterministic report during normal development:
+
+```bash
+python -m kaldrax.cli memory quality-report --profile ci
+```
+
+The command writes JSON and Markdown under `.kaldrax/evaluation/` by default. CI uploads the same evidence as a GitHub Actions artifact and enforces the credential-free regression floors from `benchmarks/memory_release_thresholds_v1.json`.
+
+Before a v0.6 release candidate, complete the existing query-by-query review and separate privacy approval with `memory benchmark-annotate`, then use the resulting approved immutable export as the retrieval benchmark dataset. Review every expected contradiction pair and expected extraction claim, then create the hash-bound attestation:
+
+```bash
+python -m kaldrax.cli memory quality-approve --reviewer "reviewer-id"
+```
+
+The command prints the labels for inspection and requires the exact confirmation `REVIEWED` for both datasets. The approval is write-once; any change to a bound benchmark file requires a new versioned approval file and a fresh review.
+
+A release candidate must then pass:
+
+```bash
+python -m kaldrax.cli memory quality-report --profile release --live-extraction
+```
+
+The release profile requires a validated retrieval export with privacy sign-off, a real Ollama hybrid run, a live extraction run using the configured provider, a matching human label-review attestation, and every release threshold. A green regular CI run does not mean v0.6 is release-ready.

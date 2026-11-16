@@ -22,6 +22,12 @@ from .memory_benchmark_comparison import run_retrieval_comparison
 from .memory_annotation import run_annotation_review
 from .memory_quality import run_extraction_benchmark
 from .memory_contradiction_quality import run_contradiction_benchmark
+from .memory_evaluation import (
+    DEFAULT_APPROVAL,
+    build_memory_evaluation_report,
+    create_quality_review_approval,
+    write_memory_evaluation_report,
+)
 from .memory_intelligence import LLMMemoryExtractor
 from .models import Task
 
@@ -339,6 +345,31 @@ def main() -> int:
     extraction_benchmark.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_extraction_v1.json"))
     extraction_benchmark.add_argument("--max-memories", type=int, default=8)
 
+    quality_approve = memory_actions.add_parser(
+        "quality-approve",
+        help="record a write-once human review of contradiction and extraction benchmark labels",
+    )
+    quality_approve.add_argument("--reviewer", required=True)
+    quality_approve.add_argument("--retrieval-dataset", type=Path, default=Path("benchmarks/memory_retrieval_kaldrax_v1.json"))
+    quality_approve.add_argument("--contradiction-dataset", type=Path, default=Path("benchmarks/memory_contradictions_v1.json"))
+    quality_approve.add_argument("--extraction-dataset", type=Path, default=Path("benchmarks/memory_extraction_v1.json"))
+    quality_approve.add_argument("--approval-file", type=Path, default=DEFAULT_APPROVAL)
+
+    quality_report = memory_actions.add_parser(
+        "quality-report",
+        help="run the complete memory evaluation and enforce CI or release thresholds",
+    )
+    quality_report.add_argument("--profile", choices=("ci", "release"), default="ci")
+    quality_report.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_retrieval_kaldrax_v1.json"))
+    quality_report.add_argument("--contradiction-dataset", type=Path, default=Path("benchmarks/memory_contradictions_v1.json"))
+    quality_report.add_argument("--extraction-dataset", type=Path, default=Path("benchmarks/memory_extraction_v1.json"))
+    quality_report.add_argument("--thresholds", type=Path, default=Path("benchmarks/memory_release_thresholds_v1.json"))
+    quality_report.add_argument("--approval-file", type=Path, default=DEFAULT_APPROVAL)
+    quality_report.add_argument("--json-report", type=Path, default=Path(".kaldrax/evaluation/memory-quality.json"))
+    quality_report.add_argument("--markdown-report", type=Path, default=Path(".kaldrax/evaluation/memory-quality.md"))
+    quality_report.add_argument("--k", type=int, default=3)
+    quality_report.add_argument("--live-extraction", action="store_true", help="run the configured live extraction provider")
+
 
     provider = commands.add_parser("provider-check", help="smoke-test configured executor and evaluator models")
     benchmark_eval = commands.add_parser("benchmark-evaluator", help="measure evaluator behavior against a regression fixture")
@@ -473,6 +504,87 @@ def main() -> int:
                 parser.error(str(exc))
             print(json.dumps(result, indent=2))
             return 0
+
+
+        if args.memory_action == "quality-approve":
+            try:
+                contradiction_data = json.loads(args.contradiction_dataset.read_text(encoding="utf-8"))
+                extraction_data = json.loads(args.extraction_dataset.read_text(encoding="utf-8"))
+                print("Review every expected_conflict label in the contradiction dataset:")
+                for case in contradiction_data.get("cases", []):
+                    print(f"- {case.get('id')}: {case.get('expected_conflict')} | {case.get('left')} <> {case.get('right')}")
+                print("Review every expected match_terms claim in the extraction dataset:")
+                for case in extraction_data.get("cases", []):
+                    print(f"- {case.get('id')}: {case.get('expected')}")
+                contradiction_confirmed = input(
+                    "Type REVIEWED after inspecting all contradiction labels: "
+                ).strip() == "REVIEWED"
+                extraction_confirmed = input(
+                    "Type REVIEWED after inspecting all extraction labels: "
+                ).strip() == "REVIEWED"
+                result = create_quality_review_approval(
+                    retrieval_dataset=args.retrieval_dataset,
+                    contradiction_dataset=args.contradiction_dataset,
+                    extraction_dataset=args.extraction_dataset,
+                    approval_path=args.approval_file,
+                    reviewer=args.reviewer,
+                    contradiction_labels_reviewed=contradiction_confirmed,
+                    extraction_labels_reviewed=extraction_confirmed,
+                )
+            except (ValueError, TypeError, RuntimeError, OSError, json.JSONDecodeError) as exc:
+                parser.error(str(exc))
+            print(json.dumps(result, indent=2))
+            return 0
+
+        if args.memory_action == "quality-report":
+            extraction_result = {"status": "not_run", "reason": "live extraction was not requested"}
+            if args.live_extraction:
+                api_key = os.getenv("KALDRAX_API_KEY", "").strip()
+                model = os.getenv("KALDRAX_MODEL", "").strip()
+                if not api_key or not model:
+                    extraction_result = {
+                        "status": "not_run",
+                        "reason": "KALDRAX_API_KEY and KALDRAX_MODEL are required for live extraction",
+                    }
+                else:
+                    try:
+                        budget = _budget_from_env()
+                        extractor = LLMMemoryExtractor(
+                            _client(model, budget), max_memories=8,
+                        )
+                        extraction_metrics = run_extraction_benchmark(
+                            args.extraction_dataset, extractor=extractor,
+                        )
+                        extraction_result = {
+                            "status": "completed",
+                            "model": model,
+                            "metrics": extraction_metrics,
+                            "budget": budget.snapshot().to_dict(),
+                        }
+                    except Exception as exc:
+                        extraction_result = {
+                            "status": "failed",
+                            "error_type": type(exc).__name__,
+                        }
+            try:
+                report = build_memory_evaluation_report(
+                    retrieval_dataset=args.dataset,
+                    contradiction_dataset=args.contradiction_dataset,
+                    extraction_dataset=args.extraction_dataset,
+                    thresholds_path=args.thresholds,
+                    approval_path=args.approval_file,
+                    embedder=_embedding_provider(),
+                    extraction_result=extraction_result,
+                    k=args.k,
+                    profile=args.profile,
+                )
+                write_memory_evaluation_report(
+                    report, json_path=args.json_report, markdown_path=args.markdown_report,
+                )
+            except (ValueError, TypeError, RuntimeError, OSError) as exc:
+                parser.error(str(exc))
+            print(json.dumps(report, indent=2))
+            return 0 if report["passed"] else 1
 
         if args.memory_action == "extraction-benchmark":
             api_key = os.getenv("KALDRAX_API_KEY", "").strip()
