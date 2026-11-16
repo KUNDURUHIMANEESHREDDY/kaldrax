@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../store/AppStore";
 import { projectName } from "../lib/derive";
-import { usePageTitle } from "../components/Layout";
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useToast } from "../components/Toast";
 import {
   Badge,

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../store/AppStore";
-import { usePageTitle } from "../components/Layout";
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useToast } from "../components/Toast";
 import {
   AvatarStack,

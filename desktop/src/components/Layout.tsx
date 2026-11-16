@@ -4,8 +4,9 @@ import { useApp } from "../store/AppStore";
 import { alerts, searchAll, categoryById } from "../lib/derive";
 import { ROLE_ACTORS, ROLE_LABELS } from "../lib/permissions";
 import { Icon, BrandGlyph, type IconName } from "./Icons";
-import { Avatar, ItemThumb, useOutsideClose } from "./ui";
-import { itemStatus } from "../lib/format";
+import { Avatar, ItemThumb } from "./ui";
+import { useOutsideClose } from "../hooks/useOutsideClose";
+import { useRailBadges } from "../hooks/useRailBadges";
 import type { Role } from "../lib/types";
 
 type NavChild = { label: string; to: string };
@@ -21,13 +22,6 @@ type NavItem = {
 };
 
 const PIN_KEY = "inventra.rail.pinned";
-
-export function useRailBadges() {
-  const { state } = useApp();
-  const low = state.items.filter((i) => itemStatus(i) !== "in-stock").length;
-  const pending = state.requests.filter((r) => r.status === "pending").length;
-  return { low, pending };
-}
 
 function NavItems({
   onNavigate,
@@ -734,8 +728,3 @@ export function ScrollToTop() {
   return null;
 }
 
-export function usePageTitle(title: string) {
-  useEffect(() => {
-    document.title = `${title} · Inventra`;
-  }, [title]);
-}

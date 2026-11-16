@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useApp } from "../store/AppStore";
-import { usePageTitle } from "../components/Layout";
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useToast } from "../components/Toast";
 import {
   Avatar,

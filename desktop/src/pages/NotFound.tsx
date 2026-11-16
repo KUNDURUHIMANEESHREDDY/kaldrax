@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { usePageTitle } from "../components/Layout";
+import { usePageTitle } from "../hooks/usePageTitle";
 import { Button } from "../components/ui";
 import { Icon } from "../components/Icons";
 
