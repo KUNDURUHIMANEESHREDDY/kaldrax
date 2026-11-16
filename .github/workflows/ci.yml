@@ -160,6 +160,7 @@ jobs:
           KALDRAX_BASE_URL: ${{ vars.KALDRAX_BASE_URL }}
           KALDRAX_EMBEDDING_MODEL: ${{ vars.KALDRAX_EMBEDDING_MODEL }}
           KALDRAX_OLLAMA_URL: ${{ vars.KALDRAX_OLLAMA_URL }}
+          KALDRAX_RETRIEVAL_DATASET: ${{ vars.KALDRAX_RETRIEVAL_DATASET }}
           KALDRAX_MAX_TOKENS: "1024"
           KALDRAX_MAX_PROVIDER_CALLS: "20"
           KALDRAX_MAX_RUN_INPUT_TOKENS: "60000"
@@ -169,6 +170,7 @@ jobs:
         run: |
           python -m kaldrax.cli memory quality-report \
             --profile release \
+            --dataset "${KALDRAX_RETRIEVAL_DATASET:-benchmarks/memory_retrieval_kaldrax_v1.json}" \
             --live-extraction \
             --json-report artifacts/memory-quality-release.json \
             --markdown-report artifacts/memory-quality-release.md

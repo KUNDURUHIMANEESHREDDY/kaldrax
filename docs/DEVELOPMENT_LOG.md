@@ -335,3 +335,8 @@ This file records implementation decisions, changes, commands, verification, and
 - Added explicit minimum evaluation sample sizes to the strict release profile: retrieval query count, contradiction total and class balance, extraction case/claim count, and confidence observations.
 - The current synthetic contradiction/extraction fixtures intentionally fail these release minimums (8 pairs and 10 extraction cases); expand them with independently reviewed examples before v0.6.
 - Threshold values and minimum sample sizes are initial policy floors, not population-level statistical guarantees; recalibrate them against a larger held-out corpus.
+
+
+### Release dataset selection
+- The tag-only workflow now accepts the committed, reviewed retrieval export path through the `KALDRAX_RETRIEVAL_DATASET` repository variable; unset defaults to the canonical benchmark path.
+- Documentation now requires the same file path for local attestation creation and the GitHub tag-run report, preventing accidental approval/report path mismatches.
