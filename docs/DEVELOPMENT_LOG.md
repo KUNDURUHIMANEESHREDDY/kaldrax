@@ -77,3 +77,23 @@ This file records implementation decisions, changes, commands, verification, and
 - Exact deduplication cannot detect contradictions or determine whether knowledge is stale.
 - Memory and run reports may contain sensitive project context; local storage and access controls remain the operator's responsibility.
 - Cross-process SQLite use is supported for local persistence but is not a distributed agent coordination protocol.
+
+## 2026-11-16 — CI workflow baseline
+
+### Decisions
+- Add GitHub Actions checks for pushes to main, pull requests targeting main, and manual dispatch.
+- Test Python 3.11 and 3.13.
+- Grant the workflow read-only repository contents permission.
+
+### Changes
+- Added .github/workflows/ci.yml to install the editable package with development dependencies, run pytest, and compile source/tests.
+
+### Verification
+- Confirmed GitHub main points to commit 753a70c8accf7f33f7b923a8262b921b2969b9dd before this log-only follow-up.
+- Fetched the committed workflow file and inspected its trigger, matrix, permissions, and steps.
+- GitHub commit status returned no status checks, and the visible Actions-runs query returned zero runs at inspection time. A completed hosted CI result is not yet verified.
+- The v0.3 development entry records 41 passing tests; this session did not independently rerun the repository suite because a local GitHub clone was unavailable.
+
+### Risks / follow-up
+- Confirm the first GitHub Actions run completes on both Python versions.
+- Live provider validation, evaluator benchmark work, sandboxed code execution, and aggregate token/cost limits remain deferred as requested.
