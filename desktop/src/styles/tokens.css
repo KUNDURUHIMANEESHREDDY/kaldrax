@@ -1,0 +1,86 @@
+/* ==========================================================================
+   Inventra design tokens
+   Light theme only. Neutral, understated SaaS surfaces with a single
+   warm/olive accent family and semantic status tints.
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces */
+  --bg: #fafafa;
+  --bg-sunk: #f4f4f3;
+  --surface: #ffffff;
+  --surface-2: #f7f7f6;
+  --surface-3: #f0f0ee;
+
+  /* Ink */
+  --ink: #1a1a1a;
+  --ink-2: #3f3f3f;
+  --ink-3: #5c5c5c;
+  --muted: #757575;
+  --faint: #9b9b9b;
+
+  /* Lines */
+  --line: #ebebeb;
+  --line-2: #e2e2e0;
+  --line-strong: #d5d5d3;
+
+  /* Brand / accent */
+  --accent: #1a1a1a;
+  --accent-hover: #000000;
+  --olive: #5f6f52;
+  --olive-soft: #eef1ea;
+  --olive-ink: #46533c;
+
+  /* Semantic */
+  --green: #187a4b;
+  --green-soft: #e9f4ee;
+  --amber: #96631a;
+  --amber-soft: #fbf3e4;
+  --red: #b4352f;
+  --red-soft: #fbebea;
+  --blue: #2c5f9e;
+  --blue-soft: #ecf1f8;
+  --violet: #6a4b9c;
+  --violet-soft: #f1ecf7;
+  --slate: #55616e;
+  --slate-soft: #eef1f3;
+
+  /* Sidebar */
+  --rail: #171717;
+  --rail-hover: #262626;
+  --rail-active: #2f2f2f;
+  --rail-ink: #8d8d8d;
+  --rail-ink-active: #ffffff;
+
+  /* Radii */
+  --r-card: 24px;
+  --r-xl: 20px;
+  --r-lg: 16px;
+  --r-md: 12px;
+  --r-sm: 10px;
+  --r-xs: 8px;
+  --r-pill: 999px;
+
+  /* Elevation */
+  --shadow-xs: 0 1px 2px rgba(17, 17, 17, 0.04);
+  --shadow-sm: 0 1px 2px rgba(17, 17, 17, 0.05), 0 1px 1px rgba(17, 17, 17, 0.02);
+  --shadow-pop: 0 12px 32px -8px rgba(17, 17, 17, 0.16), 0 2px 8px rgba(17, 17, 17, 0.06);
+  --shadow-modal: 0 32px 80px -24px rgba(17, 17, 17, 0.34), 0 2px 8px rgba(17, 17, 17, 0.06);
+
+  /* Type */
+  --font-sans: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "Space Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Layout */
+  --rail-w: 62px;
+  --rail-pin-w: 236px;
+  --shell-pad: 28px;
+  --gutter: 20px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --fast: 140ms;
+  --normal: 200ms;
+}

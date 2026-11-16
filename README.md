@@ -358,3 +358,39 @@ kaldrax repo apply --root .\ --path src\kaldrax\engine.py --content-file .\.kald
 ```
 
 The workspace filters secret/runtime/build paths, refuses path traversal and symlink components, limits files to supported UTF-8 text up to 1 MB, rejects stale hashes, backs up the old file under `.kaldrax/desktop-backups/`, and uses an atomic replacement. This is an explicit local edit, not an autonomous patching pipeline; it does not run tests or commit the change. The desktop editor adds a separate confirmation step before calling it.
+
+
+## KALDRAX Desktop application
+
+The native desktop application now lives in `desktop/` alongside the Python engine in this repository. It is built with React 19, TypeScript, Vite, Rust and Tauri 2, and invokes the Python package in the repository root through the local CLI.
+
+### Run the desktop app (Windows)
+
+Requirements: Node.js 20.19+ or 22.12+, Rust stable, Windows WebView2 Runtime, Microsoft C++ Build Tools, and Python 3.11+.
+
+```powershell
+python -m pip install -e ".[dev]"
+cd desktop
+npm ci
+npm run desktop:dev
+```
+
+Browser preview (native Tauri commands are unavailable in a normal browser):
+
+```powershell
+cd desktop
+npm run dev
+```
+
+Build and verify:
+
+```powershell
+cd desktop
+npm run build
+npm run lint
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+cargo check --manifest-path src-tauri/Cargo.toml
+npm run desktop:build
+```
+
+Windows installers are emitted under `desktop/src-tauri/target/release/bundle/`. See [desktop/README.md](desktop/README.md), [desktop/DESIGN.md](desktop/DESIGN.md), [desktop/UX-CONTRACT.md](desktop/UX-CONTRACT.md), and [desktop/ENGINEERING-WORKFLOW-UI.md](desktop/ENGINEERING-WORKFLOW-UI.md) for setup, design and integration boundaries.

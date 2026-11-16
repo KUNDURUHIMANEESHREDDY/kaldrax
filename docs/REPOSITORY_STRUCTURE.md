@@ -75,3 +75,31 @@ The engine depends on domain models and the executor/evaluator/memory interfaces
 
 
 GitHub Actions additionally runs evaluator acceptance regression tests, lexical-versus-hybrid memory comparison, a Docker single-file smoke case, and a repository-aware patch/test/review/apply integration case. The optional provider-smoke job requires manually configured repository secrets and variables.
+
+## Desktop application
+
+The native application is maintained in `desktop/` and shares this repository with the Python engine:
+
+```text
+desktop/
+├── public/
+├── src/
+│   ├── components/
+│   ├── lib/
+│   ├── pages/
+│   ├── store/
+│   └── styles/
+├── src-tauri/
+│   ├── capabilities/
+│   ├── icons/
+│   └── src/
+├── package.json
+├── package-lock.json
+├── index.html
+├── vite.config.ts
+├── DESIGN.md
+├── UX-CONTRACT.md
+└── ENGINEERING-WORKFLOW-UI.md
+```
+
+The Python engine remains at the repository root. The Tauri bridge invokes `python -m kaldrax.cli` with the selected engine root. Node dependencies, Vite output and Cargo target artifacts are generated locally and ignored by Git.

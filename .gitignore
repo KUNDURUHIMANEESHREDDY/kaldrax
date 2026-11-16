@@ -17,3 +17,9 @@ runs/
 !.env.example
 .DS_Store
 Thumbs.db
+
+# KALDRAX desktop dependencies and generated artifacts
+node_modules/
+desktop/node_modules/
+desktop/dist/
+desktop/src-tauri/target/
