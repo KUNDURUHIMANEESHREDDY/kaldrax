@@ -16,6 +16,7 @@ from .execution import ExampleExecutor, LLMExecutor
 from .llm import OpenAICompatibleClient
 from .memory import MemoryReviewConflict, SQLiteMemoryStore
 from .memory_benchmarks import run_retrieval_benchmark
+from .memory_benchmark_comparison import run_retrieval_comparison
 from .memory_quality import run_extraction_benchmark
 from .memory_intelligence import LLMMemoryExtractor
 from .models import Task
@@ -276,6 +277,14 @@ def main() -> int:
     benchmark.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_retrieval_engineering_v2.json"))
     benchmark.add_argument("--k", type=int, default=3)
 
+    benchmark_compare = memory_actions.add_parser(
+        "benchmark-compare", help="compare lexical and local-hybrid retrieval on a source-backed corpus",
+    )
+    benchmark_compare.add_argument(
+        "--dataset", type=Path, default=Path("benchmarks/memory_retrieval_kaldrax_v1.json"),
+    )
+    benchmark_compare.add_argument("--k", type=int, default=3)
+
     extraction_benchmark = memory_actions.add_parser(
         "extraction-benchmark", help="evaluate extraction quality and confidence calibration using the configured LLM",
     )
@@ -372,6 +381,16 @@ def main() -> int:
         if args.memory_action == "benchmark":
             try:
                 result = run_retrieval_benchmark(
+                    args.dataset, embedder=_embedding_provider(), k=args.k,
+                )
+            except (ValueError, TypeError, RuntimeError, OSError) as exc:
+                parser.error(str(exc))
+            print(json.dumps(result, indent=2))
+            return 0
+
+        if args.memory_action == "benchmark-compare":
+            try:
+                result = run_retrieval_comparison(
                     args.dataset, embedder=_embedding_provider(), k=args.k,
                 )
             except (ValueError, TypeError, RuntimeError, OSError) as exc:
