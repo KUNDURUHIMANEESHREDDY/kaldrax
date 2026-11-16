@@ -60,6 +60,96 @@ def test_decomposer_rejects_malformed_planner_output():
         TaskDecomposer(Planner('{"tasks":"not a list"}')).decompose("Build")
 
 
+def test_decomposer_uses_repository_context_and_emits_topological_plan():
+    repository_context = {
+        "files": [
+            {"path": "config/settings.py", "imports": [], "exports": ["JWT_SECRET"]},
+            {"path": "models/user.py", "imports": [], "exports": ["User"]},
+            {"path": "auth/jwt.py", "imports": ["config.settings"], "exports": ["create_token"]},
+            {"path": "routes/auth.py", "imports": ["auth.jwt", "models.user"], "exports": ["login"]},
+            {"path": "tests/test_auth.py", "imports": ["routes.auth"], "exports": []},
+        ],
+        "dependencies": [
+            {"source": "auth/jwt.py", "target": "config/settings.py"},
+            {"source": "routes/auth.py", "target": "auth/jwt.py"},
+            {"source": "routes/auth.py", "target": "models/user.py"},
+            {"source": "tests/test_auth.py", "target": "routes/auth.py"},
+        ],
+        "test_files": ["tests/test_auth.py", "tests/test_middleware.py"],
+    }
+    planner = Planner(json.dumps({"tasks": [
+        {
+            "id": "add-auth-tests", "phase": "tests",
+            "description": "Add JWT route and middleware regression tests",
+            "file_scope": ["tests/test_auth.py", "tests/test_middleware.py"],
+            "depends_on": ["wire-api"],
+            "acceptance_criteria": ["Authentication behavior is covered"],
+        },
+        {
+            "id": "wire-api", "phase": "api",
+            "description": "Add auth routes and request middleware",
+            "file_scope": ["routes/auth.py", "middleware/auth.py"],
+            "depends_on": ["implement-security", "add-user-model"],
+            "acceptance_criteria": ["Protected routes validate bearer tokens"],
+        },
+        {
+            "id": "implement-security", "phase": "security",
+            "description": "Implement JWT signing and password hashing",
+            "file_scope": ["auth/jwt.py", "auth/passwords.py"],
+            "depends_on": ["configure-jwt"],
+            "acceptance_criteria": ["Tokens are signed and passwords are hashed"],
+        },
+        {
+            "id": "add-user-model", "phase": "data",
+            "description": "Add the user model and persistence fields",
+            "file_scope": ["models/user.py"],
+            "depends_on": [],
+            "acceptance_criteria": ["Users have stable identity and password hash fields"],
+        },
+        {
+            "id": "configure-jwt", "phase": "configuration",
+            "description": "Add JWT key, algorithm and expiry settings",
+            "file_scope": ["config/settings.py"],
+            "depends_on": [],
+            "acceptance_criteria": ["JWT settings are loaded from configuration"],
+        },
+    ]}))
+    graph = TaskDecomposer(planner).decompose(
+        "Add JWT authentication to the API",
+        repository_context=repository_context,
+    )
+    assert planner.prompts[0][1]["repository_context"] == repository_context
+    assert planner.prompts[0][1]["constraints"]["file_scope_required_for_every_task"] is True
+    assert [[node.id for node in wave] for wave in graph.execution_waves] == [
+        ["add-user-model", "configure-jwt"],
+        ["implement-security"],
+        ["wire-api"],
+        ["add-auth-tests"],
+    ]
+    assert [node.id for node in graph.execution_order] == [
+        "add-user-model", "configure-jwt", "implement-security", "wire-api", "add-auth-tests",
+    ]
+    assert graph.execution_order[2].file_scope == ("auth/jwt.py", "auth/passwords.py")
+
+
+def test_decomposer_requires_phase_and_file_scope_for_repository_plans():
+    planner = Planner(json.dumps({"tasks": [{
+        "id": "configure", "description": "Add config", "depends_on": [],
+        "acceptance_criteria": ["Configuration works"],
+    }]}))
+    with pytest.raises(TaskGraphError, match="phase and repository file_scope"):
+        TaskDecomposer(planner).decompose("Add config", repository_context={"files": []})
+
+
+@pytest.mark.parametrize("file_scope", [
+    ("../outside.py",), ("/etc/passwd",), (".git/config",), (".",),
+    (r"src\\outside.py",), (".env",), (".env.production",),
+])
+def test_task_node_rejects_unsafe_file_scope(file_scope):
+    with pytest.raises(TaskGraphError, match="unsafe repository path"):
+        TaskNode("unsafe", "Unsafe file scope", file_scope=file_scope)
+
+
 def test_independent_tasks_run_in_parallel_and_join_after_dependencies():
     graph = TaskGraph("build", (
         TaskNode("a", "A"),
@@ -84,6 +174,22 @@ def test_independent_tasks_run_in_parallel_and_join_after_dependencies():
     assert report.passed
     assert peak == 2
     assert report.outputs["join"] == "done:join"
+
+
+def test_scheduler_respects_topological_order_when_plan_lists_consumers_first():
+    graph = TaskGraph("auth", (
+        TaskNode("tests", "Verify authentication", ("api",)),
+        TaskNode("api", "Add routes and middleware", ("security",)),
+        TaskNode("security", "Implement JWT helpers", ("config",)),
+        TaskNode("config", "Add JWT settings"),
+    ))
+    started = []
+    report = TaskGraphScheduler(max_workers=4).run(
+        graph,
+        lambda node: started.append(node.id) or f"completed:{node.id}",
+    )
+    assert report.passed
+    assert started == ["config", "security", "api", "tests"]
 
 
 def test_failure_blocks_descendants_but_not_independent_work():
@@ -329,9 +435,16 @@ def test_cli_orchestration_passes_task_outputs_through_repository_patch_and_appl
             self.calls.append((system_prompt, payload))
             if self.role == "planner":
                 if "task decomposition planner" in system_prompt:
+                    assert payload["repository_context"] is not None
+                    assert any(
+                        edge["target"] == "src/operations.py"
+                        for edge in payload["repository_context"]["dependencies"]
+                    )
                     return json.dumps({"tasks": [{
                         "id": "implement-subtract",
+                        "phase": "implementation",
                         "description": "Implement integer subtraction",
+                        "file_scope": ["src/operations.py", "tests/test_operations.py"],
                         "depends_on": [],
                         "acceptance_criteria": ["subtraction is implemented"],
                     }]})
@@ -339,6 +452,12 @@ def test_cli_orchestration_passes_task_outputs_through_repository_patch_and_appl
                 return "Inspect the subtraction module and produce the safe patch."
             if self.role == "builder":
                 if "focused KALDRAX implementation worker" in system_prompt:
+                    assert payload["phase"] == "implementation"
+                    assert payload["file_scope"] == ["src/operations.py", "tests/test_operations.py"]
+                    assert any(
+                        edge["target"] == "src/operations.py"
+                        for edge in payload["repository_context"]["dependencies"]
+                    )
                     return "Deliverable: implement subtract(left, right)."
                 assert payload["task_graph_context"]["task_outputs"]["implement-subtract"]
                 return json.dumps({
@@ -420,6 +539,9 @@ def test_cli_orchestration_passes_task_outputs_through_repository_patch_and_appl
     assert cli._orchestrate(args) == 0
     payload = json.loads(artifact.read_text(encoding="utf-8"))
     assert payload["task_graph_passed"] is True
+    assert payload["execution_order"] == ["implement-subtract"]
+    assert payload["execution_waves"] == [["implement-subtract"]]
+    assert payload["tasks"][0]["file_scope"] == ["src/operations.py", "tests/test_operations.py"]
     assert payload["repository"]["status"] == "passed"
     assert payload["repository"]["reviewer_approved"] is True
     assert payload["repository"]["verification"]["exit_code"] == 0

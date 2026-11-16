@@ -618,3 +618,14 @@ This file records implementation decisions, changes, commands, verification, and
 - Python parsing is syntax-aware; other language import/export extraction is heuristic and cannot replace compiler, language-server, or build-system analysis.
 - Only imports resolved to files in the bounded scan become dependency edges. Monorepo-specific aliasing and advanced language/module semantics may require additional adapters.
 - Affected components and test targets are candidate navigation evidence. The existing Docker verification, reviewer, independent evaluator, and explicit apply gates remain authoritative.
+
+
+## 2026-11-16 — Repository-aware executable dependency plans
+
+- Upgraded task decomposition to accept the repository-intelligence map before implementation planning.
+- Added validated task phases and relative file scopes to task nodes, including guards against traversal, absolute paths, Git/KALDRAX runtime paths, and environment secrets.
+- Added deterministic topological execution waves; the scheduler now dispatches ready work in graph order while retaining parallelism for independent tasks.
+- Passed scoped repository file/dependency/test context and completed prerequisite outputs into implementation workers.
+- Included phases, file scopes, execution order, and parallel waves in repository patch/review context and orchestration artifacts.
+- Added JWT-authentication planning coverage for configuration, security, data, API, and test dependencies.
+- Verification: local execution unavailable in this environment; the main-branch CI workflow is configured to run the full pytest suite and source compilation after commit.
