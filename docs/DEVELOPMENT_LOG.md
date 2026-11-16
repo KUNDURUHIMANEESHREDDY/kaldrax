@@ -458,3 +458,34 @@ This file records implementation decisions, changes, commands, verification, and
 - StockAdjustForm is rendered only by its open-state wrapper; set the nested Modal's visibility to true instead of accidentally resolving the imported Tauri file-picker function named `open`.
 - Added the missing memoized team-report refresh callback used by TeamRunsPage's Refresh action.
 - These changes resolve the TypeScript errors found by the production build; normal initial report loading remains unchanged.
+
+
+## 2026-11-16 — Desktop lint cleanup and hosted verification
+
+### Decisions
+- Keep Oxlint rule configuration enabled and unchanged; resolve Fast Refresh warnings by separating hooks, contexts, and pure UI helpers from component modules.
+- Reset modal form state through keyed form mounts rather than synchronous state updates inside effects.
+- Keep async page-loading effects cancellable and separate from stateful user-triggered handlers.
+- Capture page clock references outside render to satisfy React purity checks.
+
+### Changes
+- Added a required desktop CI job that runs `npm ci`, `npm run lint`, and `npm run build` on Node.js 24.
+- Split `usePageTitle`, `useRailBadges`, `useOutsideClose`, `useToast`, `useItemOptions`, and `useApp` into hook modules; moved toast context and shared UI helper functions/types into non-component modules.
+- Replaced the donut chart's render-local mutable offset with an immutable reduction.
+- Reworked stock adjustment, material consumption, and request rejection forms to reset on keyed mount; reinitialized Settings drafts when persisted settings change.
+- Refactored memory, team-report, and repository loading effects to use cancellable asynchronous requests.
+- Moved the AppStore state-ref synchronization to a layout effect.
+
+### Verification
+- GitHub Actions run [43879830327](https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/actions/runs/43879830327) passed for commit [b1cf2ca](https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/commit/b1cf2ca2eacf9cc18654bb46b74cc4c6dcc6404d).
+- Desktop `npm run lint`: **0 warnings and 0 errors**. No lint rules were disabled or weakened.
+- Desktop `npm run build`: TypeScript project build and Vite production build passed.
+- Python 3.11 and 3.13 full suites, retrieval/evaluator benchmarks, and source compilation passed.
+- Python 3.13 also passed the real hosted Docker sandbox smoke test, repository patch/Docker integration test, and CI-profile memory quality report.
+- Python 3.11 Docker-specific steps and the optional CI-profile memory report were skipped by design.
+- Live provider smoke was skipped because this was a push-triggered run; the v0.6 release gate was skipped because this was not a v0.6 tag.
+
+### Remaining environmental and release gates
+- Hosted Docker execution and repository-team patch verification are verified. Local Windows Docker Desktop/Linux-engine execution and native desktop end-to-end testing remain locally unverified.
+- Live chat/embedding provider execution still needs operator-configured hosted API credentials and a manually dispatched provider check.
+- Regular CI success is not v0.6 release approval. Human-reviewed retrieval/privacy evidence, contradiction/extraction label approval, live embedding/retrieval measurements, and live extraction/calibration evidence remain separate release requirements.
