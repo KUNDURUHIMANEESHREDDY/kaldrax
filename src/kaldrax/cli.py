@@ -16,6 +16,7 @@ from .execution import ExampleExecutor, LLMExecutor
 from .llm import OpenAICompatibleClient
 from .memory import MemoryReviewConflict, SQLiteMemoryStore
 from .memory_benchmarks import run_retrieval_benchmark
+from .memory_quality import run_extraction_benchmark
 from .memory_intelligence import LLMMemoryExtractor
 from .models import Task
 
@@ -271,9 +272,15 @@ def main() -> int:
     consolidate.add_argument("--project", default=None)
     consolidate.add_argument("--memory-db", type=Path, default=Path(".kaldrax/memory.sqlite3"))
 
-    benchmark = memory_actions.add_parser("benchmark", help="measure retrieval quality on the bundled benchmark corpus")
-    benchmark.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_retrieval.json"))
+    benchmark = memory_actions.add_parser("benchmark", help="measure retrieval quality on an annotated engineering corpus")
+    benchmark.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_retrieval_engineering_v2.json"))
     benchmark.add_argument("--k", type=int, default=3)
+
+    extraction_benchmark = memory_actions.add_parser(
+        "extraction-benchmark", help="evaluate extraction quality and confidence calibration using the configured LLM",
+    )
+    extraction_benchmark.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_extraction_v1.json"))
+    extraction_benchmark.add_argument("--max-memories", type=int, default=8)
 
 
     provider = commands.add_parser("provider-check", help="smoke-test configured executor and evaluator models")
@@ -367,7 +374,24 @@ def main() -> int:
                 result = run_retrieval_benchmark(
                     args.dataset, embedder=_embedding_provider(), k=args.k,
                 )
-            except (ValueError, TypeError) as exc:
+            except (ValueError, TypeError, RuntimeError, OSError) as exc:
+                parser.error(str(exc))
+            print(json.dumps(result, indent=2))
+            return 0
+
+        if args.memory_action == "extraction-benchmark":
+            api_key = os.getenv("KALDRAX_API_KEY", "").strip()
+            model = os.getenv("KALDRAX_MODEL", "").strip()
+            if not api_key or not model:
+                parser.error("KALDRAX_API_KEY and KALDRAX_MODEL are required for extraction benchmarking")
+            try:
+                budget = _budget_from_env()
+                extractor = LLMMemoryExtractor(
+                    _client(model, budget), max_memories=args.max_memories,
+                )
+                result = run_extraction_benchmark(args.dataset, extractor=extractor)
+                result["budget"] = budget.snapshot().to_dict()
+            except (ValueError, TypeError, RuntimeError, OSError) as exc:
                 parser.error(str(exc))
             print(json.dumps(result, indent=2))
             return 0
