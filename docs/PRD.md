@@ -26,7 +26,7 @@ KALDRAX is a local-first engineering application that learns from previous proje
 - Hosted or distributed memory services.
 - Remote embedding providers or a mandatory embedding model dependency.
 - General natural-language theorem proving or contradiction resolution.
-- Probabilistic confidence calibration.
+- Guaranteeing or automatically correcting population-level confidence calibration; this milestone measures calibration on an annotated sample only.
 - Multi-agent coordination across machines.
 - Automatic destructive deletion of stale or rejected knowledge.
 - Arbitrary shell/code execution or deployment automation.
