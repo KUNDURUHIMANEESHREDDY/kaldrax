@@ -1,0 +1,708 @@
+{
+  "name": "kaldrax-engineering-memory-v2",
+  "version": 2,
+  "provenance": "synthetic_curated",
+  "description": "Curated, manually annotated engineering-memory benchmark spanning architecture, persistence, API design, reliability, security, async processing, observability, delivery, performance, frontend accessibility, testing, operations, governance, and supply-chain practices. These cases are synthetic and must not be represented as telemetry from production users.",
+  "memory_count": 40,
+  "query_count": 42,
+  "memories": [
+    {
+      "id": "ports-adapters",
+      "category": "Architecture",
+      "content": "Decision: Keep domain workflows behind stable ports and move provider integrations into replaceable adapters.",
+      "summary": "ports architecture boundaries interfaces providers",
+      "tags": [
+        "architecture"
+      ]
+    },
+    {
+      "id": "project-scope",
+      "category": "Architecture",
+      "content": "Rule: Scope every memory query by project identifier and expose only shared records plus the requesting agent's private records.",
+      "summary": "project isolation tenancy scope",
+      "tags": [
+        "architecture"
+      ]
+    },
+    {
+      "id": "sqlite-wal",
+      "category": "Persistence",
+      "content": "Decision: Use SQLite write-ahead logging and a busy timeout for the local single-machine memory database.",
+      "summary": "sqlite database wal durability",
+      "tags": [
+        "persistence"
+      ]
+    },
+    {
+      "id": "additive-migrations",
+      "category": "Persistence",
+      "content": "Rule: Evolve persisted schemas with additive migrations and preserve existing rows during upgrades.",
+      "summary": "database schema migration backwards compatibility",
+      "tags": [
+        "persistence"
+      ]
+    },
+    {
+      "id": "idempotency",
+      "category": "API",
+      "content": "Rule: Give retryable write endpoints idempotency keys so duplicate client requests do not repeat side effects.",
+      "summary": "http api request retries duplicate writes",
+      "tags": [
+        "api"
+      ]
+    },
+    {
+      "id": "retry-budgets",
+      "category": "Reliability",
+      "content": "Rule: Bound recursive retries with a maximum iteration count and an overall execution budget.",
+      "summary": "agent loop runaway bounded retries",
+      "tags": [
+        "reliability"
+      ]
+    },
+    {
+      "id": "secure-cookie",
+      "category": "Security",
+      "content": "Rule: Mark session cookies Secure, HttpOnly, and SameSite, and avoid storing bearer tokens in browser local storage.",
+      "summary": "browser session cookie authentication",
+      "tags": [
+        "security"
+      ]
+    },
+    {
+      "id": "server-authz",
+      "category": "Security",
+      "content": "Rule: Enforce authorization on the server for every protected resource; hiding a client control is not an access check.",
+      "summary": "server side permissions access control",
+      "tags": [
+        "security"
+      ]
+    },
+    {
+      "id": "secret-handling",
+      "category": "Security",
+      "content": "Rule: Keep API credentials out of logs, run reports, prompts, and persistent project memory.",
+      "summary": "api keys secrets redaction",
+      "tags": [
+        "security"
+      ]
+    },
+    {
+      "id": "ssrf",
+      "category": "Security",
+      "content": "Rule: Validate outbound URLs and resolve host addresses before fetching user-controlled resources to prevent SSRF.",
+      "summary": "server request forgery url validation",
+      "tags": [
+        "security"
+      ]
+    },
+    {
+      "id": "sql-params",
+      "category": "Security",
+      "content": "Rule: Use parameterized SQL queries and bind values instead of interpolating user input into SQL strings.",
+      "summary": "database injection prepared statements",
+      "tags": [
+        "security"
+      ]
+    },
+    {
+      "id": "rate-limit",
+      "category": "API",
+      "content": "Rule: Apply per-identity rate limits and return Retry-After when a caller exceeds its request allowance.",
+      "summary": "api throttling request quota",
+      "tags": [
+        "api"
+      ]
+    },
+    {
+      "id": "cursor-pagination",
+      "category": "API",
+      "content": "Decision: Use opaque cursor pagination for changing datasets rather than offset pagination over mutable records.",
+      "summary": "api list pagination stable ordering",
+      "tags": [
+        "api"
+      ]
+    },
+    {
+      "id": "dead-letter",
+      "category": "Async",
+      "content": "Rule: Move messages to a dead-letter queue after the configured delivery attempts are exhausted; preserve the failure reason.",
+      "summary": "worker queue poison messages",
+      "tags": [
+        "async"
+      ]
+    },
+    {
+      "id": "outbox",
+      "category": "Async",
+      "content": "Pattern: Write domain changes and outgoing event records in one database transaction, then publish the outbox asynchronously.",
+      "summary": "transactional outbox message consistency",
+      "tags": [
+        "async"
+      ]
+    },
+    {
+      "id": "backoff-jitter",
+      "category": "Reliability",
+      "content": "Rule: Retry transient provider failures with exponential backoff and jitter; do not retry permanent validation errors.",
+      "summary": "network transient failures retry storm",
+      "tags": [
+        "reliability"
+      ]
+    },
+    {
+      "id": "log-redaction",
+      "category": "Observability",
+      "content": "Rule: Emit structured logs with correlation IDs and redact credentials, authorization headers, and personal data.",
+      "summary": "logging pii observability",
+      "tags": [
+        "observability"
+      ]
+    },
+    {
+      "id": "trace-correlation",
+      "category": "Observability",
+      "content": "Rule: Propagate one trace identifier across API requests, background jobs, and provider calls.",
+      "summary": "distributed tracing request correlation",
+      "tags": [
+        "observability"
+      ]
+    },
+    {
+      "id": "slo-alert",
+      "category": "Observability",
+      "content": "Decision: Alert on user-visible service-level objective burn rate rather than raw host CPU thresholds alone.",
+      "summary": "slo error budget alerting",
+      "tags": [
+        "observability"
+      ]
+    },
+    {
+      "id": "health-check",
+      "category": "Delivery",
+      "content": "Rule: Expose separate liveness and readiness checks; readiness must fail when required dependencies are unavailable.",
+      "summary": "deployment health probe service",
+      "tags": [
+        "delivery"
+      ]
+    },
+    {
+      "id": "deployment-rollback",
+      "category": "Delivery",
+      "content": "Rule: Keep the previous release artifact available and automatically roll back when post-deploy health checks fail.",
+      "summary": "release deploy rollback",
+      "tags": [
+        "delivery"
+      ]
+    },
+    {
+      "id": "ci-reproducible",
+      "category": "Delivery",
+      "content": "Rule: Pin runtime and tool versions in CI, install from the lock file, and run the same checks on every supported Python version.",
+      "summary": "continuous integration deterministic builds",
+      "tags": [
+        "delivery"
+      ]
+    },
+    {
+      "id": "cache-invalidation",
+      "category": "Performance",
+      "content": "Rule: Define cache invalidation and ownership before adding a cache; stale authorization and configuration must not be served.",
+      "summary": "cache consistency stale values",
+      "tags": [
+        "performance"
+      ]
+    },
+    {
+      "id": "query-index",
+      "category": "Performance",
+      "content": "Rule: Use query plans and production-shaped data to choose indexes; avoid indexing every column without evidence.",
+      "summary": "database query optimization slow reads",
+      "tags": [
+        "performance"
+      ]
+    },
+    {
+      "id": "embedding-batches",
+      "category": "Performance",
+      "content": "Rule: Batch embedding requests and cap batch size to reduce local model overhead without exceeding memory limits.",
+      "summary": "vector embedding indexing throughput",
+      "tags": [
+        "performance"
+      ]
+    },
+    {
+      "id": "keyboard-access",
+      "category": "Frontend",
+      "content": "Rule: All interactive controls must be reachable and operable with a keyboard and expose visible focus state.",
+      "summary": "web accessibility keyboard navigation",
+      "tags": [
+        "frontend"
+      ]
+    },
+    {
+      "id": "color-contrast",
+      "category": "Frontend",
+      "content": "Rule: Meet WCAG AA text contrast targets and never communicate status by color alone.",
+      "summary": "frontend accessibility contrast color",
+      "tags": [
+        "frontend"
+      ]
+    },
+    {
+      "id": "api-schema",
+      "category": "Contracts",
+      "content": "Decision: Validate inbound and outbound API payloads against a versioned schema at the system boundary.",
+      "summary": "request response schema validation",
+      "tags": [
+        "contracts"
+      ]
+    },
+    {
+      "id": "property-tests",
+      "category": "Testing",
+      "content": "Pattern: Use property-based tests for parser invariants and boundary-heavy input spaces in addition to example-based tests.",
+      "summary": "randomized tests invariants fuzz",
+      "tags": [
+        "testing"
+      ]
+    },
+    {
+      "id": "compat-tests",
+      "category": "Testing",
+      "content": "Rule: Run backward-compatibility tests against the oldest supported database schema before releasing migrations.",
+      "summary": "legacy version compatibility",
+      "tags": [
+        "testing"
+      ]
+    },
+    {
+      "id": "backup-restore",
+      "category": "Operations",
+      "content": "Rule: Verify backups by restoring them in a scheduled drill; a successful backup job alone does not prove recoverability.",
+      "summary": "database restore recovery point",
+      "tags": [
+        "operations"
+      ]
+    },
+    {
+      "id": "feature-flag",
+      "category": "Operations",
+      "content": "Rule: Put risky releases behind a remotely configurable feature flag with an emergency kill switch.",
+      "summary": "rollout disable feature toggle",
+      "tags": [
+        "operations"
+      ]
+    },
+    {
+      "id": "adr-records",
+      "category": "Governance",
+      "content": "Decision: Record architecture decisions with context, alternatives, consequences, status, and a stable identifier.",
+      "summary": "architecture decision record rationale",
+      "tags": [
+        "governance"
+      ]
+    },
+    {
+      "id": "dependency-pinning",
+      "category": "Supply chain",
+      "content": "Rule: Pin direct dependencies, review transitive updates, and generate an SBOM for release artifacts.",
+      "summary": "package supply chain dependency version",
+      "tags": [
+        "supply-chain"
+      ]
+    },
+    {
+      "id": "container-user",
+      "category": "Supply chain",
+      "content": "Rule: Run application containers as a non-root user and use a minimal runtime image.",
+      "summary": "docker container privilege",
+      "tags": [
+        "supply-chain"
+      ]
+    },
+    {
+      "id": "config-validation",
+      "category": "Reliability",
+      "content": "Rule: Validate configuration types and required fields at startup, then fail with a redacted actionable error.",
+      "summary": "environment config startup validation",
+      "tags": [
+        "reliability"
+      ]
+    },
+    {
+      "id": "static-analysis",
+      "category": "Testing",
+      "content": "Rule: Run format, lint, type checks, and static analysis in CI before merging changes.",
+      "summary": "code quality lint typing",
+      "tags": [
+        "testing"
+      ]
+    },
+    {
+      "id": "credential-rotation",
+      "category": "Security",
+      "content": "Rule: Rotate provider credentials after suspected exposure and invalidate the previous credential immediately.",
+      "summary": "api key rotation revoke",
+      "tags": [
+        "security"
+      ]
+    },
+    {
+      "id": "concurrency-lock",
+      "category": "Persistence",
+      "content": "Rule: Protect local file and database mutations with transactional locking and explicit busy handling.",
+      "summary": "sqlite concurrent writes process lock",
+      "tags": [
+        "persistence"
+      ]
+    },
+    {
+      "id": "local-runtime",
+      "category": "Architecture",
+      "content": "Decision: Keep the local control plane functional without a hosted database; remote model calls remain optional adapters.",
+      "summary": "offline local first self hosted",
+      "tags": [
+        "architecture"
+      ]
+    }
+  ],
+  "queries": [
+    {
+      "id": "arch-ports",
+      "category": "Architecture",
+      "query": "Where should provider-specific code live if the core should not be tied to one vendor?",
+      "relevant": [
+        "ports-adapters"
+      ]
+    },
+    {
+      "id": "arch-isolation",
+      "category": "Architecture",
+      "query": "How do we prevent one codebase from reading another project's stored context?",
+      "relevant": [
+        "project-scope"
+      ]
+    },
+    {
+      "id": "local-first",
+      "category": "Architecture",
+      "query": "Can the control plane run on a developer machine without a hosted database?",
+      "relevant": [
+        "local-runtime"
+      ]
+    },
+    {
+      "id": "sqlite-wal",
+      "category": "Persistence",
+      "query": "Which local database mode improves concurrent readers and write reliability?",
+      "relevant": [
+        "sqlite-wal"
+      ]
+    },
+    {
+      "id": "schema-upgrade",
+      "category": "Persistence",
+      "query": "How should old installations keep their data when the storage format changes?",
+      "relevant": [
+        "additive-migrations"
+      ]
+    },
+    {
+      "id": "concurrent-writes",
+      "category": "Persistence",
+      "query": "What protects the local store when two processes write at once?",
+      "relevant": [
+        "concurrency-lock"
+      ]
+    },
+    {
+      "id": "idempotent-post",
+      "category": "API",
+      "query": "How do clients safely repeat a POST after losing the response?",
+      "relevant": [
+        "idempotency"
+      ]
+    },
+    {
+      "id": "api-throttle",
+      "category": "API",
+      "query": "What response guidance should a client receive after exceeding its quota?",
+      "relevant": [
+        "rate-limit"
+      ]
+    },
+    {
+      "id": "stable-lists",
+      "category": "API",
+      "query": "How should a collection endpoint page through records while new rows are being added?",
+      "relevant": [
+        "cursor-pagination"
+      ]
+    },
+    {
+      "id": "retry-cap",
+      "category": "Reliability",
+      "query": "How do we stop a recursive agent from retrying indefinitely?",
+      "relevant": [
+        "retry-budgets"
+      ]
+    },
+    {
+      "id": "transient-retry",
+      "category": "Reliability",
+      "query": "What retry schedule reduces synchronized load during temporary network failures?",
+      "relevant": [
+        "backoff-jitter"
+      ]
+    },
+    {
+      "id": "startup-config",
+      "category": "Reliability",
+      "query": "Where should malformed environment variables be rejected?",
+      "relevant": [
+        "config-validation"
+      ]
+    },
+    {
+      "id": "cookie-security",
+      "category": "Security",
+      "query": "Which browser cookie attributes reduce session theft and cross-site request risk?",
+      "relevant": [
+        "secure-cookie"
+      ]
+    },
+    {
+      "id": "authz-check",
+      "category": "Security",
+      "query": "Is hiding an admin button enough to protect an admin endpoint?",
+      "relevant": [
+        "server-authz"
+      ]
+    },
+    {
+      "id": "credential-leak",
+      "category": "Security",
+      "query": "Where must provider tokens never appear in durable diagnostics?",
+      "relevant": [
+        "secret-handling"
+      ]
+    },
+    {
+      "id": "ssrf-protection",
+      "category": "Security",
+      "query": "What checks are needed before fetching a URL supplied by a user?",
+      "relevant": [
+        "ssrf"
+      ]
+    },
+    {
+      "id": "sql-injection",
+      "category": "Security",
+      "query": "How do we avoid untrusted values becoming executable SQL syntax?",
+      "relevant": [
+        "sql-params"
+      ]
+    },
+    {
+      "id": "rotation",
+      "category": "Security",
+      "query": "What should happen after an API token is suspected to have leaked?",
+      "relevant": [
+        "credential-rotation"
+      ]
+    },
+    {
+      "id": "dead-letter",
+      "category": "Async",
+      "query": "Where do poison messages go after all worker deliveries fail?",
+      "relevant": [
+        "dead-letter"
+      ]
+    },
+    {
+      "id": "outbox-pattern",
+      "category": "Async",
+      "query": "How can a database update and event publication avoid a dual-write inconsistency?",
+      "relevant": [
+        "outbox"
+      ]
+    },
+    {
+      "id": "log-hygiene",
+      "category": "Observability",
+      "query": "How should logs preserve request context without exposing sensitive values?",
+      "relevant": [
+        "log-redaction"
+      ]
+    },
+    {
+      "id": "trace-flow",
+      "category": "Observability",
+      "query": "How can a background task be connected to the originating HTTP request in traces?",
+      "relevant": [
+        "trace-correlation"
+      ]
+    },
+    {
+      "id": "slo-burn",
+      "category": "Observability",
+      "query": "What should page the on-call when reliability is degrading for users?",
+      "relevant": [
+        "slo-alert"
+      ]
+    },
+    {
+      "id": "readiness",
+      "category": "Delivery",
+      "query": "How does a load balancer know whether the service can accept traffic?",
+      "relevant": [
+        "health-check"
+      ]
+    },
+    {
+      "id": "rollback",
+      "category": "Delivery",
+      "query": "What safety action should follow a failed post-release health check?",
+      "relevant": [
+        "deployment-rollback"
+      ]
+    },
+    {
+      "id": "ci-parity",
+      "category": "Delivery",
+      "query": "How do we make builds repeatable across developer and CI environments?",
+      "relevant": [
+        "ci-reproducible"
+      ]
+    },
+    {
+      "id": "cache-policy",
+      "category": "Performance",
+      "query": "What must be designed before introducing caching for permissions and settings?",
+      "relevant": [
+        "cache-invalidation"
+      ]
+    },
+    {
+      "id": "indexing",
+      "category": "Performance",
+      "query": "How do we choose database indexes without adding unnecessary write overhead?",
+      "relevant": [
+        "query-index"
+      ]
+    },
+    {
+      "id": "vector-throughput",
+      "category": "Performance",
+      "query": "How can local embedding indexing reduce per-request overhead?",
+      "relevant": [
+        "embedding-batches"
+      ]
+    },
+    {
+      "id": "keyboard",
+      "category": "Frontend",
+      "query": "What is required so forms and dialogs work without a mouse?",
+      "relevant": [
+        "keyboard-access"
+      ]
+    },
+    {
+      "id": "contrast",
+      "category": "Frontend",
+      "query": "How should status and text remain understandable for users with low vision?",
+      "relevant": [
+        "color-contrast"
+      ]
+    },
+    {
+      "id": "contract-validation",
+      "category": "Contracts",
+      "query": "Where should request bodies be checked against a known API contract?",
+      "relevant": [
+        "api-schema"
+      ]
+    },
+    {
+      "id": "parser-properties",
+      "category": "Testing",
+      "query": "What testing strategy finds edge cases beyond a few hand-written examples?",
+      "relevant": [
+        "property-tests"
+      ]
+    },
+    {
+      "id": "migration-regression",
+      "category": "Testing",
+      "query": "How do we ensure a schema upgrade still works for the oldest supported database?",
+      "relevant": [
+        "compat-tests"
+      ]
+    },
+    {
+      "id": "restore-drill",
+      "category": "Operations",
+      "query": "How do we prove that a scheduled database backup can actually be recovered?",
+      "relevant": [
+        "backup-restore"
+      ]
+    },
+    {
+      "id": "kill-switch",
+      "category": "Operations",
+      "query": "How can a risky feature be disabled quickly without rolling back the whole release?",
+      "relevant": [
+        "feature-flag"
+      ]
+    },
+    {
+      "id": "decision-history",
+      "category": "Governance",
+      "query": "Where should the rationale and trade-offs for an architecture choice be recorded?",
+      "relevant": [
+        "adr-records"
+      ]
+    },
+    {
+      "id": "sbom",
+      "category": "Supply chain",
+      "query": "What inventory should accompany a software release to describe included components?",
+      "relevant": [
+        "dependency-pinning"
+      ]
+    },
+    {
+      "id": "container-hardening",
+      "category": "Supply chain",
+      "query": "Which Linux account should application processes use inside a production container?",
+      "relevant": [
+        "container-user"
+      ]
+    },
+    {
+      "id": "static-checks",
+      "category": "Testing",
+      "query": "Which automated source checks should run before changes are accepted?",
+      "relevant": [
+        "static-analysis"
+      ]
+    },
+    {
+      "id": "api-secret-policy",
+      "category": "Security",
+      "query": "How do we keep authentication material out of execution history and stored lessons?",
+      "relevant": [
+        "secret-handling"
+      ]
+    },
+    {
+      "id": "db-read-performance",
+      "category": "Performance",
+      "query": "What evidence should guide index selection when database reads slow down?",
+      "relevant": [
+        "query-index"
+      ]
+    }
+  ]
+}
