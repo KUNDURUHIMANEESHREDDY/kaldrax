@@ -248,6 +248,50 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 cancelled=cancelled,
             )
 
+    def preflight_full_suite(self) -> dict[str, str]:
+        """Confirm Docker, the local image, and pytest availability without pulling or networking."""
+        docker = self._check_docker()
+        try:
+            inspected = self._run(
+                [docker, "image", "inspect", "--format", "{{.Id}}", self.image],
+                capture_output=True, text=True, timeout=10, check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            raise SandboxExecutionError("Unable to inspect the configured local verification image") from None
+        if inspected.returncode != 0 or not str(inspected.stdout).strip():
+            raise SandboxExecutionError(
+                "configured verification image is not available locally; build or pull it before running KALDRAX"
+            )
+        probe = [
+            docker, "run", "--rm", "--pull=never",
+            "--network", "none",
+            "--memory", "128m", "--memory-swap", "128m",
+            "--cpus", "0.25", "--pids-limit", "16",
+            "--read-only", "--cap-drop", "ALL",
+            "--security-opt", "no-new-privileges",
+            "--user", "65534:65534",
+            "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=16m",
+            "--entrypoint", "python",
+            self.image, "-B", "-c", "import pytest",
+        ]
+        try:
+            checked = self._run(
+                probe, capture_output=True, text=True, timeout=15, check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            raise SandboxExecutionError("Unable to verify pytest availability in the configured image") from None
+        if checked.returncode != 0:
+            raise SandboxExecutionError(
+                "configured verification image does not provide an importable pytest installation"
+            )
+        return {
+            "image": self.image,
+            "image_id": str(inspected.stdout).strip(),
+            "pytest": "available",
+            "pull_policy": "never",
+            "network": "none",
+        }
+
     def run_workspace_full_suite(
         self,
         workspace: Path | str,
