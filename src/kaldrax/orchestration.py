@@ -673,7 +673,9 @@ class CheckpointStore:
                     raise
                 raise TaskGraphError("checkpoint is corrupt or invalid") from exc
 
-    def load_latest(self) -> tuple[TaskGraph, ExecutionCheckpoint] | None:
+    def load_latest(
+        self, *, objective: str | None = None,
+    ) -> tuple[TaskGraph, ExecutionCheckpoint] | None:
         """Load the most recent persisted graph revision for this request and repository."""
         with self._lock:
             if not self.path.exists():
@@ -694,6 +696,8 @@ class CheckpointStore:
                 if payload.get("graph") is None:
                     return None
                 graph = TaskGraph.from_dict(payload["graph"])
+                if objective is not None and graph.objective != objective:
+                    raise TaskGraphError("checkpoint graph objective does not match the requested objective")
                 if payload.get("graph_fingerprint") != graph.fingerprint():
                     raise TaskGraphError("checkpoint graph payload does not match its fingerprint")
             except TaskGraphError:
