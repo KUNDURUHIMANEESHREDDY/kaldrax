@@ -334,3 +334,43 @@ def test_task_file_scope_rejects_noncanonical_and_private_allowlist_paths():
     for allowed_paths in (("src//module.py",), (".env",), (".venv/bin/tool",), ("../outside.py",)):
         with pytest.raises(WorkspaceError):
             RepositoryWorkspace.validate_file_scope(allowed_paths)
+
+def test_staged_patch_uses_complete_tracked_repository_not_prompt_snapshot(tmp_path):
+    large_test = "# full-suite fixture\n" + ("# retained test context\n" * 2600)
+    workspace = init_repo(tmp_path / "repo", {
+        "app.py": "def value():\n    return 1\n",
+        "tests/test_full_repository.py": large_test,
+        "docs/architecture.md": "Full repository docs.\n",
+    })
+    snapshot = workspace.capture()
+    assert "tests/test_full_repository.py" in snapshot.omitted_paths
+    assert all(item.path != "tests/test_full_repository.py" for item in snapshot.files)
+
+    with workspace.staged_patch(snapshot, PATCH) as (stage, changed):
+        assert changed == ("app.py",)
+        assert (stage / "tests" / "test_full_repository.py").read_text(encoding="utf-8") == large_test
+        assert (stage / "docs" / "architecture.md").read_text(encoding="utf-8") == "Full repository docs.\n"
+        assert (stage / "app.py").read_text(encoding="utf-8").endswith("return 2\n")
+
+
+def test_full_repository_staging_rejects_tracked_symlinks(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "app.py").write_text("value = 1\n", encoding="utf-8")
+    (root / "target.py").write_text("value = 2\n", encoding="utf-8")
+    try:
+        (root / "linked.py").symlink_to("target.py")
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is unavailable on this platform")
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    subprocess.run(["git", "-C", str(root), "config", "user.email", "kaldrax@example.invalid"], check=True)
+    subprocess.run(["git", "-C", str(root), "config", "user.name", "KALDRAX Tests"], check=True)
+    subprocess.run(["git", "-C", str(root), "add", "--all"], check=True)
+    subprocess.run(["git", "-C", str(root), "commit", "-qm", "baseline"], check=True)
+    workspace = RepositoryWorkspace(root)
+    snapshot = workspace.capture()
+
+    with pytest.raises(WorkspaceError, match="tracked symlinks"):
+        with workspace.staged_patch(snapshot, PATCH):
+            pass
+
