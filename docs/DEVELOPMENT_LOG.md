@@ -667,3 +667,28 @@ This file records implementation decisions, changes, commands, verification, and
 ### Verification
 - Source and regression-test changes were committed to `main`.
 - The tests and compilation have not been executed in this environment. Hosted CI status is not exposed by the available GitHub check-status endpoint; do not mark this milestone verified until the Python matrix completes.
+
+
+## 2026-11-18 — Autonomous task recovery and replanning
+
+### Decisions
+- Failed and blocked task nodes trigger structured, evidence-grounded diagnosis after the scheduler's bounded transient retry policy.
+- The planner may replace unfinished tasks and recalculate their dependencies, but successful task definitions are immutable and successful outputs are carried forward.
+- A repair graph is validated by the normal DAG/task-node rules; every removed unfinished task must be listed in `retired_task_ids`.
+- Recovery is bounded to 0–3 graph-repair rounds (default 2), with the used-round count persisted across process restarts.
+- A diagnosis that requires operator input stops automated replanning.
+- A successful task graph is still not accepted until the existing independent reviewer and evaluator gates pass; workspace-backed work retains sandbox and explicit apply gates.
+
+### Changes
+- Added `TaskGraph.to_dict/from_dict` and persisted the active graph revision in checkpoints.
+- Added structured failure diagnosis with validated task-error/dependency-state evidence.
+- Added validated graph replanning, successful-task immutability, explicit retired-task declarations, and dependency recalculation.
+- Added cumulative attempt accounting and repair history to checkpoints and run artifacts.
+- Added CLI `--max-replans`, bounded recovery orchestration, restart-safe latest-graph resume, and operator-input blocking.
+- Added regression coverage for diagnosis completeness, dependency rewiring, completed-task immutability, checkpoint resume, cumulative attempts, and an end-to-end CLI recovery.
+- Updated README, architecture documentation, and ADR 0011.
+
+### Verification
+- Source, tests, and documentation were committed to `main`.
+- A local checkout/test run could not be performed because DNS resolution for `github.com` failed in the execution environment.
+- The available GitHub combined-status endpoint returned no status entries. Treat CI/test verification as pending until the repository's Python matrix reports a completed result.
