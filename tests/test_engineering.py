@@ -337,11 +337,15 @@ def test_repository_team_full_profile_requires_tests_and_compilation(tmp_path):
     assert report.status is RunStatus.PASSED
     assert len(sandbox.full_calls) == 1
     assert report.verification["profile"] == "full-repository"
-    assert report.verification["test_count"] == 9
+    assert report.verification["test_count"] == 18
+    assert report.verification["test_counts"] == {"3.11": 9, "3.13": 9}
     assert [step["name"] for step in report.verification["steps"]] == [
-        "full_test_suite",
-        "deterministic_ci_quality_checks",
-        "source_and_test_compilation",
+        "python_3_11_full_test_suite",
+        "python_3_11_deterministic_ci_quality",
+        "python_3_11_source_compilation",
+        "python_3_13_full_test_suite",
+        "python_3_13_deterministic_ci_quality",
+        "python_3_13_source_compilation",
         "desktop_lint_and_production_build",
     ]
     assert coordinator.reviewer.prompts[0][1]["verification"]["profile"] == "full-repository"
@@ -374,7 +378,7 @@ def test_repository_team_full_profile_rejects_compile_failure(tmp_path):
 
     assert report.status is RunStatus.LIMIT_REACHED
     assert report.applied is False
-    assert report.verification["test_count"] == 9
+    assert report.verification["test_count"] == 18
     assert report.verification["exit_code"] == 1
     assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")
 
@@ -389,9 +393,9 @@ def test_repository_team_full_profile_rejects_desktop_build_failure(tmp_path):
 
     assert report.status is RunStatus.LIMIT_REACHED
     assert report.applied is False
-    assert report.verification["test_count"] == 9
+    assert report.verification["test_count"] == 18
     assert report.verification["exit_code"] == 1
-    assert report.verification["steps"][2]["status"] == "failed"
+    assert report.verification["steps"][6]["status"] == "failed"
     assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")
 
 def test_repository_team_full_profile_rejects_ci_quality_benchmark_failure(tmp_path):
@@ -405,6 +409,6 @@ def test_repository_team_full_profile_rejects_ci_quality_benchmark_failure(tmp_p
 
     assert report.status is RunStatus.LIMIT_REACHED
     assert report.applied is False
-    assert report.verification["steps"][1]["name"] == "deterministic_ci_quality_checks"
-    assert report.verification["steps"][1]["status"] == "failed"
+    assert report.verification["steps"][4]["name"] == "python_3_13_deterministic_ci_quality"
+    assert report.verification["steps"][4]["status"] == "failed"
     assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")
