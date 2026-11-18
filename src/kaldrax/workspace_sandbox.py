@@ -8,10 +8,30 @@ import subprocess
 import tempfile
 import threading
 import time
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from uuid import uuid4
 
 from .sandbox import SandboxExecutionError, SandboxResult, SandboxRunner
+
+
+@dataclass(frozen=True)
+class WorkspaceVerificationSuiteResult:
+    """Combined test-suite and source-compilation evidence for a full repository run."""
+
+    exit_code: int
+    stdout: str
+    stderr: str
+    duration_ms: int
+    timed_out: bool
+    output_truncated: bool
+    container_image: str
+    cancelled: bool
+    test_count: int
+    steps: tuple[dict[str, object], ...]
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
 
 
 class WorkspaceSandboxRunner(SandboxRunner):
@@ -21,9 +41,11 @@ class WorkspaceSandboxRunner(SandboxRunner):
     but it is always a private copy. The operator's checkout is never mounted.
     """
 
-    MAX_WORKSPACE_FILES = 300
-    MAX_WORKSPACE_BYTES = 5_000_000
+    MAX_WORKSPACE_FILES = 5_000
+    MAX_WORKSPACE_FILE_BYTES = 20_000_000
+    MAX_WORKSPACE_BYTES = 100_000_000
     MAX_OUTPUT_BYTES = 1_000_000
+    MAX_SUITE_OUTPUT_BYTES = 1_000_000
     EXCLUDED_DIRS = {
         ".git", ".kaldrax", ".venv", "venv", "env", "node_modules",
         "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
@@ -77,6 +99,10 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 if not item.is_file():
                     continue
                 size = item.stat().st_size
+                if size > self.MAX_WORKSPACE_FILE_BYTES:
+                    raise ValueError(
+                        f"sandbox file exceeds the {self.MAX_WORKSPACE_FILE_BYTES}-byte limit: {relative}"
+                    )
                 count += 1
                 total += size
                 if count > self.MAX_WORKSPACE_FILES:
@@ -85,7 +111,7 @@ class WorkspaceSandboxRunner(SandboxRunner):
                     raise ValueError("sandbox workspace exceeds the 5 MB limit")
                 target = target_dir / name
                 shutil.copyfile(item, target)
-                target.chmod(0o644)
+                target.chmod(0o755 if os.access(item, os.X_OK) else 0o644)
 
     def run_workspace(
         self,
@@ -221,3 +247,138 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 container_image=self.image,
                 cancelled=cancelled,
             )
+
+    def run_workspace_full_suite(
+        self,
+        workspace: Path | str,
+        *,
+        timeout_seconds: int = 120,
+        cancel_file: Path | str | None = None,
+    ) -> WorkspaceVerificationSuiteResult:
+        """Run the complete configured pytest suite and compile all Python source/tests.
+
+        The commands and discovery roots are fixed so callers cannot accidentally
+        report a passing subset as a full-repository verification.
+        """
+        if not 1 <= timeout_seconds <= 120:
+            raise ValueError("timeout_seconds must be between 1 and 120")
+        started = time.monotonic()
+        specifications = (
+            {
+                "name": "full_test_suite",
+                "module": "pytest",
+                "module_args": ("-q",),
+            },
+            {
+                "name": "source_and_test_compilation",
+                "module": "compileall",
+                "module_args": ("-q", "src", "tests"),
+            },
+        )
+        steps: list[dict[str, object]] = []
+        for specification in specifications:
+            elapsed = time.monotonic() - started
+            remaining = timeout_seconds - int(elapsed)
+            if remaining < 1:
+                steps.append({
+                    "name": specification["name"],
+                    "module": specification["module"],
+                    "module_args": list(specification["module_args"]),
+                    "status": "not_run_timeout_budget",
+                })
+                continue
+            result = self.run_workspace(
+                workspace,
+                module=specification["module"],
+                module_args=specification["module_args"],
+                timeout_seconds=max(1, min(120, remaining)),
+                cancel_file=cancel_file,
+            )
+            combined_output = result.stdout + "\n" + result.stderr
+            test_count = None
+            if specification["name"] == "full_test_suite":
+                match = re.search(r"(?m)(\d+)\s+passed\b", combined_output)
+                test_count = int(match.group(1)) if match else 0
+            steps.append({
+                "name": specification["name"],
+                "module": specification["module"],
+                "module_args": list(specification["module_args"]),
+                "exit_code": result.exit_code,
+                "duration_ms": result.duration_ms,
+                "timed_out": result.timed_out,
+                "output_truncated": result.output_truncated,
+                "cancelled": result.cancelled,
+                "test_count": test_count,
+                "container_image": result.container_image,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "status": (
+                    "passed"
+                    if result.exit_code == 0 and not result.timed_out
+                    and not result.output_truncated
+                    and (
+                        specification["name"] != "full_test_suite"
+                        or (test_count is not None and test_count > 0)
+                    )
+                    else "failed"
+                ),
+            })
+            if result.cancelled:
+                break
+
+        stdout_parts = [
+            f"=== {step['name']} ===\n{step.get('stdout', '')}"
+            for step in steps if step.get("stdout")
+        ]
+        stderr_parts = [
+            f"=== {step['name']} ===\n{step.get('stderr', '')}"
+            for step in steps if step.get("stderr")
+        ]
+        stdout = "\n".join(stdout_parts)
+        stderr = "\n".join(stderr_parts)
+        truncated = any(bool(step.get("output_truncated")) for step in steps)
+        if len(stdout.encode("utf-8")) > self.MAX_SUITE_OUTPUT_BYTES:
+            stdout = stdout.encode("utf-8")[:self.MAX_SUITE_OUTPUT_BYTES].decode("utf-8", errors="replace")
+            truncated = True
+        if len(stderr.encode("utf-8")) > self.MAX_SUITE_OUTPUT_BYTES:
+            stderr = stderr.encode("utf-8")[:self.MAX_SUITE_OUTPUT_BYTES].decode("utf-8", errors="replace")
+            truncated = True
+
+        timed_out = any(bool(step.get("timed_out")) for step in steps)
+        cancelled = any(bool(step.get("cancelled")) for step in steps)
+        test_count = next(
+            (int(step["test_count"]) for step in steps if step.get("name") == "full_test_suite"
+             and isinstance(step.get("test_count"), int)),
+            0,
+        )
+        passed = (
+            len(steps) == len(specifications)
+            and all(step.get("status") == "passed" for step in steps)
+            and test_count > 0
+        )
+        first_failure = next(
+            (step for step in steps if step.get("status") != "passed"),
+            None,
+        )
+        exit_code = 0 if passed else (
+            int(first_failure["exit_code"])
+            if first_failure is not None and isinstance(first_failure.get("exit_code"), int)
+            else 124 if timed_out else 130 if cancelled else 1
+        )
+        image = next(
+            (str(step["container_image"]) for step in steps if step.get("container_image")),
+            self.image,
+        )
+        return WorkspaceVerificationSuiteResult(
+            exit_code=exit_code,
+            stdout=stdout,
+            stderr=stderr,
+            duration_ms=int((time.monotonic() - started) * 1000),
+            timed_out=timed_out,
+            output_truncated=truncated,
+            container_image=image,
+            cancelled=cancelled,
+            test_count=test_count,
+            steps=tuple(steps),
+        )
+
