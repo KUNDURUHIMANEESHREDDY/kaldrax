@@ -144,14 +144,22 @@ The scanner is bounded to 750 files, 300 KB per file, and 14 MB total. It exclud
 The repository path is a separate coordinator from the prose-only team flow. It depends on the planner/builder/reviewer chat-client port, the independent evaluator port, the shared run-budget ledger, a clean Git workspace, and a Docker-backed workspace verifier.
 
 1. Require a Git repository root with no staged, unstaged, or untracked changes; record the immutable base HEAD.
-2. Capture a bounded UTF-8 file snapshot. Prioritize source/tests; omit Git/runtime metadata, dependency/build caches, credentials, environment files, databases, keys, certificates, symlinks, binary/oversized files, and lower-priority files that exceed the total limit.
+2. Capture a bounded UTF-8 model-context snapshot. Prioritize source/tests; omit Git/runtime metadata, dependency/build caches, credentials, environment files, databases, keys, certificates, symlinks, binary/oversized files, and lower-priority files that exceed the total limit. This 240-file/45-KB snapshot is only for prompts; it is not the test workspace.
 3. Analyze the clean checkout and send the planner the path/size manifest plus repository-intelligence map. Send the builder the bounded source snapshot and the same dependency/test map. The builder must return JSON containing a summary and unified Git diff.
 4. Validate every diff section and path. Reject traversal, Windows drive/ADS syntax, Git metadata/runtime paths, credential files, binary changes, renames, submodules, and mode changes.
-5. Apply the patch only to a temporary Git staging workspace. Run one fixed Python verification module (unittest, pytest, or compileall) inside a separate disposable Docker copy. The container has no network and bounded memory, CPU, PIDs, runtime, and output.
+5. Reconstruct the complete safe tracked checkout from the Git index into a temporary staging workspace, independently of the prompt snapshot, and apply the patch there. The full stage is capped at 5,000 files, 20 MB per file, and 100 MB total; private/excluded paths are omitted, while tracked symlinks and submodules fail closed. Copy that full stage into a separate disposable Docker workspace. Single-module verification remains available; the full profile runs the complete pytest discovery followed by compileall -q src tests. Each command runs with no network and bounded memory, CPU, PIDs, runtime, and output.
 6. Send the diff and captured verification results to the reviewer. The independent evaluator receives an evidence pack with the original criteria, patch, sandbox status/output, and reviewer verdict.
-7. Only a successful command, non-empty test discovery for unittest/pytest, untruncated output, reviewer approval, and evaluator pass can accept the patch.
+7. Only successful verification stages, non-empty passing test discovery, untruncated output, reviewer approval, and evaluator pass can accept the patch. The full profile records each stage and requires both pytest and compilation to pass.
 8. Default to dry-run. Applying requires the explicit apply flag; immediately before the write, verify the checkout remains clean and its HEAD matches the captured base commit. KALDRAX does not commit or push the resulting changes.
 
+
+### Full-repository verification profile
+
+The full profile is a fixed two-stage Python verification plan: run python -m pytest -q against the repository's configured full test discovery, then run python -m compileall -q src tests. The second stage still runs when the test suite fails, so the report can preserve both findings. A positive pytest passed count is mandatory even if a runner exits zero. The combined report contains stage names, commands, exit codes, durations, test count, timeout/truncation/cancellation status, image identity, and bounded output. A missing pytest installation, zero passed tests, timeout, truncated output, or compilation error rejects the patch.
+
+A full run requires a pre-pulled image containing pytest. docker/verification.Dockerfile creates the supported KALDRAX test image. The test command and discovery root are not overrideable through --verify-arg; single-module overrides remain available for legacy/constrained workflows.
+
+The prompt snapshot remains small. RepositoryWorkspace.staged_patch separately enumerates tracked Git-index entries and copies all safe tracked files into the staging workspace before applying the patch. This prevents a prompt token limit from silently removing unrelated tests, package metadata, or source modules from the verification environment. The stage and Docker copy share explicit 5,000-file, 20-MB-per-file, and 100-MB total limits. Private paths and excluded dependency/build/runtime directories are omitted; tracked symlinks, submodules, unsafe paths, and bound violations fail closed instead of producing a misleading partial pass.
 
 ### Task-DAG file-scope enforcement
 
