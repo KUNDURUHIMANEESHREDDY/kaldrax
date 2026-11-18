@@ -90,7 +90,7 @@ def test_workspace_sandbox_accepts_a_configured_pre_pulled_image(tmp_path):
         "full_test_suite", "source_and_test_compilation",
     ]
     assert runner.calls[0][0:2] == ("pytest", ("-q",))
-    assert runner.calls[1][0:2] == ("compileall", ("-q", "src", "tests"))
+    assert runner.calls[1][0:2] == ("compileall", ("-q", "."))
     assert all(call[2] <= 60 for call in runner.calls)
     assert all(call[3] is None for call in runner.calls)
     assert result.steps[0]["status"] == "passed"
