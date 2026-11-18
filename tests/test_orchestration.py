@@ -6,11 +6,14 @@ import pytest
 
 from kaldrax.orchestration import (
     CheckpointStore,
+    ExecutionCheckpoint,
+    NodeCheckpoint,
     RetryPolicy,
     RetryableTaskError,
     TaskDecomposer,
     TaskGraph,
     TaskGraphError,
+    TaskGraphReport,
     TaskGraphScheduler,
     TaskNode,
     TaskState,
@@ -651,3 +654,356 @@ def test_unbound_legacy_checkpoint_remains_loadable(tmp_path):
     checkpoint_path.write_text(json.dumps(payload), encoding="utf-8")
 
     assert CheckpointStore(checkpoint_path).load(graph) is not None
+
+def test_failure_diagnosis_requires_complete_structured_results():
+    graph = TaskGraph("Build service", (
+        TaskNode("base", "Build base"),
+        TaskNode("implementation", "Implement service", ("base",)),
+        TaskNode("integration", "Integrate service", ("implementation",)),
+    ))
+    report = TaskGraphReport(
+        objective=graph.objective,
+        states={
+            "base": TaskState.SUCCEEDED.value,
+            "implementation": TaskState.FAILED.value,
+            "integration": TaskState.BLOCKED.value,
+        },
+        outputs={"base": "Base module is ready."},
+        attempts={"base": 1, "implementation": 2, "integration": 0},
+        errors={"implementation": "ValueError: unsupported input"},
+        events=[],
+    )
+    planner = Planner(json.dumps({"diagnoses": [
+        {
+            "task_id": "implementation",
+            "category": "implementation",
+            "root_cause": "The implementation rejected a supported input shape.",
+            "retryable": False,
+            "operator_input_required": False,
+            "repair_instruction": "Handle both supported input variants and add a regression case.",
+        },
+        {
+            "task_id": "integration",
+            "category": "dependency",
+            "root_cause": "The implementation prerequisite failed.",
+            "retryable": False,
+            "operator_input_required": False,
+            "repair_instruction": "Rewire integration to the repaired implementation task.",
+        },
+    ]}))
+
+    diagnoses = TaskDecomposer(planner).diagnose_failures(graph, report)
+
+    assert {item["task_id"] for item in diagnoses} == {"implementation", "integration"}
+    assert diagnoses[1]["category"] == "dependency"
+    assert planner.prompts[0][1]["successful_task_outputs"] == {"base": "Base module is ready."}
+
+    invalid = TaskDecomposer(Planner(json.dumps({"diagnoses": [{
+        "task_id": "implementation",
+        "category": "implementation",
+        "root_cause": "Only one task was diagnosed.",
+        "retryable": True,
+        "operator_input_required": False,
+        "repair_instruction": "Retry.",
+    }]})))
+    with pytest.raises(TaskGraphError, match="failure diagnosis"):
+        invalid.diagnose_failures(graph, report)
+
+
+def test_replan_rewires_unfinished_work_and_keeps_successful_tasks_immutable():
+    base = TaskNode(
+        "base", "Create shared base", (),
+        ("base module exists",), phase="foundation", file_scope=("src/base.py",),
+    )
+    failed = TaskNode(
+        "failed", "Implement the first approach", ("base",),
+        ("service works",), phase="implementation", file_scope=("src/service.py",),
+    )
+    blocked = TaskNode(
+        "blocked", "Integrate the service", ("failed",),
+        ("integration works",), phase="integration", file_scope=("src/integration.py",),
+    )
+    graph = TaskGraph("Build a service", (base, failed, blocked))
+    report = TaskGraphReport(
+        objective=graph.objective,
+        states={
+            "base": TaskState.SUCCEEDED.value,
+            "failed": TaskState.FAILED.value,
+            "blocked": TaskState.BLOCKED.value,
+        },
+        outputs={"base": "Base implementation is complete."},
+        attempts={"base": 1, "failed": 3, "blocked": 0},
+        errors={"failed": "ValueError: incompatible interface"},
+        events=[],
+    )
+    repaired_payload = {
+        "repair_summary": "Replace the incompatible implementation and rewire integration.",
+        "retired_task_ids": ["failed"],
+        "tasks": [
+            {
+                "id": "base", "description": "Create shared base", "depends_on": [],
+                "acceptance_criteria": ["base module exists"],
+                "phase": "foundation", "file_scope": ["src/base.py"],
+            },
+            {
+                "id": "replacement", "description": "Implement service using the stable base interface",
+                "depends_on": ["base"], "acceptance_criteria": ["service works"],
+                "phase": "implementation", "file_scope": ["src/service.py"],
+            },
+            {
+                "id": "blocked", "description": "Integrate the repaired service",
+                "depends_on": ["replacement"], "acceptance_criteria": ["integration works"],
+                "phase": "integration", "file_scope": ["src/integration.py"],
+            },
+        ],
+    }
+    planner = Planner(json.dumps(repaired_payload))
+
+    repaired, retired, summary = TaskDecomposer(planner).replan(
+        graph,
+        report,
+        [
+            {
+                "task_id": "failed", "category": "implementation",
+                "root_cause": "The first interface was incompatible.",
+                "retryable": False, "operator_input_required": False,
+                "repair_instruction": "Replace it with an implementation using the base interface.",
+            },
+            {
+                "task_id": "blocked", "category": "dependency",
+                "root_cause": "The integration task depends on failed.",
+                "retryable": False, "operator_input_required": False,
+                "repair_instruction": "Depend on the replacement implementation.",
+            },
+        ],
+        acceptance_criteria=("service works", "integration works"),
+    )
+
+    assert retired == ["failed"]
+    assert summary.startswith("Replace")
+    assert next(node for node in repaired.tasks if node.id == "base") == base
+    assert next(node for node in repaired.tasks if node.id == "blocked").depends_on == ("replacement",)
+    assert [node.id for node in repaired.execution_order] == ["base", "replacement", "blocked"]
+    assert planner.prompts[0][1]["immutable_successful_tasks"][0]["output"] == "Base implementation is complete."
+
+
+def test_replan_rejects_changes_to_successful_task_definition():
+    base = TaskNode("base", "Completed base", (), ("base ready",))
+    failed = TaskNode("failed", "Failed task")
+    graph = TaskGraph("Build", (base, failed))
+    report = TaskGraphReport(
+        graph.objective,
+        {"base": "succeeded", "failed": "failed"},
+        {"base": "already done"},
+        {"base": 1, "failed": 1},
+        {"failed": "ValueError: failed"},
+        [],
+    )
+    planner = Planner(json.dumps({
+        "repair_summary": "Attempted to rename completed work.",
+        "retired_task_ids": [],
+        "tasks": [
+            {"id": "base", "description": "Rebuild the base", "depends_on": [], "acceptance_criteria": ["base ready"]},
+            {"id": "failed", "description": "Retry failed task", "depends_on": [], "acceptance_criteria": []},
+        ],
+    }))
+
+    with pytest.raises(TaskGraphError, match="changed or removed successful task"):
+        TaskDecomposer(planner).replan(
+            graph, report,
+            [{
+                "task_id": "failed", "category": "implementation",
+                "root_cause": "Failure", "retryable": True,
+                "operator_input_required": False, "repair_instruction": "Retry with a fix.",
+            }],
+        )
+
+
+def test_repaired_checkpoint_resumes_only_unfinished_work_and_persists_graph(tmp_path):
+    initial = TaskGraph("Build", (
+        TaskNode("base", "Build base"),
+        TaskNode("broken", "Build broken module"),
+    ))
+    request_fingerprint = "a" * 64
+    store = CheckpointStore(tmp_path / "recovery.json", request_fingerprint=request_fingerprint)
+    first_calls = []
+
+    def first_executor(task):
+        first_calls.append(task.id)
+        if task.id == "broken":
+            raise ValueError("permanent implementation error")
+        return "base-output"
+
+    failed = TaskGraphScheduler(
+        retry_policy=RetryPolicy(max_attempts=1),
+    ).run(initial, first_executor, checkpoint_store=store)
+    assert failed.states["base"] == TaskState.SUCCEEDED.value
+    assert failed.states["broken"] == TaskState.FAILED.value
+
+    repaired = TaskGraph("Build", (
+        TaskNode("base", "Build base"),
+        TaskNode("replacement", "Build corrected module", ("base",)),
+    ))
+    old_checkpoint = store.load(initial)
+    assert old_checkpoint is not None
+    seeded_nodes = {
+        "base": NodeCheckpoint(
+            state=TaskState.SUCCEEDED,
+            attempts=old_checkpoint.nodes["base"].attempts,
+            output=old_checkpoint.nodes["base"].output,
+            total_attempts=old_checkpoint.nodes["base"].total_attempts,
+        ),
+        "replacement": NodeCheckpoint(
+            state=TaskState.PENDING,
+            total_attempts=old_checkpoint.nodes["broken"].total_attempts,
+        ),
+    }
+    store.save(ExecutionCheckpoint(
+        schema_version=1,
+        graph_fingerprint=repaired.fingerprint(),
+        nodes=seeded_nodes,
+        events=old_checkpoint.events,
+        graph=repaired,
+        repair_history=[{"round": 1, "status": "replanned"}],
+    ))
+    second_calls = []
+    resumed = TaskGraphScheduler(
+        retry_policy=RetryPolicy(max_attempts=1),
+    ).run(
+        repaired,
+        lambda task: second_calls.append(task.id) or "replacement-output",
+        checkpoint_store=store,
+    )
+
+    assert first_calls == ["base", "broken"]
+    assert second_calls == ["replacement"]
+    assert resumed.passed
+    assert resumed.outputs == {"base": "base-output", "replacement": "replacement-output"}
+    assert resumed.attempts == {"base": 1, "replacement": 1}
+    assert resumed.repair_history == [{"round": 1, "status": "replanned"}]
+
+    loaded_graph, loaded_checkpoint = store.load_latest()
+    assert loaded_graph.fingerprint() == repaired.fingerprint()
+    assert loaded_checkpoint.nodes["base"].output == "base-output"
+
+
+def test_cli_orchestration_repairs_failed_work_without_repeating_successful_tasks(
+    tmp_path, monkeypatch, capsys,
+):
+    from types import SimpleNamespace
+
+    import kaldrax.cli as cli
+    from kaldrax.budgets import RunBudget
+
+    initial_tasks = [
+        {
+            "id": "base", "description": "Create base component",
+            "depends_on": [], "acceptance_criteria": ["base delivered"],
+        },
+        {
+            "id": "fragile", "description": "Implement fragile component",
+            "depends_on": [], "acceptance_criteria": ["fragile delivered after repair"],
+        },
+    ]
+    repaired_tasks = [
+        {
+            "id": "base", "description": "Create base component",
+            "depends_on": [], "acceptance_criteria": ["base delivered"],
+        },
+        {
+            "id": "fragile", "description": "Implement component using the diagnosed input contract",
+            "depends_on": [], "acceptance_criteria": ["fragile delivered after repair"],
+        },
+    ]
+
+    class RoleClient:
+        def __init__(self, role):
+            self.role = role
+            self.calls = []
+            self.builder_calls = {}
+
+        def complete(self, *, system_prompt, user_prompt):
+            payload = json.loads(user_prompt)
+            self.calls.append((system_prompt, payload))
+            if self.role == "planner":
+                if "dependency-aware task decomposition planner" in system_prompt:
+                    return json.dumps({"tasks": initial_tasks})
+                if "failure-diagnosis agent" in system_prompt:
+                    return json.dumps({"diagnoses": [{
+                        "task_id": "fragile",
+                        "category": "implementation",
+                        "root_cause": "The first implementation did not satisfy its contract.",
+                        "retryable": False,
+                        "operator_input_required": False,
+                        "repair_instruction": "Revise the task implementation to honor the input contract.",
+                    }]})
+                if "bounded task-graph repair planner" in system_prompt:
+                    return json.dumps({
+                        "repair_summary": "Revise the failed implementation without touching completed work.",
+                        "retired_task_ids": [],
+                        "tasks": repaired_tasks,
+                    })
+                raise AssertionError(system_prompt)
+            if self.role == "builder":
+                if system_prompt.startswith("You are a focused KALDRAX implementation worker."):
+                    task_id = payload["task_id"]
+                    self.builder_calls[task_id] = self.builder_calls.get(task_id, 0) + 1
+                    if task_id == "fragile" and self.builder_calls[task_id] == 1:
+                        raise ValueError("initial implementation rejected an input")
+                    if task_id == "base":
+                        return "base delivered"
+                    return "fragile delivered after repair"
+            if self.role == "reviewer":
+                return json.dumps({
+                    "approved": True, "findings": [], "summary": "Repaired aggregate is sound.",
+                })
+            if self.role == "evaluator":
+                criterion = "fragile delivered after repair"
+                return json.dumps({"criteria": [{
+                    "criterion": criterion,
+                    "passed": criterion in payload["candidate"],
+                    "evidence": criterion if criterion in payload["candidate"] else "",
+                }]})
+            raise AssertionError(self.role)
+
+    clients = {
+        role: RoleClient(role)
+        for role in ("planner", "builder", "reviewer", "evaluator")
+    }
+    monkeypatch.setenv("KALDRAX_API_KEY", "test-key")
+    monkeypatch.setenv("KALDRAX_PLANNER_MODEL", "planner-model")
+    monkeypatch.setenv("KALDRAX_MODEL", "builder-model")
+    monkeypatch.setenv("KALDRAX_REVIEWER_MODEL", "reviewer-model")
+    monkeypatch.setenv("KALDRAX_EVALUATOR_MODEL", "evaluator-model")
+    monkeypatch.setattr(cli, "_budget_from_env", RunBudget)
+    monkeypatch.setattr(
+        cli, "_client",
+        lambda model, budget: clients[model.removesuffix("-model")],
+    )
+
+    artifact = tmp_path / "runs" / "recovery.json"
+    args = SimpleNamespace(
+        objective="Build a reliable component",
+        criterion=["fragile delivered after repair"],
+        max_workers=1,
+        max_attempts=1,
+        max_replans=1,
+        checkpoint=tmp_path / "checkpoint.json",
+        fresh=True,
+        retry_failed=False,
+        progress_jsonl=None,
+        artifact=artifact,
+    )
+
+    assert cli._orchestrate(args) == 0
+    report = json.loads(artifact.read_text(encoding="utf-8"))
+    assert report["passed"] is True
+    assert report["states"] == {"base": "succeeded", "fragile": "succeeded"}
+    assert report["attempts"] == {"base": 1, "fragile": 2}
+    assert clients["builder"].builder_calls == {"base": 1, "fragile": 2}
+    assert report["repair_history"][0]["status"] == "replanned"
+    assert report["repair_history"][0]["preserved_successful_task_ids"] == ["base"]
+    assert report["repair_history"][0]["reset_task_ids"] == ["fragile"]
+    assert clients["reviewer"].calls
+    assert clients["evaluator"].calls
+    capsys.readouterr()
