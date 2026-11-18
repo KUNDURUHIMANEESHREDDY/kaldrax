@@ -314,9 +314,9 @@ class WorkspaceSandboxRunner(SandboxRunner):
         if len(versions) < 3 or not versions[0].startswith("python="):
             raise SandboxExecutionError("configured verification image returned incomplete toolchain evidence")
         python_version = versions[0].removeprefix("python=")
-        python_match = re.match(r"^(\\d+)\\.(\\d+)", python_version)
+        python_match = re.match(r"^(\d+)\.(\d+)", python_version)
         node_version, npm_version = versions[1], versions[2]
-        node_match = re.match(r"^v?(\\d+)\\.", node_version)
+        node_match = re.match(r"^v?(\d+)\.", node_version)
         if (
             python_match is None
             or (int(python_match.group(1)), int(python_match.group(2))) < (3, 11)
