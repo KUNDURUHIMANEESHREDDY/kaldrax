@@ -212,6 +212,8 @@ def _benchmark_evaluator(args: argparse.Namespace) -> int:
 
 
 def _team(args: argparse.Namespace) -> int:
+    if args.verify_module == "full" and args.workspace is None:
+        raise ValueError("--verify-module full requires --workspace")
     _, builder_model, evaluator_model = _require_provider()
     planner_model = os.getenv("KALDRAX_PLANNER_MODEL", "")
     reviewer_model = os.getenv("KALDRAX_REVIEWER_MODEL", "")
@@ -395,6 +397,8 @@ def _orchestrate(args: argparse.Namespace) -> int:
     if not args.criterion:
         raise ValueError("orchestrate requires at least one --criterion for independent evaluation")
     verify_module = getattr(args, "verify_module", "unittest")
+    if verify_module == "full" and workspace_root is None:
+        raise ValueError("--verify-module full requires --workspace")
     if workspace_root is not None and verify_module == "full":
         if getattr(args, "verify_arg", None) is not None:
             raise ValueError("--verify-arg cannot be combined with the fixed full verification profile")
