@@ -349,10 +349,17 @@ class RepositoryWorkspace:
                 mode = metadata.split(" ", 1)[0]
             except ValueError:
                 raise WorkspaceError("Git returned an invalid tracked-file index entry") from None
-            self._validate_path(relative)
-            parts = PurePosixPath(relative).parts
+            candidate = PurePosixPath(relative)
+            if (
+                not relative or "\\" in relative or ":" in relative
+                or candidate.is_absolute() or candidate.as_posix() != relative
+                or any(part in {"", ".", ".."} for part in relative.split("/"))
+            ):
+                raise WorkspaceError("Git index contains an unsafe tracked path")
+            parts = candidate.parts
             if any(part.casefold() in self.EXCLUDED_DIRS for part in parts) or self._is_private(relative):
                 continue
+            self._validate_path(relative)
             if mode == "160000":
                 raise WorkspaceError(
                     f"full-repository verification cannot omit submodule contents: {relative}"
