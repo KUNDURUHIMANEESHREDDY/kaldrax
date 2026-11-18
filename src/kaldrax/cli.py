@@ -233,7 +233,10 @@ def _team(args: argparse.Namespace) -> int:
             "unittest": ("discover", "-s", "tests", "-v"),
             "pytest": ("-q",),
             "compileall": ("-q", "."),
+            "full": (),
         }
+        if args.verify_module == "full" and args.verify_arg is not None:
+            raise ValueError("--verify-arg cannot be combined with the fixed full verification profile")
         verify_args = tuple(args.verify_arg) if args.verify_arg is not None else default_verify_args[args.verify_module]
         report = RepositoryTeamCoordinator(
             planner=_client(planner_model, budget),
@@ -757,8 +760,11 @@ def _orchestrate(args: argparse.Namespace) -> int:
             "unittest": ("discover", "-s", "tests", "-v"),
             "pytest": ("-q",),
             "compileall": ("-q", "."),
+            "full": (),
         }
         verify_module = getattr(args, "verify_module", "unittest")
+        if verify_module == "full" and getattr(args, "verify_arg", None) is not None:
+            raise ValueError("--verify-arg cannot be combined with the fixed full verification profile")
         verify_args = (
             tuple(args.verify_arg)
             if getattr(args, "verify_arg", None) is not None
@@ -1095,7 +1101,11 @@ def main() -> int:
     orchestrate.add_argument("--workspace", type=Path, default=None, help="clean Git repository root to turn accepted task outputs into a verified patch")
     orchestrate.add_argument("--apply", action="store_true", help="apply the repository patch only after Docker verification, reviewer approval and independent evaluation")
     orchestrate.add_argument("--max-cycles", type=int, default=2, help="maximum repository patch repair cycles (1-5)")
-    orchestrate.add_argument("--verify-module", choices=("unittest", "pytest", "compileall"), default="unittest")
+    orchestrate.add_argument(
+        "--verify-module", choices=("unittest", "pytest", "compileall", "full"),
+        default="unittest",
+        help="full runs the entire pytest suite plus compileall over src and tests",
+    )
     orchestrate.add_argument("--verify-arg", action="append", default=None, help="repeat to add a verification-module argument")
     orchestrate.add_argument("--sandbox-timeout", type=int, default=120)
     orchestrate.add_argument("--sandbox-workspace-root", type=Path, default=Path(".kaldrax/sandbox"))
@@ -1110,7 +1120,11 @@ def main() -> int:
     team.add_argument("--memory-db", type=Path, default=None)
     team.add_argument("--workspace", type=Path, default=None, help="Git repository root for real file changes")
     team.add_argument("--apply", action="store_true", help="apply the patch to the clean checkout after all checks pass")
-    team.add_argument("--verify-module", choices=("unittest", "pytest", "compileall"), default="unittest")
+    team.add_argument(
+        "--verify-module", choices=("unittest", "pytest", "compileall", "full"),
+        default="unittest",
+        help="full runs the entire pytest suite plus compileall over src and tests",
+    )
     team.add_argument("--verify-arg", action="append", default=None, help="repeat to add a verification-module argument")
     team.add_argument("--sandbox-timeout", type=int, default=120)
     team.add_argument("--sandbox-workspace-root", type=Path, default=Path(".kaldrax/sandbox"))
