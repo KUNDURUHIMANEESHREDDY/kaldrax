@@ -69,7 +69,7 @@ def test_workspace_sandbox_accepts_a_configured_pre_pulled_image(tmp_path):
         WorkspaceSandboxRunner(workspace_root=tmp_path, image="--privileged")
 
 
-def test_full_repository_suite_runs_pytest_and_compileall_with_fixed_full_scope(tmp_path):
+def test_full_repository_suite_runs_all_fixed_ci_and_desktop_stages(tmp_path):
     class RecordingRunner(WorkspaceSandboxRunner):
         def __init__(self):
             super().__init__(workspace_root=tmp_path / "sandbox")
@@ -120,6 +120,7 @@ def test_full_repository_suite_runs_pytest_and_compileall_with_fixed_full_scope(
     assert all(call[3] is None for call in runner.calls)
     assert result.steps[0]["status"] == "passed"
     assert result.steps[1]["status"] == "passed"
+    assert result.steps[2]["status"] == "passed"
     assert result.steps[3]["status"] == "passed"
     assert result.preflight == runner._full_suite_preflight
 
@@ -361,7 +362,8 @@ def test_full_repository_suite_rejects_desktop_build_failure(tmp_path):
     assert result.exit_code == 2
     assert result.steps[0]["status"] == "passed"
     assert result.steps[1]["status"] == "passed"
-    assert result.steps[2]["status"] == "failed"
+    assert result.steps[2]["status"] == "passed"
+    assert result.steps[3]["status"] == "failed"
     assert result.stderr.endswith("vite build failed")
 
 def test_workspace_sandbox_runs_deterministic_ci_quality_checks_in_fixed_offline_script(monkeypatch, tmp_path):
