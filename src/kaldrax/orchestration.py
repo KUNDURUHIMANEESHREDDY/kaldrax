@@ -714,6 +714,7 @@ class TaskGraphReport:
     attempts: dict[str, int]
     errors: dict[str, str]
     events: list[dict[str, str]]
+    repair_history: list[dict[str, object]] = field(default_factory=list)
 
     @property
     def passed(self) -> bool:
@@ -746,9 +747,12 @@ class TaskGraphScheduler:
         ) or ExecutionCheckpoint(
             1, graph.fingerprint(),
             {task.id: NodeCheckpoint() for task in graph.tasks}, [],
+            graph=graph,
         )
+        checkpoint.graph = graph
         ordered_tasks = graph.execution_order
         for node in checkpoint.nodes.values():
+            node.total_attempts = max(node.total_attempts, node.attempts)
             if node.state is TaskState.RUNNING:
                 if node.attempts >= self.retry_policy.max_attempts:
                     node.state = TaskState.FAILED
@@ -780,6 +784,7 @@ class TaskGraphScheduler:
             while record.attempts < self.retry_policy.max_attempts:
                 with lock:
                     record.attempts += 1
+                    record.total_attempts += 1
                     record.state = TaskState.RUNNING
                     record.updated_at = str(time.time())
                     checkpoint_store.save(checkpoint) if checkpoint_store else None
@@ -855,7 +860,8 @@ class TaskGraphScheduler:
             graph.objective,
             {key: value.state.value for key, value in checkpoint.nodes.items()},
             {key: value.output for key, value in checkpoint.nodes.items() if value.output},
-            {key: value.attempts for key, value in checkpoint.nodes.items()},
+            {key: value.total_attempts for key, value in checkpoint.nodes.items()},
             {key: value.error for key, value in checkpoint.nodes.items() if value.error},
             list(checkpoint.events),
+            list(checkpoint.repair_history),
         )
