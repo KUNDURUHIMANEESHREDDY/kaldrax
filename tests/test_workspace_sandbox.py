@@ -75,8 +75,8 @@ def test_full_repository_suite_runs_pytest_and_compileall_with_fixed_full_scope(
             super().__init__(workspace_root=tmp_path / "sandbox")
             self.calls = []
 
-        def run_workspace(self, workspace, *, module, module_args, timeout_seconds, cancel_file=None):
-            self.calls.append((module, module_args, timeout_seconds, cancel_file))
+        def run_workspace(self, workspace, *, module, module_args, timeout_seconds, cancel_file=None, **kwargs):
+            self.calls.append((module, module_args, timeout_seconds, cancel_file, kwargs))
             stdout = "9 passed, 2 skipped in 0.31s\n" if module == "pytest" else ""
             return SandboxResult(
                 exit_code=0, stdout=stdout, stderr="", duration_ms=20,
@@ -97,6 +97,9 @@ def test_full_repository_suite_runs_pytest_and_compileall_with_fixed_full_scope(
     assert runner.calls[0][0:2] == ("pytest", ("-q",))
     assert runner.calls[1][0:2] == ("compileall", ("-q", "."))
     assert runner.calls[2][0:2] == ("desktop", ())
+    assert runner.calls[2][4]["memory_mb"] == 1024
+    assert runner.calls[2][4]["cpu_count"] == 2.0
+    assert runner.calls[2][4]["pids_limit"] == 128
     assert all(call[2] <= 60 for call in runner.calls)
     assert all(call[3] is None for call in runner.calls)
     assert result.steps[0]["status"] == "passed"
@@ -110,7 +113,7 @@ def test_full_repository_suite_rejects_zero_passed_tests_but_still_compiles(tmp_
             super().__init__(workspace_root=tmp_path / "sandbox")
             self.calls = []
 
-        def run_workspace(self, workspace, *, module, module_args, timeout_seconds, cancel_file=None):
+        def run_workspace(self, workspace, *, module, module_args, timeout_seconds, cancel_file=None, **kwargs):
             self.calls.append(module)
             stdout = "4 skipped in 0.01s\n" if module == "pytest" else ""
             return SandboxResult(
@@ -135,7 +138,7 @@ def test_full_repository_suite_keeps_test_failures_and_runs_compilation(tmp_path
             super().__init__(workspace_root=tmp_path / "sandbox")
             self.calls = []
 
-        def run_workspace(self, workspace, *, module, module_args, timeout_seconds, cancel_file=None):
+        def run_workspace(self, workspace, *, module, module_args, timeout_seconds, cancel_file=None, **kwargs):
             self.calls.append(module)
             if module == "pytest":
                 return SandboxResult(
