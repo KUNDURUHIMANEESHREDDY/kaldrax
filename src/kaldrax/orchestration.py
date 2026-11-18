@@ -476,7 +476,12 @@ class TaskDecomposer:
             raise TaskGraphError("there are no failed or blocked tasks to replan")
         if (
             not isinstance(diagnoses, list)
-            or any(not isinstance(item, dict) or not isinstance(item.get("task_id"), str) for item in diagnoses)
+            or any(
+                not isinstance(item, dict)
+                or not isinstance(item.get("task_id"), str)
+                or not isinstance(item.get("retryable"), bool)
+                for item in diagnoses
+            )
         ):
             raise TaskGraphError("repair planning requires structured task diagnoses")
         diagnosis_ids = [item["task_id"] for item in diagnoses]
