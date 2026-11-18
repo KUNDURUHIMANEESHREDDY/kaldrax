@@ -89,7 +89,7 @@ class RepositoryTeamCoordinator:
         self.workspace = RepositoryWorkspace(workspace_root)
         self.sandbox = sandbox or WorkspaceSandboxRunner()
         self.verify_module = verify_module
-        self.verify_args = tuple(verify_args)
+        self.verify_args = () if verify_module == "full" else tuple(verify_args)
         self.timeout_seconds = timeout_seconds
         self.max_cycles = max_cycles
         self.budget = budget
