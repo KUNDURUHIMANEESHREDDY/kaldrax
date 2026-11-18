@@ -855,7 +855,7 @@ def test_repaired_checkpoint_resumes_only_unfinished_work_and_persists_graph(tmp
         ),
         "replacement": NodeCheckpoint(
             state=TaskState.PENDING,
-            total_attempts=old_checkpoint.nodes["broken"].total_attempts,
+            total_attempts=0,
         ),
     }
     store.save(ExecutionCheckpoint(
