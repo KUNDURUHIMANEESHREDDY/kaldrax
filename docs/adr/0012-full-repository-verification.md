@@ -26,7 +26,7 @@ The full staged checkout is bounded to 5,000 files, 20 MB per file, and 100 MB t
 The full profile runs two ordered stages against the staged full repository:
 
 1. python -m pytest -q, using the repository's configured complete test discovery.
-2. python -m compileall -q src tests.
+2. python -m compileall -q ., covering all tracked Python files in the staged repository.
 
 Compilation is attempted even when the test suite fails, unless cancellation or the total timeout prevents it. The report records each stage separately, including command, exit code, duration, test count (for pytest), timeout, cancellation, truncation, image and bounded output. At least one passed test is required; zero-test or all-skipped green exits do not qualify. Both stages, reviewer approval and independent evaluator PASS are mandatory.
 
