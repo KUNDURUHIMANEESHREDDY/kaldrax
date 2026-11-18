@@ -629,3 +629,21 @@ This file records implementation decisions, changes, commands, verification, and
 - Included phases, file scopes, execution order, and parallel waves in repository patch/review context and orchestration artifacts.
 - Added JWT-authentication planning coverage for configuration, security, data, API, and test dependencies.
 - Verification: local execution unavailable in this environment; the main-branch CI workflow is configured to run the full pytest suite and source compilation after commit.
+
+## 2026-11-18 — Repository-bound orchestration checkpoints
+
+### Decisions
+- A workspace-backed orchestration checkpoint is valid only for the same canonical repository root and full Git HEAD.
+- A dirty checkout is not eligible for checkpoint binding; uncommitted and untracked changes must be resolved before a run or resume.
+- Unbound checkpoints remain compatible with non-repository orchestration. A repository-backed run must not reuse an older unbound checkpoint.
+- Recheck repository identity after repository analysis, after task planning, and before the repository patch-verification stage.
+
+### Changes
+- Added `RepositoryWorkspace.checkpoint_binding()`, returning the canonical root and full SHA-1/SHA-256 Git HEAD for a clean worktree.
+- Persisted the optional repository binding in atomic task checkpoint JSON and reject resume when its root or HEAD differs.
+- Bound `kaldrax orchestrate --workspace` to the initial checkout and included the binding in its run report.
+- Added regression tests for root mismatch, HEAD mismatch, legacy unbound checkpoints, and dirty-worktree rejection.
+
+### Verification
+- Source and regression-test changes were committed to `main`.
+- Automated test execution and hosted CI status are pending; do not treat this milestone as verified until CI completes.
