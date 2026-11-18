@@ -6,6 +6,7 @@ from kaldrax.evaluation import CriteriaEvaluator
 from kaldrax.models import RunStatus, Task
 from kaldrax.sandbox import SandboxResult
 from kaldrax.workspace import RepositoryWorkspace
+from kaldrax.workspace_sandbox import WorkspaceVerificationSuiteResult
 
 
 PATCH = """diff --git a/csv_reader.py b/csv_reader.py
@@ -248,4 +249,87 @@ new file mode 100644
     assert any("task file_scope" in event for event in report.events)
     assert coordinator.builder.prompts[0][1]["allowed_paths"] == ["csv_reader.py"]
     assert not (root / "docs" / "extra.md").exists()
+    assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")class FullSuiteSandbox(SuccessfulSandbox):
+    def __init__(self, *, exit_code=0, test_count=9):
+        super().__init__(exit_code=exit_code)
+        self.test_count = test_count
+        self.full_calls = []
+
+    def run_workspace_full_suite(self, workspace, *, timeout_seconds, cancel_file=None):
+        self.full_calls.append((workspace, timeout_seconds, cancel_file))
+        steps = (
+            {
+                "name": "full_test_suite", "module": "pytest", "module_args": ["-q"],
+                "exit_code": 0 if self.test_count else 1, "test_count": self.test_count,
+                "status": "passed" if self.test_count else "failed",
+            },
+            {
+                "name": "source_and_test_compilation", "module": "compileall",
+                "module_args": ["-q", "src", "tests"], "exit_code": self.exit_code,
+                "status": "passed" if self.exit_code == 0 else "failed",
+            },
+        )
+        overall = 0 if self.exit_code == 0 and self.test_count > 0 else 1
+        return WorkspaceVerificationSuiteResult(
+            exit_code=overall,
+            stdout=f"{self.test_count} passed\n",
+            stderr="",
+            duration_ms=25,
+            timed_out=False,
+            output_truncated=False,
+            container_image="registry.example.test/python-pytest:3.13",
+            cancelled=False,
+            test_count=self.test_count,
+            steps=steps,
+        )
+
+
+def test_repository_team_full_profile_requires_tests_and_compilation(tmp_path):
+    root = tmp_path / "repo"
+    init_csv_repo(root)
+    sandbox = FullSuiteSandbox()
+    coordinator, task = make_coordinator(root, sandbox)
+    coordinator.verify_module = "full"
+
+    report = coordinator.run(task, apply_changes=False)
+
+    assert report.status is RunStatus.PASSED
+    assert len(sandbox.full_calls) == 1
+    assert report.verification["profile"] == "full-repository"
+    assert report.verification["test_count"] == 9
+    assert [step["name"] for step in report.verification["steps"]] == [
+        "full_test_suite", "source_and_test_compilation",
+    ]
+    assert coordinator.reviewer.prompts[0][1]["verification"]["profile"] == "full-repository"
+
+
+def test_repository_team_full_profile_rejects_zero_test_suite_even_on_green_exit(tmp_path):
+    root = tmp_path / "repo"
+    init_csv_repo(root)
+    sandbox = FullSuiteSandbox(exit_code=0, test_count=0)
+    coordinator, task = make_coordinator(root, sandbox)
+    coordinator.verify_module = "full"
+
+    report = coordinator.run(task, apply_changes=True)
+
+    assert report.status is RunStatus.LIMIT_REACHED
+    assert report.applied is False
+    assert report.verification["exit_code"] == 1
+    assert report.verification["test_count"] == 0
+    assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")
+
+
+def test_repository_team_full_profile_rejects_compile_failure(tmp_path):
+    root = tmp_path / "repo"
+    init_csv_repo(root)
+    sandbox = FullSuiteSandbox(exit_code=2, test_count=9)
+    coordinator, task = make_coordinator(root, sandbox)
+    coordinator.verify_module = "full"
+
+    report = coordinator.run(task, apply_changes=True)
+
+    assert report.status is RunStatus.LIMIT_REACHED
+    assert report.applied is False
+    assert report.verification["test_count"] == 9
+    assert report.verification["exit_code"] == 1
     assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")
