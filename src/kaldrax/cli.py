@@ -724,10 +724,6 @@ def _orchestrate(args: argparse.Namespace) -> int:
         f"## {node.id}\n{report.outputs[node.id]}"
         for node in graph.execution_order if node.id in report.outputs
     )
-    final_output = "\n\n".join(
-        f"## {node.id}\n{report.outputs[node.id]}"
-        for node in graph.execution_order if node.id in report.outputs
-    )
     reviewer_approved = False
     reviewer_findings: list[str] = []
     evaluation = None
