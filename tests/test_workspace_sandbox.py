@@ -85,8 +85,20 @@ def test_full_repository_suite_runs_pytest_and_compileall_with_fixed_full_scope(
             )
 
     runner = RecordingRunner()
+    runner._full_suite_preflight = {
+        "image": "kaldrax-verification:full",
+        "image_id": "sha256:full-image",
+        "python": "3.11.8",
+        "pytest": "available",
+        "node": "v24.2.0",
+        "npm": "10.8.2",
+        "desktop_dependencies": "prebuilt",
+        "pull_policy": "never",
+        "network": "none",
+    }
     result = runner.run_workspace_full_suite(tmp_path, timeout_seconds=60)
 
+    assert result.preflight == runner._full_suite_preflight
     assert result.exit_code == 0
     assert result.test_count == 9
     assert [step["name"] for step in result.steps] == [
@@ -184,11 +196,6 @@ def test_full_suite_preflight_requires_local_python_node_image_and_pytest_withou
         run_factory=run_factory,
     )
     evidence = runner.preflight_full_suite()
-    runner._full_suite_preflight = dict(evidence)
-    suite_result = runner.run_workspace_full_suite(
-        tmp_path, timeout_seconds=60,
-    ) if False else None
-
     assert evidence == {
         "image": "kaldrax-verification:full",
         "image_id": "sha256:local-image",
