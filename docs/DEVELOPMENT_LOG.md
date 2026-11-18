@@ -743,3 +743,11 @@ This file records implementation decisions, changes, commands, verification, and
 - The probe uses pull-never, network-none, read-only root, dropped capabilities, non-root UID, and explicit CPU/memory/PID bounds.
 - Added CLI regression tests proving both commands stop before provider clients when preflight fails, plus sandbox tests for missing images and missing pytest.
 - Full-suite total-deadline exhaustion is now recorded as a timeout rather than a generic failed stage.
+
+### Desktop verification added to the full profile
+- CI inspection showed that KALDRAX also has a Node.js 24 desktop job running npm ci, npm run lint, and npm run build; the Python-only profile was not a complete project gate.
+- Extended the offline verification image with Node.js/npm and prebuilt desktop node_modules from desktop/package-lock.json.
+- The sandbox verifies package.json and package-lock.json against hashes stored in the image before exposing its preinstalled node_modules to the disposable desktop workspace. Dependency changes therefore fail closed until the image is rebuilt.
+- Added the third fixed stage for desktop lint and production build. It executes from the staged desktop tree in a network-disabled, read-only-root, non-root container.
+- Updated preflight to require pytest, Node/npm, and the prebuilt desktop dependency directory before provider clients are created.
+- Added regression coverage for the desktop container command, three-stage order, desktop-stage acceptance failure, and expanded preflight evidence.
