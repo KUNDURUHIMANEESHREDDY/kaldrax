@@ -708,3 +708,31 @@ This file records implementation decisions, changes, commands, verification, and
 - The corrected test passed 40 consecutive repetitions (0 failures).
 - Full local suite without Docker integration: **231 passed, 5 skipped**.
 - Docker-backed integration tests were not run locally: the Docker CLI is installed but the Docker Desktop Linux engine is unavailable in this environment (`docker info` cannot connect to `npipe:////./pipe/dockerDesktopLinuxEngine`). Those tests remain verified only by hosted CI.
+
+## 2026-11-18 — Full-repository verification
+
+### Findings
+- The repository prompt snapshot is intentionally limited to 240 files and 45 KB.
+- The previous patch staging code rebuilt the verification tree from that prompt snapshot, so tests or source files omitted for prompt-size reasons were absent from Docker verification. This could produce a partial-tree green result.
+- Repository-team verification ran one selected Python module per cycle and had no combined full-suite-plus-compilation profile.
+
+### Decisions
+- Separate prompt context from the verification workspace. Stage all safe tracked Git-index files independently of the prompt snapshot.
+- Keep full verification bounded at 5,000 files, 20 MB per file, and 100 MB total. Fail closed on tracked symlinks, submodules, unsafe/missing tracked paths, unsupported modes, and bound violations.
+- Add a fixed full profile: entire pytest discovery followed by compileall over src and tests. Continue to compile after test failures unless cancelled or the total timeout is exhausted.
+- Require at least one passed pytest test and both verification stages to pass. Preserve existing reviewer and independent evaluator gates.
+- Keep legacy single-module modes; expose the full profile in CLI and desktop UI. A pre-pulled pytest-enabled image is required.
+
+### Changes
+- Rebuilt temporary patch staging from the complete safe tracked Git index, not the prompt snapshot; preserved executable mode.
+- Increased the sandbox workspace bounds to match full staging and added per-file limits.
+- Added WorkspaceVerificationSuiteResult and run_workspace_full_suite, recording each fixed stage and aggregate result.
+- Integrated the full profile into the repository coordinator acceptance gate, CLI, and desktop verification selector/backend.
+- Added docker/verification.Dockerfile for the offline pytest-enabled sandbox image.
+- Added regression tests for full tracked staging, symlink rejection, fixed full-suite commands, zero-test rejection, compilation after test failure, and independent full-profile acceptance gates.
+- Updated README, architecture, desktop UX, and ADR 0012.
+
+### Verification
+- Source, tests, and documentation were committed to main.
+- Local Python test execution remains unavailable in this environment; the repository files were accessed through GitHub's file API, not a local checkout.
+- The verification code paths and regression assertions were re-fetched from main for source-level inspection. Do not mark this milestone verified until the Python matrix and Docker-backed integration run complete.
