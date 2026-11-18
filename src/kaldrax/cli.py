@@ -1120,7 +1120,7 @@ def main() -> int:
     orchestrate.add_argument(
         "--verify-module", choices=("unittest", "pytest", "compileall", "full"),
         default="unittest",
-        help="full runs the entire pytest suite plus compileall over src and tests",
+        help="full runs the entire pytest suite plus compileall over the full staged repository",
     )
     orchestrate.add_argument("--verify-arg", action="append", default=None, help="repeat to add a verification-module argument")
     orchestrate.add_argument("--sandbox-timeout", type=int, default=120)
@@ -1139,7 +1139,7 @@ def main() -> int:
     team.add_argument(
         "--verify-module", choices=("unittest", "pytest", "compileall", "full"),
         default="unittest",
-        help="full runs the entire pytest suite plus compileall over src and tests",
+        help="full runs the entire pytest suite plus compileall over the full staged repository",
     )
     team.add_argument("--verify-arg", action="append", default=None, help="repeat to add a verification-module argument")
     team.add_argument("--sandbox-timeout", type=int, default=120)
