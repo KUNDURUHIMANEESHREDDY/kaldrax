@@ -634,8 +634,8 @@ fn start_team_run(
             return Err("Selected repository path must be a directory.".to_string());
         }
         let verify_module = request.verify_module.as_deref().unwrap_or("unittest");
-        if !["unittest", "pytest", "compileall"].contains(&verify_module) {
-            return Err("Verification module must be unittest, pytest or compileall.".to_string());
+        if !["unittest", "pytest", "compileall", "full"].contains(&verify_module) {
+            return Err("Verification module must be full, unittest, pytest or compileall.".to_string());
         }
         let sandbox_timeout = request.sandbox_timeout_seconds.unwrap_or(120);
         if !(1..=120).contains(&sandbox_timeout) {
