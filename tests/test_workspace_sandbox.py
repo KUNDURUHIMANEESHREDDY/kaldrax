@@ -66,7 +66,10 @@ def test_workspace_sandbox_accepts_a_configured_pre_pulled_image(tmp_path):
     runner = WorkspaceSandboxRunner(workspace_root=tmp_path, image="registry.example.test/tools/python:3.13")
     assert runner.image == "registry.example.test/tools/python:3.13"
     with pytest.raises(ValueError, match="valid Docker image"):
-        WorkspaceSandboxRunner(workspace_root=tmp_path, image="--privileged")def test_full_repository_suite_runs_pytest_and_compileall_with_fixed_full_scope(tmp_path):
+        WorkspaceSandboxRunner(workspace_root=tmp_path, image="--privileged")
+
+
+def test_full_repository_suite_runs_pytest_and_compileall_with_fixed_full_scope(tmp_path):
     class RecordingRunner(WorkspaceSandboxRunner):
         def __init__(self):
             super().__init__(workspace_root=tmp_path / "sandbox")
@@ -148,3 +151,86 @@ def test_full_repository_suite_keeps_test_failures_and_runs_compilation(tmp_path
     assert result.test_count == 7
     assert result.steps[0]["status"] == "failed"
     assert result.steps[1]["status"] == "passed"
+
+def test_full_suite_preflight_requires_local_image_and_pytest_without_pulling(monkeypatch, tmp_path):
+    import shutil
+
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/docker")
+    calls = []
+
+    def run_factory(command, **kwargs):
+        calls.append(command)
+        if command[1] == "info":
+            return SimpleNamespace(returncode=0, stdout="29.0", stderr="")
+        if command[1:3] == ["image", "inspect"]:
+            return SimpleNamespace(returncode=0, stdout="sha256:local-image", stderr="")
+        if command[1] == "run":
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        raise AssertionError(command)
+
+    runner = WorkspaceSandboxRunner(
+        workspace_root=tmp_path / "sandbox",
+        image="registry.example.test/kaldrax-verify:py313",
+        run_factory=run_factory,
+    )
+    evidence = runner.preflight_full_suite()
+
+    assert evidence == {
+        "image": "registry.example.test/kaldrax-verify:py313",
+        "image_id": "sha256:local-image",
+        "pytest": "available",
+        "pull_policy": "never",
+        "network": "none",
+    }
+    assert [call[1] for call in calls] == ["info", "image", "run"]
+    probe = calls[-1]
+    assert "--pull=never" in probe
+    assert probe[probe.index("--network") + 1] == "none"
+    assert probe[probe.index("--entrypoint") + 1] == "python"
+    assert probe[-3:] == ["-B", "-c", "import pytest"]
+
+
+def test_full_suite_preflight_fails_when_image_is_not_pulled(monkeypatch, tmp_path):
+    import shutil
+
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/docker")
+    calls = []
+
+    def run_factory(command, **kwargs):
+        calls.append(command)
+        if command[1] == "info":
+            return SimpleNamespace(returncode=0, stdout="29.0", stderr="")
+        return SimpleNamespace(returncode=1, stdout="", stderr="No such image")
+
+    runner = WorkspaceSandboxRunner(
+        workspace_root=tmp_path / "sandbox",
+        image="registry.example.test/kaldrax-verify:missing",
+        run_factory=run_factory,
+    )
+    with pytest.raises(RuntimeError, match="not available locally"):
+        runner.preflight_full_suite()
+    assert [call[1] for call in calls] == ["info", "image"]
+
+
+def test_full_suite_preflight_fails_when_pytest_is_missing_from_image(monkeypatch, tmp_path):
+    import shutil
+
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/docker")
+    calls = []
+
+    def run_factory(command, **kwargs):
+        calls.append(command)
+        if command[1] == "info":
+            return SimpleNamespace(returncode=0, stdout="29.0", stderr="")
+        if command[1:3] == ["image", "inspect"]:
+            return SimpleNamespace(returncode=0, stdout="sha256:local-image", stderr="")
+        return SimpleNamespace(returncode=1, stdout="", stderr="ModuleNotFoundError: pytest")
+
+    runner = WorkspaceSandboxRunner(
+        workspace_root=tmp_path / "sandbox",
+        image="registry.example.test/kaldrax/no-pytest:py313",
+        run_factory=run_factory,
+    )
+    with pytest.raises(RuntimeError, match="does not provide an importable pytest"):
+        runner.preflight_full_suite()
+    assert [call[1] for call in calls] == ["info", "image", "run"]
