@@ -152,6 +152,15 @@ The repository path is a separate coordinator from the prose-only team flow. It 
 7. Only a successful command, non-empty test discovery for unittest/pytest, untruncated output, reviewer approval, and evaluator pass can accept the patch.
 8. Default to dry-run. Applying requires the explicit apply flag; immediately before the write, verify the checkout remains clean and its HEAD matches the captured base commit. KALDRAX does not commit or push the resulting changes.
 
+
+### Task-DAG file-scope enforcement
+
+For `kaldrax orchestrate --workspace`, every repository-backed task carries an exact, canonical `file_scope`. The task worker receives that task's own paths as its permission boundary. Before execution begins, KALDRAX validates every task scope against repository path policy and forms the union used by the final unified-patch builder.
+
+The host parses all paths in the diff and rejects any created, modified, or deleted path outside that union before impact analysis. The staging operation and final `apply_patch` operation independently repeat the check. Empty scopes, duplicate paths, non-canonical paths, traversal, credentials, runtime state, and excluded dependency/build paths fail closed. Matching is by exact relative path; directory prefixes and wildcards are not permissions. The accepted allowlist and actual changed paths are included in the repository report, reviewer input, and evaluator evidence.
+
+This is enforced by repository code, not by relying on model compliance. The unified patch builder is authorized for the union of task scopes because it produces one aggregate diff; the individual task workers receive only their own scopes. The separate `team --workspace` command does not currently produce a task DAG and therefore does not yet receive this per-task allowlist contract.
+
 The workspace snapshot and sandbox copy are independent of the user's actual working directory. The actual checkout is never mounted into Docker. The Docker daemon, host kernel, and pre-pulled image remain trusted parts of the boundary. This is defense-in-depth, not VM-grade isolation. Custom images selected through KALDRAX_SANDBOX_IMAGE must be pre-pulled and contain Python plus the requested test module/dependencies.
 
 ## New repository runtime modules
