@@ -418,7 +418,7 @@ def _orchestrate(args: argparse.Namespace) -> int:
     saved_checkpoint = None
     recovered_graph = None
     if not getattr(args, "fresh", False):
-        recovered = checkpoint_store.load_latest()
+        recovered = checkpoint_store.load_latest(objective=args.objective)
         if recovered is not None:
             recovered_graph, saved_checkpoint = recovered
     graph = recovered_graph or decomposer.decompose(
