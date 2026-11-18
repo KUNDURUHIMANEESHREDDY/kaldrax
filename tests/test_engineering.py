@@ -251,12 +251,14 @@ new file mode 100644
     assert not (root / "docs" / "extra.md").exists()
     assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")class FullSuiteSandbox(SuccessfulSandbox):
     def __init__(
-        self, *, exit_code=0, test_count=9, suite_exit_code=None, desktop_exit_code=0,
+        self, *, exit_code=0, test_count=9, suite_exit_code=None,
+        desktop_exit_code=0, ci_quality_exit_code=0,
     ):
         super().__init__(exit_code=exit_code)
         self.test_count = test_count
         self.suite_exit_code = suite_exit_code
         self.desktop_exit_code = desktop_exit_code
+        self.ci_quality_exit_code = ci_quality_exit_code
         self.full_calls = []
 
     def run_workspace_full_suite(self, workspace, *, timeout_seconds, cancel_file=None):
@@ -266,6 +268,11 @@ new file mode 100644
                 "name": "full_test_suite", "module": "pytest", "module_args": ["-q"],
                 "exit_code": 0 if self.test_count else 1, "test_count": self.test_count,
                 "status": "passed" if self.test_count else "failed",
+            },
+            {
+                "name": "deterministic_ci_quality_checks", "module": "ci-quality",
+                "module_args": [], "exit_code": self.ci_quality_exit_code,
+                "status": "passed" if self.ci_quality_exit_code == 0 else "failed",
             },
             {
                 "name": "source_and_test_compilation", "module": "compileall",
@@ -279,7 +286,8 @@ new file mode 100644
             },
         )
         calculated = (
-            0 if self.exit_code == 0 and self.desktop_exit_code == 0 and self.test_count > 0 else 1
+            0 if self.exit_code == 0 and self.ci_quality_exit_code == 0
+            and self.desktop_exit_code == 0 and self.test_count > 0 else 1
         )
         overall = calculated if self.suite_exit_code is None else self.suite_exit_code
         return WorkspaceVerificationSuiteResult(
@@ -311,6 +319,7 @@ def test_repository_team_full_profile_requires_tests_and_compilation(tmp_path):
     assert report.verification["test_count"] == 9
     assert [step["name"] for step in report.verification["steps"]] == [
         "full_test_suite",
+        "deterministic_ci_quality_checks",
         "source_and_test_compilation",
         "desktop_lint_and_production_build",
     ]
@@ -362,4 +371,19 @@ def test_repository_team_full_profile_rejects_desktop_build_failure(tmp_path):
     assert report.verification["test_count"] == 9
     assert report.verification["exit_code"] == 1
     assert report.verification["steps"][2]["status"] == "failed"
+    assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")
+
+def test_repository_team_full_profile_rejects_ci_quality_benchmark_failure(tmp_path):
+    root = tmp_path / "repo"
+    init_csv_repo(root)
+    sandbox = FullSuiteSandbox(ci_quality_exit_code=1)
+    coordinator, task = make_coordinator(root, sandbox)
+    coordinator.verify_module = "full"
+
+    report = coordinator.run(task, apply_changes=True)
+
+    assert report.status is RunStatus.LIMIT_REACHED
+    assert report.applied is False
+    assert report.verification["steps"][1]["name"] == "deterministic_ci_quality_checks"
+    assert report.verification["steps"][1]["status"] == "failed"
     assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")
