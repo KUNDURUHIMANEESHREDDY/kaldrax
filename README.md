@@ -276,6 +276,7 @@ The GitHub Actions matrix runs on Python 3.11 and 3.13, executes the full test s
 - [ADR 0006: Memory quality and contradiction evaluation](docs/adr/0006-memory-quality-evaluation.md)
 - [ADR 0007: Repository-aware engineering loop](docs/adr/0007-repository-engineering-loop.md)
 - [ADR 0008: Repository intelligence and dependency mapping](docs/adr/0008-repository-intelligence.md)
+- [ADR 0010: Task file-scope enforcement](docs/adr/0010-task-file-scope-enforcement.md)
 - [Repository structure](docs/REPOSITORY_STRUCTURE.md)
 
 
@@ -443,6 +444,8 @@ kaldrax orchestrate --objective "Implement a CSV import feature" --criterion "CS
 ```
 
 With `--workspace`, KALDRAX feeds the task graph and completed deliverables into the repository planner and patch builder. It validates the unified diff, stages it against an immutable clean-HEAD snapshot, executes the selected verification command in a disposable, network-isolated Docker workspace, then requires repository reviewer approval and independent evidence-backed evaluation. This mode is a dry run by default: it reports a verified patch without changing the checkout.
+
+For DAG-backed runs, every task's `file_scope` is an exact repository-relative permission list. Each task worker receives its own scope. The aggregate patch builder is restricted to the union of those paths; KALDRAX rejects any created, modified, or deleted path outside that union before impact analysis or sandbox execution, repeats the check while staging, and checks again immediately before application. Empty, non-canonical, private, and excluded paths are rejected before task workers execute. This is exact-path matching, not directory-prefix or wildcard matching. The separate `team --workspace` workflow does not currently build a task DAG, so it retains the existing unsafe-path checks but does not yet provide per-task allowlists.
 
 Add `--apply` to apply the patch to the selected checkout only after all gates pass. The command rejects a dirty or invalid workspace before creating provider clients, so unrelated work does not incur model charges. The apply operation rechecks that the checkout is still clean and its HEAD still matches the original snapshot immediately before writing. Never use `--apply` on a checkout containing unrelated work; commit or move unrelated changes first. The default maximum is two patch/review/verification cycles. `--max-cycles`, `--sandbox-timeout`, `--verify-module`, and repeated `--verify-arg` options configure that stage. A workspace that becomes dirty during execution is blocked by the coordinator and never has the patch applied.
 
