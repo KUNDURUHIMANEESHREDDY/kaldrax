@@ -647,3 +647,23 @@ This file records implementation decisions, changes, commands, verification, and
 ### Verification
 - Source and regression-test changes were committed to `main`.
 - Automated test execution and hosted CI status are pending; do not treat this milestone as verified until CI completes.
+
+## 2026-11-18 — Strict task file-scope enforcement
+
+### Decisions
+- Repository-backed DAG task scopes are exact path permissions, not prompt suggestions.
+- Focused task workers receive their own scope. The aggregate patch builder is limited to the union of scopes from the accepted task graph.
+- Scope matching covers created, modified, and deleted paths and is repeated during initial diff validation, isolated staging, and final application.
+- `team --workspace` remains outside this task-DAG permission contract until it adopts structured task scopes.
+
+### Changes
+- Added canonical allowlist validation and host-side diff path enforcement to `RepositoryWorkspace`.
+- Added optional allowlist guards to `changed_paths`, `staged_patch`, and `apply_patch`.
+- Propagated each task's own scope to its worker and the graph-wide union to the repository patch builder, reviewer, and independent-evaluator evidence.
+- Added scope metadata to repository reports and rejected unsafe scopes before task workers are invoked.
+- Added regression tests for out-of-scope modifications, new files, deletions, staging, application, and early rejection before sandbox/reviewer execution.
+- Documented the behavior in README, architecture, and ADR 0010.
+
+### Verification
+- Source and regression-test changes were committed to `main`.
+- The tests and compilation have not been executed in this environment. Hosted CI status is not exposed by the available GitHub check-status endpoint; do not mark this milestone verified until the Python matrix completes.
