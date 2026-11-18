@@ -320,14 +320,22 @@ class WorkspaceSandboxRunner(SandboxRunner):
             },
         )
         steps: list[dict[str, object]] = []
+        total_timeout_exhausted = False
         for specification in specifications:
             elapsed = time.monotonic() - started
-            remaining = timeout_seconds - int(elapsed)
+            remaining = timeout_seconds - elapsed
             if remaining < 1:
+                total_timeout_exhausted = True
                 steps.append({
                     "name": specification["name"],
                     "module": specification["module"],
                     "module_args": list(specification["module_args"]),
+                    "exit_code": 124,
+                    "duration_ms": 0,
+                    "timed_out": True,
+                    "output_truncated": False,
+                    "cancelled": False,
+                    "test_count": None,
                     "status": "not_run_timeout_budget",
                 })
                 continue
@@ -335,7 +343,7 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 workspace,
                 module=specification["module"],
                 module_args=specification["module_args"],
-                timeout_seconds=max(1, min(120, remaining)),
+                timeout_seconds=max(1, min(120, int(remaining))),
                 cancel_file=cancel_file,
             )
             combined_output = result.stdout + "\n" + result.stderr
@@ -388,7 +396,7 @@ class WorkspaceSandboxRunner(SandboxRunner):
             stderr = stderr.encode("utf-8")[:self.MAX_SUITE_OUTPUT_BYTES].decode("utf-8", errors="replace")
             truncated = True
 
-        timed_out = any(bool(step.get("timed_out")) for step in steps)
+        timed_out = total_timeout_exhausted or any(bool(step.get("timed_out")) for step in steps)
         cancelled = any(bool(step.get("cancelled")) for step in steps)
         test_count = next(
             (int(step["test_count"]) for step in steps if step.get("name") == "full_test_suite"
