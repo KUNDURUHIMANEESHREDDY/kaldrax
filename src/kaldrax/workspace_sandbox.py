@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 import threading
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from uuid import uuid4
 
@@ -30,6 +30,7 @@ class WorkspaceVerificationSuiteResult:
     test_count: int
     steps: tuple[dict[str, object], ...]
     preflight: dict[str, str] | None = None
+    test_counts: dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -53,7 +54,10 @@ class WorkspaceSandboxRunner(SandboxRunner):
         ".tox", "dist", "build", "coverage", ".next", ".turbo",
         ".aws", ".ssh", ".docker", ".kube", "secrets", "credentials", "certs", "certificates",
     }
-    ALLOWED_MODULES = {"compileall", "unittest", "pytest", "desktop", "ci-quality"}
+    ALLOWED_MODULES = {
+        "compileall", "unittest", "pytest", "pytest311",
+        "compileall311", "desktop", "ci-quality", "ci-quality311",
+    }
     CI_QUALITY_VERIFICATION_COMMAND = (
         "failures=0; "
         "run_check() { name=\"$1\"; shift; "
@@ -68,6 +72,19 @@ class WorkspaceSandboxRunner(SandboxRunner):
         "run_check memory-ci-quality-report python -B -m kaldrax.cli memory quality-report --profile ci "
         "--json-report /tmp/kaldrax-memory-quality.json "
         "--markdown-report /tmp/kaldrax-memory-quality.md; "
+        "exit \"$failures\""
+    )
+    CI_QUALITY_VERIFICATION_COMMAND_311 = (
+        "failures=0; "
+        "run_check() { name=\"$1\"; shift; "
+        "printf '\\n=== %s ===\\n' \"$name\"; "
+        "\"$@\"; code=$?; "
+        "printf '=== %s exit_code=%s ===\\n' \"$name\" \"$code\"; "
+        "[ \"$code\" -eq 0 ] || failures=1; "
+        "}; "
+        "run_check memory-retrieval-benchmark python311 -B -m kaldrax.cli memory benchmark; "
+        "run_check lexical-hybrid-comparison python311 -B -m kaldrax.cli memory benchmark-compare; "
+        "run_check deterministic-evaluator python311 -B -m kaldrax.cli benchmark-evaluator --mode deterministic --min-accuracy 0.80; "
         "exit \"$failures\""
     )
     DESKTOP_VERIFICATION_COMMAND = (
@@ -160,7 +177,7 @@ class WorkspaceSandboxRunner(SandboxRunner):
             for item in module_args
         ):
             raise ValueError("verification arguments are invalid or exceed the size limit")
-        if module in {"desktop", "ci-quality"} and module_args:
+        if module in {"desktop", "ci-quality", "ci-quality311"} and module_args:
             raise ValueError(f"{module} verification uses a fixed command and accepts no module arguments")
         if not 1 <= timeout_seconds <= 120:
             raise ValueError("timeout_seconds must be between 1 and 120")
@@ -196,12 +213,20 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 "--env", "PYTHONDONTWRITEBYTECODE=1",
                 "--env", "PYTHONPATH=/workspace/src:/workspace",
             ]
-            if module in {"desktop", "ci-quality"}:
+            if module in {"desktop", "ci-quality", "ci-quality311"}:
                 script = (
                     self.DESKTOP_VERIFICATION_COMMAND
-                    if module == "desktop" else self.CI_QUALITY_VERIFICATION_COMMAND
+                    if module == "desktop"
+                    else self.CI_QUALITY_VERIFICATION_COMMAND_311
+                    if module == "ci-quality311"
+                    else self.CI_QUALITY_VERIFICATION_COMMAND
                 )
                 command.extend([self.image, "/bin/sh", "-c", script])
+            elif module in {"pytest311", "compileall311"}:
+                python_module = "pytest" if module == "pytest311" else "compileall"
+                command.extend([
+                    self.image, "python311", "-B", "-m", python_module, *module_args,
+                ])
             else:
                 command.extend([self.image, "python", "-B", "-m", module, *module_args])
             try:
