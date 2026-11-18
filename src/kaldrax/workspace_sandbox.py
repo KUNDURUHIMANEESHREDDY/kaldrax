@@ -31,6 +31,7 @@ class WorkspaceVerificationSuiteResult:
     steps: tuple[dict[str, object], ...]
     preflight: dict[str, str] | None = None
     test_counts: dict[str, int] = field(default_factory=dict)
+    test_counts: dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -411,25 +412,61 @@ class WorkspaceSandboxRunner(SandboxRunner):
         started = time.monotonic()
         specifications = (
             {
-                "name": "full_test_suite",
+                "name": "python_3_11_full_test_suite",
+                "module": "pytest311",
+                "module_args": ("-q",),
+                "python_version": "3.11",
+                "count_tests": True,
+                "memory_mb": 512,
+                "cpu_count": 1.0,
+                "pids_limit": 128,
+            },
+            {
+                "name": "python_3_11_deterministic_ci_quality",
+                "module": "ci-quality311",
+                "module_args": (),
+                "python_version": "3.11",
+                "count_tests": False,
+                "memory_mb": 512,
+                "cpu_count": 1.0,
+                "pids_limit": 128,
+            },
+            {
+                "name": "python_3_11_source_compilation",
+                "module": "compileall311",
+                "module_args": ("-q", "."),
+                "python_version": "3.11",
+                "count_tests": False,
+                "memory_mb": 512,
+                "cpu_count": 1.0,
+                "pids_limit": 128,
+            },
+            {
+                "name": "python_3_13_full_test_suite",
                 "module": "pytest",
                 "module_args": ("-q",),
+                "python_version": "3.13",
+                "count_tests": True,
                 "memory_mb": 512,
                 "cpu_count": 1.0,
                 "pids_limit": 128,
             },
             {
-                "name": "deterministic_ci_quality_checks",
+                "name": "python_3_13_deterministic_ci_quality",
                 "module": "ci-quality",
                 "module_args": (),
+                "python_version": "3.13",
+                "count_tests": False,
                 "memory_mb": 512,
                 "cpu_count": 1.0,
                 "pids_limit": 128,
             },
             {
-                "name": "source_and_test_compilation",
+                "name": "python_3_13_source_compilation",
                 "module": "compileall",
                 "module_args": ("-q", "."),
+                "python_version": "3.13",
+                "count_tests": False,
                 "memory_mb": 512,
                 "cpu_count": 1.0,
                 "pids_limit": 128,
@@ -438,12 +475,15 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 "name": "desktop_lint_and_production_build",
                 "module": "desktop",
                 "module_args": (),
+                "python_version": None,
+                "count_tests": False,
                 "memory_mb": 1024,
                 "cpu_count": 2.0,
                 "pids_limit": 128,
             },
         )
         steps: list[dict[str, object]] = []
+        test_counts: dict[str, int] = {}
         total_timeout_exhausted = False
         for specification in specifications:
             elapsed = time.monotonic() - started
@@ -454,6 +494,7 @@ class WorkspaceSandboxRunner(SandboxRunner):
                     "name": specification["name"],
                     "module": specification["module"],
                     "module_args": list(specification["module_args"]),
+                    "python_version": specification["python_version"],
                     "memory_mb": specification["memory_mb"],
                     "cpu_count": specification["cpu_count"],
                     "pids_limit": specification["pids_limit"],
@@ -478,13 +519,15 @@ class WorkspaceSandboxRunner(SandboxRunner):
             )
             combined_output = result.stdout + "\n" + result.stderr
             test_count = None
-            if specification["name"] == "full_test_suite":
+            if specification["count_tests"]:
                 match = re.search(r"(?m)(\d+)\s+passed\b", combined_output)
                 test_count = int(match.group(1)) if match else 0
+                test_counts[str(specification["python_version"])] = test_count
             steps.append({
                 "name": specification["name"],
                 "module": specification["module"],
                 "module_args": list(specification["module_args"]),
+                "python_version": specification["python_version"],
                 "memory_mb": specification["memory_mb"],
                 "cpu_count": specification["cpu_count"],
                 "pids_limit": specification["pids_limit"],
@@ -502,7 +545,7 @@ class WorkspaceSandboxRunner(SandboxRunner):
                     if result.exit_code == 0 and not result.timed_out
                     and not result.output_truncated
                     and (
-                        specification["name"] != "full_test_suite"
+                        not specification["count_tests"]
                         or (test_count is not None and test_count > 0)
                     )
                     else "failed"
@@ -531,15 +574,12 @@ class WorkspaceSandboxRunner(SandboxRunner):
 
         timed_out = total_timeout_exhausted or any(bool(step.get("timed_out")) for step in steps)
         cancelled = any(bool(step.get("cancelled")) for step in steps)
-        test_count = next(
-            (int(step["test_count"]) for step in steps if step.get("name") == "full_test_suite"
-             and isinstance(step.get("test_count"), int)),
-            0,
-        )
+        test_count = sum(test_counts.values())
         passed = (
             len(steps) == len(specifications)
             and all(step.get("status") == "passed" for step in steps)
-            and test_count > 0
+            and set(test_counts) == {"3.11", "3.13"}
+            and all(value > 0 for value in test_counts.values())
         )
         first_failure = next(
             (step for step in steps if step.get("status") != "passed"),
@@ -567,5 +607,6 @@ class WorkspaceSandboxRunner(SandboxRunner):
             test_count=test_count,
             steps=tuple(steps),
             preflight=dict(self._full_suite_preflight) if self._full_suite_preflight is not None else None,
+            test_counts=dict(test_counts),
         )
 
