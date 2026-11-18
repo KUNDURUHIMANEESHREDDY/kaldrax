@@ -1016,3 +1016,96 @@ def test_cli_orchestration_repairs_failed_work_without_repeating_successful_task
     assert clients["reviewer"].calls
     assert clients["evaluator"].calls
     capsys.readouterr()
+
+def test_cli_orchestration_keeps_operator_gated_recovery_blocked_across_resume(
+    tmp_path, monkeypatch, capsys,
+):
+    from types import SimpleNamespace
+
+    import kaldrax.cli as cli
+    from kaldrax.budgets import RunBudget
+
+    class RoleClient:
+        def __init__(self, role):
+            self.role = role
+            self.diagnosis_calls = 0
+            self.builder_calls = 0
+            self.replan_calls = 0
+
+        def complete(self, *, system_prompt, user_prompt):
+            payload = json.loads(user_prompt)
+            if self.role == "planner":
+                if "dependency-aware task decomposition planner" in system_prompt:
+                    return json.dumps({"tasks": [{
+                        "id": "needs-input",
+                        "description": "Configure the external service credentials",
+                        "depends_on": [],
+                        "acceptance_criteria": ["service is configured"],
+                    }]})
+                if "failure-diagnosis agent" in system_prompt:
+                    self.diagnosis_calls += 1
+                    return json.dumps({"diagnoses": [{
+                        "task_id": "needs-input",
+                        "category": "provider",
+                        "root_cause": "The run has no configured provider credential.",
+                        "evidence": {
+                            "type": "task_error",
+                            "excerpt": "provider credential is missing",
+                        },
+                        "retryable": False,
+                        "operator_input_required": True,
+                        "repair_instruction": "Ask the operator to configure the provider credential.",
+                    }]})
+                if "bounded task-graph repair planner" in system_prompt:
+                    self.replan_calls += 1
+                    raise AssertionError("operator-gated work must not be replanned automatically")
+            if self.role == "builder":
+                self.builder_calls += 1
+                raise ValueError("provider credential is missing")
+            if self.role in {"reviewer", "evaluator"}:
+                raise AssertionError("acceptance gates must not run while a task is failed")
+            raise AssertionError(system_prompt)
+
+    clients = {
+        role: RoleClient(role)
+        for role in ("planner", "builder", "reviewer", "evaluator")
+    }
+    monkeypatch.setenv("KALDRAX_API_KEY", "test-key")
+    monkeypatch.setenv("KALDRAX_PLANNER_MODEL", "planner-model")
+    monkeypatch.setenv("KALDRAX_MODEL", "builder-model")
+    monkeypatch.setenv("KALDRAX_REVIEWER_MODEL", "reviewer-model")
+    monkeypatch.setenv("KALDRAX_EVALUATOR_MODEL", "evaluator-model")
+    monkeypatch.setattr(cli, "_budget_from_env", RunBudget)
+    monkeypatch.setattr(
+        cli, "_client",
+        lambda model, budget: clients[model.removesuffix("-model")],
+    )
+
+    artifact = tmp_path / "runs" / "operator-gated.json"
+    args = SimpleNamespace(
+        objective="Configure a provider-backed service",
+        criterion=["service is configured"],
+        max_workers=1,
+        max_attempts=1,
+        max_replans=2,
+        checkpoint=tmp_path / "checkpoint.json",
+        fresh=True,
+        retry_failed=False,
+        progress_jsonl=None,
+        artifact=artifact,
+    )
+
+    assert cli._orchestrate(args) == 1
+    first_report = json.loads(artifact.read_text(encoding="utf-8"))
+    assert first_report["repair_history"][0]["status"] == "needs_operator"
+    assert clients["planner"].diagnosis_calls == 1
+    assert clients["planner"].replan_calls == 0
+
+    args.fresh = False
+    assert cli._orchestrate(args) == 1
+    second_report = json.loads(artifact.read_text(encoding="utf-8"))
+    assert second_report["repair_history"][0]["status"] == "needs_operator"
+    assert clients["planner"].diagnosis_calls == 1
+    assert clients["planner"].replan_calls == 0
+    assert clients["builder"].builder_calls == 1
+    capsys.readouterr()
