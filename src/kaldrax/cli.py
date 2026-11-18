@@ -566,6 +566,12 @@ def _orchestrate(args: argparse.Namespace) -> int:
             "status": "diagnosing",
             "graph_fingerprint_before": graph.fingerprint(),
             "affected_task_ids": affected_ids,
+            "previous_attempts": {
+                task_id: report.attempts.get(task_id, 0) for task_id in affected_ids
+            },
+            "previous_errors": {
+                task_id: report.errors.get(task_id, "")[:1000] for task_id in affected_ids
+            },
         }
         try:
             diagnoses = decomposer.diagnose_failures(graph, report)
