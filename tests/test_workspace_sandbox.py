@@ -273,7 +273,8 @@ def test_workspace_sandbox_runs_desktop_lint_and_build_as_fixed_offline_command(
     command = commands[-1]
     assert result.exit_code == 0
     assert command[command.index("--network") + 1] == "none"
-    assert command[-3] == "kaldrax-verification:full"
+    assert command[-4] == "kaldrax-verification:full"
+    assert command[-3] == "/bin/sh"
     assert command[-2:] == ["-c", WorkspaceSandboxRunner.DESKTOP_VERIFICATION_COMMAND]
     assert "sha256sum -c /opt/kaldrax-desktop-deps.sha256" in command[-1]
     assert "npm run lint" in command[-1]
