@@ -315,7 +315,7 @@ deleted file mode 100644
 
 
 def test_patch_file_scope_is_rechecked_when_staging(tmp_path):
-    workspace = init_repo(tmp_path / "repo", {"app.py": "print('safe')\\n"})
+    workspace = init_repo(tmp_path / "repo", {"app.py": "print('safe')\n"})
     snapshot = workspace.capture()
     with pytest.raises(WorkspaceError, match="task file_scope"):
         with workspace.staged_patch(snapshot, PATCH, allowed_paths=("README.md",)):
@@ -323,7 +323,7 @@ def test_patch_file_scope_is_rechecked_when_staging(tmp_path):
 
 
 def test_patch_file_scope_is_rechecked_before_application(tmp_path):
-    workspace = init_repo(tmp_path / "repo", {"app.py": "def value():\\n    return 1\\n"})
+    workspace = init_repo(tmp_path / "repo", {"app.py": "def value():\n    return 1\n"})
     snapshot = workspace.capture()
     with pytest.raises(WorkspaceError, match="task file_scope"):
         workspace.apply_patch(snapshot, PATCH, allowed_paths=("README.md",))
