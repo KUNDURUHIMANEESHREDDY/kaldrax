@@ -546,7 +546,8 @@ def _orchestrate(args: argparse.Namespace) -> int:
             except Exception:
                 pass
 
-    for recovery_round in range(1, max_replans + 1):
+    recovery_rounds_used = len(report.repair_history)
+    for recovery_round in range(recovery_rounds_used + 1, max_replans + 1):
         affected_ids = [
             node.id for node in graph.execution_order
             if report.states.get(node.id) in {TaskState.FAILED.value, TaskState.BLOCKED.value}
@@ -684,21 +685,27 @@ def _orchestrate(args: argparse.Namespace) -> int:
             persist_repair_record(recovery_record, "task_graph_replan_failed", type(exc).__name__)
             break
 
-    if not report.passed and max_replans > 0 and report.repair_history:
-        completed_rounds = sum(
-            1 for item in report.repair_history if item.get("status") == "replanned"
-        )
-        if completed_rounds >= max_replans and any(
+    if (
+        not report.passed
+        and max_replans > 0
+        and len(report.repair_history) >= max_replans
+        and any(
             state in {TaskState.FAILED.value, TaskState.BLOCKED.value}
             for state in report.states.values()
-        ):
-            event = {"event": "task_replan_limit_reached", "task_id": "graph", "detail": str(max_replans)}
+        )
+    ):
+        event = {"event": "task_replan_limit_reached", "task_id": "graph", "detail": str(max_replans)}
+        if event not in report.events:
             report.events.append(event)
-            if progress_sink is not None:
-                try:
-                    progress_sink(event)
-                except Exception:
-                    pass
+            saved = checkpoint_store.load(graph)
+            if saved is not None:
+                saved.events.append(event)
+                checkpoint_store.save(saved)
+        if progress_sink is not None:
+            try:
+                progress_sink(event)
+            except Exception:
+                pass
     final_output = "\n\n".join(
         f"## {node.id}\n{report.outputs[node.id]}"
         for node in graph.execution_order if node.id in report.outputs
