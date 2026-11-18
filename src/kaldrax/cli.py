@@ -349,12 +349,16 @@ def _orchestrate(args: argparse.Namespace) -> int:
     apply_changes = bool(getattr(args, "apply", False))
     if apply_changes and workspace_root is None:
         raise ValueError("--apply requires --workspace")
+    repository_workspace = None
+    repository_binding: dict[str, str] | None = None
     if workspace_root is not None:
-        workspace_status = RepositoryWorkspace(workspace_root).status()
-        if not workspace_status["clean"]:
+        repository_workspace = RepositoryWorkspace(workspace_root)
+        try:
+            repository_binding = repository_workspace.checkpoint_binding()
+        except WorkspaceError as exc:
             raise ValueError(
                 "--workspace must be clean before orchestration starts; move or commit unrelated changes first"
-            )
+            ) from exc
 
     api_key = os.getenv("KALDRAX_API_KEY", "").strip()
     planner_model = os.getenv("KALDRAX_PLANNER_MODEL", "").strip()
@@ -380,6 +384,8 @@ def _orchestrate(args: argparse.Namespace) -> int:
     if workspace_root is not None:
         try:
             repository_context = RepositoryIntelligenceAnalyzer(workspace_root).analyze().to_prompt()
+            if repository_workspace is not None and repository_workspace.checkpoint_binding() != repository_binding:
+                raise ValueError("repository changed while repository intelligence was being analyzed")
         except Exception as exc:
             raise ValueError(
                 f"repository analysis failed before dependency-aware planning: {type(exc).__name__}"
@@ -389,6 +395,14 @@ def _orchestrate(args: argparse.Namespace) -> int:
         tuple(args.criterion),
         repository_context=repository_context,
     )
+    if repository_workspace is not None:
+        try:
+            current_binding = repository_workspace.checkpoint_binding()
+        except WorkspaceError as exc:
+            raise ValueError("repository changed before task execution; restart orchestration") from exc
+        if current_binding != repository_binding:
+            raise ValueError("repository HEAD changed during planning; restart orchestration")
+
     task = Task(args.objective, tuple(args.criterion))
     outputs: dict[str, str] = {}
     outputs_lock = threading.Lock()
@@ -447,7 +461,10 @@ def _orchestrate(args: argparse.Namespace) -> int:
     checkpoint_path = args.checkpoint or (
         Path(".kaldrax/checkpoints") / f"{request_fingerprint}.json"
     )
-    checkpoint_store = CheckpointStore(checkpoint_path)
+    checkpoint_store = CheckpointStore(
+        checkpoint_path,
+        repository_binding=repository_binding,
+    )
     if not args.fresh:
         saved = checkpoint_store.load(graph)
         if saved is not None:
@@ -527,6 +544,12 @@ def _orchestrate(args: argparse.Namespace) -> int:
             else verify_defaults[verify_module]
         )
         try:
+            if repository_workspace is not None:
+                current_binding = repository_workspace.checkpoint_binding()
+                if current_binding != repository_binding:
+                    raise WorkspaceError(
+                        "repository HEAD changed during task execution; refusing to verify or apply a patch against a different checkout"
+                    )
             repository_coordinator = RepositoryTeamCoordinator(
                 planner=_TaskGraphContextClient(
                     planner, graph_context,
@@ -684,6 +707,7 @@ def _orchestrate(args: argparse.Namespace) -> int:
         "errors": report.errors,
         "events": report.events,
         "checkpoint": str(checkpoint_path),
+        "repository_binding": repository_binding,
         "budget": budget.snapshot().to_dict(),
     }
     args.artifact.parent.mkdir(parents=True, exist_ok=True)
