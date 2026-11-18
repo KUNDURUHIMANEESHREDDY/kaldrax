@@ -547,7 +547,14 @@ def _orchestrate(args: argparse.Namespace) -> int:
                 pass
 
     recovery_rounds_used = len(report.repair_history)
-    for recovery_round in range(recovery_rounds_used + 1, max_replans + 1):
+    waiting_for_operator = bool(
+        report.repair_history
+        and report.repair_history[-1].get("status") == "needs_operator"
+    )
+    first_recovery_round = (
+        max_replans + 1 if waiting_for_operator else recovery_rounds_used + 1
+    )
+    for recovery_round in range(first_recovery_round, max_replans + 1):
         affected_ids = [
             node.id for node in graph.execution_order
             if report.states.get(node.id) in {TaskState.FAILED.value, TaskState.BLOCKED.value}
@@ -689,6 +696,7 @@ def _orchestrate(args: argparse.Namespace) -> int:
         not report.passed
         and max_replans > 0
         and len(report.repair_history) >= max_replans
+        and not waiting_for_operator
         and any(
             state in {TaskState.FAILED.value, TaskState.BLOCKED.value}
             for state in report.states.values()
