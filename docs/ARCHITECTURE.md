@@ -168,3 +168,16 @@ The workspace snapshot and sandbox copy are independent of the user's actual wor
 - workspace captures bounded, secret-filtered Git snapshots, validates unified diffs, stages them in temporary Git workspaces, and applies accepted patches only after checking the base HEAD and clean-tree invariant.
 - workspace_sandbox copies staged files into another disposable directory and runs an allowlisted Python verification module inside Docker with no network and resource/output limits.
 - engineering implements the repository planner → patch builder → sandbox verifier → reviewer → independent evaluator loop with a shared run budget and structured report.
+
+
+## Autonomous task recovery and replanning
+
+The dependency-aware orchestration layer treats a failed DAG as a recovery input rather than a completed plan. After bounded transient retries, KALDRAX gathers every failed and blocked node and asks the planner for a structured diagnosis. Each diagnosis must identify one affected task, a bounded root-cause statement, a category, a retry recommendation, an operator-input flag, a repair instruction, and traceable evidence. Evidence is validated against the persisted task error or an actual failed/blocked prerequisite state; an ungrounded diagnosis is rejected.
+
+The repair planner receives the original objective and acceptance criteria, the current graph, node states/attempts/errors, diagnoses, and bounded excerpts from successful outputs. It returns a complete replacement graph plus explicit `retired_task_ids`. The graph is parsed through the same task-node/path/dependency validation as the initial plan. Cycles, missing dependencies, duplicate IDs, malformed scopes, and invalid retirement declarations fail closed.
+
+Successful task definitions are immutable across a repair: ID, description, dependency edges, acceptance criteria, phase, and file scope must match exactly. Their outputs and cumulative attempts are copied into the new checkpoint and those nodes remain `succeeded`; they are never scheduled again. Failed/blocked nodes that remain in the new graph are reset to pending, removed unfinished IDs must be listed as retired, and newly added tasks start pending. The revised `TaskGraph` recalculates topological execution waves before the scheduler resumes.
+
+Recovery is bounded by `--max-replans` (default 2, allowed range 0–3). The active graph revision, request fingerprint, repository binding, node outputs, cumulative attempt counts, and repair history are written to the atomic checkpoint. The latest repaired graph is loaded on subsequent invocations, so restart does not revert to the original decomposition. The limit is cumulative across resumes. When the diagnosis declares operator input necessary, automatic replanning stops and remains blocked until the operator supplies a changed request or explicitly starts fresh.
+
+A repaired DAG is not an accepted deliverable. The existing aggregate reviewer and distinct evidence-backed evaluator still gate non-repository runs. Workspace-backed runs additionally require repository patch validation, exact task file-scope enforcement, sandbox verification, reviewer approval, independent evaluation, and explicit apply authorization. The repair planner cannot mark a task successful or bypass any acceptance gate.
