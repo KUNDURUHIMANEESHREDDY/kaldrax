@@ -105,6 +105,7 @@ def test_full_repository_suite_runs_pytest_and_compileall_with_fixed_full_scope(
     assert result.steps[0]["status"] == "passed"
     assert result.steps[1]["status"] == "passed"
     assert result.steps[2]["status"] == "passed"
+    assert result.preflight is None
 
 
 def test_full_repository_suite_rejects_zero_passed_tests_but_still_compiles(tmp_path):
@@ -183,6 +184,10 @@ def test_full_suite_preflight_requires_local_python_node_image_and_pytest_withou
         run_factory=run_factory,
     )
     evidence = runner.preflight_full_suite()
+    runner._full_suite_preflight = dict(evidence)
+    suite_result = runner.run_workspace_full_suite(
+        tmp_path, timeout_seconds=60,
+    ) if False else None
 
     assert evidence == {
         "image": "kaldrax-verification:full",
@@ -204,6 +209,7 @@ def test_full_suite_preflight_requires_local_python_node_image_and_pytest_withou
     assert "import pytest" in probe[-1]
     assert "node --version" in probe[-1]
     assert "/opt/kaldrax-deps/desktop/node_modules" in probe[-1]
+    assert runner._full_suite_preflight == evidence
 
 
 def test_full_suite_preflight_fails_when_image_is_not_pulled(monkeypatch, tmp_path):
@@ -310,3 +316,39 @@ def test_full_suite_preflight_rejects_wrong_node_major(monkeypatch, tmp_path):
     )
     with pytest.raises(RuntimeError, match="requires Node.js 24"):
         runner.preflight_full_suite()
+
+def test_full_repository_suite_rejects_desktop_build_failure(tmp_path):
+    class FailingDesktopRunner(WorkspaceSandboxRunner):
+        def __init__(self):
+            super().__init__(workspace_root=tmp_path / "sandbox")
+            self.calls = []
+
+        def run_workspace(self, workspace, *, module, module_args, timeout_seconds, cancel_file=None, **kwargs):
+            self.calls.append(module)
+            if module == "pytest":
+                return SandboxResult(
+                    exit_code=0, stdout="3 passed in 0.1s\n", stderr="",
+                    duration_ms=10, timed_out=False, output_truncated=False,
+                    container_image="kaldrax-verification:full",
+                )
+            if module == "desktop":
+                return SandboxResult(
+                    exit_code=2, stdout="", stderr="vite build failed",
+                    duration_ms=15, timed_out=False, output_truncated=False,
+                    container_image="kaldrax-verification:full",
+                )
+            return SandboxResult(
+                exit_code=0, stdout="", stderr="", duration_ms=5,
+                timed_out=False, output_truncated=False,
+                container_image="kaldrax-verification:full",
+            )
+
+    runner = FailingDesktopRunner()
+    result = runner.run_workspace_full_suite(tmp_path, timeout_seconds=60)
+
+    assert runner.calls == ["pytest", "compileall", "desktop"]
+    assert result.exit_code == 2
+    assert result.steps[0]["status"] == "passed"
+    assert result.steps[1]["status"] == "passed"
+    assert result.steps[2]["status"] == "failed"
+    assert result.stderr.endswith("vite build failed")
