@@ -78,8 +78,8 @@ class RepositoryTeamCoordinator:
     ) -> None:
         if not 1 <= max_cycles <= 5:
             raise ValueError("max_cycles must be between 1 and 5")
-        if verify_module not in {"compileall", "unittest", "pytest"}:
-            raise ValueError("verify_module must be compileall, unittest, or pytest")
+        if verify_module not in {"compileall", "unittest", "pytest", "full"}:
+            raise ValueError("verify_module must be compileall, unittest, pytest, or full")
         if not 1 <= timeout_seconds <= 120:
             raise ValueError("timeout_seconds must be between 1 and 120")
         self.planner = planner
@@ -299,14 +299,25 @@ class RepositoryTeamCoordinator:
                 with self.workspace.staged_patch(
                     snapshot, patch, allowed_paths=self.allowed_paths,
                 ) as (staged_root, changed):
-                    sandbox_options = {
-                        "module": self.verify_module,
-                        "module_args": self.verify_args,
-                        "timeout_seconds": self.timeout_seconds,
-                    }
-                    if self.cancel_file is not None:
-                        sandbox_options["cancel_file"] = self.cancel_file
-                    verification = self.sandbox.run_workspace(staged_root, **sandbox_options)
+                    if self.verify_module == "full":
+                        full_suite = getattr(self.sandbox, "run_workspace_full_suite", None)
+                        if not callable(full_suite):
+                            raise WorkspaceError(
+                                "full verification requires a sandbox with run_workspace_full_suite support"
+                            )
+                        suite_options = {"timeout_seconds": self.timeout_seconds}
+                        if self.cancel_file is not None:
+                            suite_options["cancel_file"] = self.cancel_file
+                        verification = full_suite(staged_root, **suite_options)
+                    else:
+                        sandbox_options = {
+                            "module": self.verify_module,
+                            "module_args": self.verify_args,
+                            "timeout_seconds": self.timeout_seconds,
+                        }
+                        if self.cancel_file is not None:
+                            sandbox_options["cancel_file"] = self.cancel_file
+                        verification = self.sandbox.run_workspace(staged_root, **sandbox_options)
             except Exception as exc:
                 report.events.append(f"cycle_{cycle}_verification_error:{type(exc).__name__}:{str(exc)[:300]}")
                 feedback = [f"Patch staging or sandbox verification failed: {type(exc).__name__}: {str(exc)[:300]}"]
@@ -323,13 +334,18 @@ class RepositoryTeamCoordinator:
             verification_data["module"] = self.verify_module
             verification_data["module_args"] = list(self.verify_args)
             test_count: int | None = None
-            if self.verify_module == "unittest":
-                match = re.search(r"\bRan\s+(\d+)\s+tests?\b", verification.stdout + "\n" + verification.stderr)
-                test_count = int(match.group(1)) if match else None
-            elif self.verify_module == "pytest":
-                match = re.search(r"(?:^|\s)(\d+)\s+passed\b", verification.stdout + "\n" + verification.stderr)
-                test_count = int(match.group(1)) if match else None
-            verification_data["test_count"] = test_count
+            if self.verify_module == "full":
+                test_count = verification.test_count
+                verification_data["profile"] = "full-repository"
+                verification_data["test_count"] = test_count
+            else:
+                if self.verify_module == "unittest":
+                    match = re.search(r"\bRan\s+(\d+)\s+tests?\b", verification.stdout + "\n" + verification.stderr)
+                    test_count = int(match.group(1)) if match else None
+                elif self.verify_module == "pytest":
+                    match = re.search(r"(?:^|\s)(\d+)\s+passed\b", verification.stdout + "\n" + verification.stderr)
+                    test_count = int(match.group(1)) if match else None
+                verification_data["test_count"] = test_count
             report.verification = verification_data
             self._trace(report, "sandbox", cycle, json.dumps(verification_data))
             self._progress(
@@ -420,7 +436,7 @@ class RepositoryTeamCoordinator:
                 return self._finish(report)
 
             tests_ran = (
-                self.verify_module not in {"unittest", "pytest"}
+                self.verify_module not in {"unittest", "pytest", "full"}
                 or (test_count is not None and test_count > 0)
             )
             verified = (
