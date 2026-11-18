@@ -329,7 +329,7 @@ class WorkspaceSandboxRunner(SandboxRunner):
         timeout_seconds: int = 120,
         cancel_file: Path | str | None = None,
     ) -> WorkspaceVerificationSuiteResult:
-        """Run the complete configured pytest suite and compile all Python source/tests.
+        """Run the complete Python suite, compile all Python files, and verify the desktop build.
 
         The commands and discovery roots are fixed so callers cannot accidentally
         report a passing subset as a full-repository verification.
@@ -342,16 +342,25 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 "name": "full_test_suite",
                 "module": "pytest",
                 "module_args": ("-q",),
+                "memory_mb": 512,
+                "cpu_count": 1.0,
+                "pids_limit": 128,
             },
             {
                 "name": "source_and_test_compilation",
                 "module": "compileall",
                 "module_args": ("-q", "."),
+                "memory_mb": 512,
+                "cpu_count": 1.0,
+                "pids_limit": 128,
             },
             {
                 "name": "desktop_lint_and_production_build",
                 "module": "desktop",
                 "module_args": (),
+                "memory_mb": 1024,
+                "cpu_count": 2.0,
+                "pids_limit": 128,
             },
         )
         steps: list[dict[str, object]] = []
@@ -365,6 +374,9 @@ class WorkspaceSandboxRunner(SandboxRunner):
                     "name": specification["name"],
                     "module": specification["module"],
                     "module_args": list(specification["module_args"]),
+                    "memory_mb": specification["memory_mb"],
+                    "cpu_count": specification["cpu_count"],
+                    "pids_limit": specification["pids_limit"],
                     "exit_code": 124,
                     "duration_ms": 0,
                     "timed_out": True,
@@ -379,6 +391,9 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 module=specification["module"],
                 module_args=specification["module_args"],
                 timeout_seconds=max(1, min(120, int(remaining))),
+                memory_mb=specification["memory_mb"],
+                cpu_count=specification["cpu_count"],
+                pids_limit=specification["pids_limit"],
                 cancel_file=cancel_file,
             )
             combined_output = result.stdout + "\n" + result.stderr
@@ -390,6 +405,9 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 "name": specification["name"],
                 "module": specification["module"],
                 "module_args": list(specification["module_args"]),
+                "memory_mb": specification["memory_mb"],
+                "cpu_count": specification["cpu_count"],
+                "pids_limit": specification["pids_limit"],
                 "exit_code": result.exit_code,
                 "duration_ms": result.duration_ms,
                 "timed_out": result.timed_out,
