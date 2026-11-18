@@ -880,7 +880,9 @@ def test_repaired_checkpoint_resumes_only_unfinished_work_and_persists_graph(tmp
         checkpoint_store=store,
     )
 
-    assert first_calls == ["base", "broken"]
+    # "base" and "broken" are independent tasks, so their start order is
+    # not part of the scheduler contract when more than one worker is used.
+    assert sorted(first_calls) == ["base", "broken"]
     assert second_calls == ["replacement"]
     assert resumed.passed
     assert resumed.outputs == {"base": "base-output", "replacement": "replacement-output"}

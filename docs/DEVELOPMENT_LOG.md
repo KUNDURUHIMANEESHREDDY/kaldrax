@@ -692,3 +692,19 @@ This file records implementation decisions, changes, commands, verification, and
 - Source, tests, and documentation were committed to `main`.
 - A local checkout/test run could not be performed because DNS resolution for `github.com` failed in the execution environment.
 - The available GitHub combined-status endpoint returned no status entries. Treat CI/test verification as pending until the repository's Python matrix reports a completed result.
+
+## 2026-11-18 — Scheduler test flakiness repair
+
+### Investigation
+- GitHub Actions runs 154 failed at "Run test suite" on both Python 3.11 and 3.13.
+- A local clone of current `main` reproduced a failing test: `test_repaired_checkpoint_resumes_only_unfinished_work_and_persists_graph`.
+- The test asserted `first_calls == ["base", "broken"]` for two independent task nodes. `TaskGraphScheduler` intentionally dispatches both concurrently, so executor start order is not deterministic. Repeating the test 30 times produced 6 failures (20%), each with the reversed order. This explains the intermittent hosted CI failure.
+
+### Changes
+- Made the assertion order-independent with `sorted(first_calls)`, preserving the check that both tasks execute exactly once.
+- A concurrent main-branch fix additionally pinned that first run to `max_workers=1`; the order-independent assertion remains as protection if the worker count is raised again.
+
+### Verification
+- The corrected test passed 40 consecutive repetitions (0 failures).
+- Full local suite without Docker integration: **231 passed, 5 skipped**.
+- Docker-backed integration tests were not run locally: the Docker CLI is installed but the Docker Desktop Linux engine is unavailable in this environment (`docker info` cannot connect to `npipe:////./pipe/dockerDesktopLinuxEngine`). Those tests remain verified only by hosted CI.
