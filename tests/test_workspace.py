@@ -291,3 +291,46 @@ def test_checkpoint_binding_uses_full_head_and_refuses_dirty_worktree(tmp_path):
     (root / "app.py").write_text("print('changed')\n", encoding="utf-8")
     with pytest.raises(WorkspaceError, match="uncommitted or untracked"):
         workspace.checkpoint_binding()
+
+def test_patch_file_scope_rejects_out_of_scope_new_and_deleted_paths():
+    new_file = """diff --git a/docs/extra.md b/docs/extra.md
+new file mode 100644
+--- /dev/null
++++ b/docs/extra.md
+@@ -0,0 +1 @@
++# unauthorized
+"""
+    with pytest.raises(WorkspaceError, match="task file_scope.*docs/extra.md"):
+        RepositoryWorkspace.changed_paths(new_file, allowed_paths=("app.py",))
+
+    deleted_file = """diff --git a/app.py b/app.py
+deleted file mode 100644
+--- a/app.py
++++ /dev/null
+@@ -1 +0,0 @@
+-print('safe')
+"""
+    with pytest.raises(WorkspaceError, match="task file_scope.*app.py"):
+        RepositoryWorkspace.changed_paths(deleted_file, allowed_paths=())
+
+
+def test_patch_file_scope_is_rechecked_when_staging(tmp_path):
+    workspace = init_repo(tmp_path / "repo", {"app.py": "print('safe')\\n"})
+    snapshot = workspace.capture()
+    with pytest.raises(WorkspaceError, match="task file_scope"):
+        with workspace.staged_patch(snapshot, PATCH, allowed_paths=("README.md",)):
+            pytest.fail("out-of-scope patch must never reach staging")
+
+
+def test_patch_file_scope_is_rechecked_before_application(tmp_path):
+    workspace = init_repo(tmp_path / "repo", {"app.py": "def value():\\n    return 1\\n"})
+    snapshot = workspace.capture()
+    with pytest.raises(WorkspaceError, match="task file_scope"):
+        workspace.apply_patch(snapshot, PATCH, allowed_paths=("README.md",))
+    assert "return 1" in (workspace.root / "app.py").read_text(encoding="utf-8")
+
+
+def test_task_file_scope_rejects_noncanonical_and_private_allowlist_paths():
+    for allowed_paths in (("src//module.py",), (".env",), (".venv/bin/tool",), ("../outside.py",)):
+        with pytest.raises(WorkspaceError):
+            RepositoryWorkspace.validate_file_scope(allowed_paths)
