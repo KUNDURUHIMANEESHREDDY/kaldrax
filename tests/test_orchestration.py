@@ -454,6 +454,7 @@ def test_cli_orchestration_passes_task_outputs_through_repository_patch_and_appl
                 if "focused KALDRAX implementation worker" in system_prompt:
                     assert payload["phase"] == "implementation"
                     assert payload["file_scope"] == ["src/operations.py", "tests/test_operations.py"]
+                    assert payload["allowed_paths"] == payload["file_scope"]
                     assert any(
                         edge["target"] == "src/operations.py"
                         for edge in payload["repository_context"]["dependencies"]
