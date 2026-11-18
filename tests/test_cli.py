@@ -326,3 +326,95 @@ def test_repo_analyze_cli_reports_stack_and_changed_path_impact(tmp_path, monkey
     assert "npm" in result["build_systems"]
     assert "src/app.ts" in result["affected_components"]["src/helper.ts"]
     assert result["relevant_tests"]["src/helper.ts"] == ["tests/app.test.ts"]
+
+def test_team_full_verification_preflights_docker_before_provider_clients(monkeypatch, tmp_path):
+    import kaldrax.cli as cli
+    from types import SimpleNamespace
+
+    events = []
+
+    class FakeWorkspace:
+        def __init__(self, root):
+            events.append(("workspace", root))
+
+        def checkpoint_binding(self):
+            events.append(("clean-checkout",))
+            return {"root": str(tmp_path.resolve()), "head": "a" * 40}
+
+    class FakeSandbox:
+        def __init__(self, *, workspace_root, image):
+            events.append(("sandbox", image))
+
+        def preflight_full_suite(self):
+            events.append(("preflight",))
+            raise RuntimeError("Docker image preflight failed")
+
+    monkeypatch.setenv("KALDRAX_SANDBOX_IMAGE", "kaldrax-verification:py313")
+    monkeypatch.setattr(cli, "RepositoryWorkspace", FakeWorkspace)
+    monkeypatch.setattr(cli, "WorkspaceSandboxRunner", FakeSandbox)
+    monkeypatch.setattr(
+        cli, "_require_provider",
+        lambda: pytest.fail("provider configuration must not be read before full-suite preflight"),
+    )
+    args = SimpleNamespace(
+        verify_module="full",
+        workspace=tmp_path,
+        verify_arg=None,
+        sandbox_workspace_root=tmp_path / "sandbox",
+    )
+
+    with pytest.raises(RuntimeError, match="Docker image preflight failed"):
+        cli._team(args)
+
+    assert [event[0] for event in events] == ["workspace", "clean-checkout", "sandbox", "preflight"]
+
+
+def test_orchestrate_full_verification_preflights_docker_before_provider_clients(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    import kaldrax.cli as cli
+
+    events = []
+
+    class FakeWorkspace:
+        def __init__(self, root):
+            events.append(("workspace", root))
+
+        def checkpoint_binding(self):
+            events.append(("clean-checkout",))
+            return {"root": str(tmp_path.resolve()), "head": "b" * 40}
+
+    class FakeSandbox:
+        def __init__(self, *, workspace_root, image):
+            events.append(("sandbox", image))
+
+        def preflight_full_suite(self):
+            events.append(("preflight",))
+            raise RuntimeError("Docker image preflight failed")
+
+    monkeypatch.setenv("KALDRAX_API_KEY", "test-key")
+    monkeypatch.setenv("KALDRAX_PLANNER_MODEL", "planner")
+    monkeypatch.setenv("KALDRAX_MODEL", "builder")
+    monkeypatch.setenv("KALDRAX_REVIEWER_MODEL", "reviewer")
+    monkeypatch.setenv("KALDRAX_EVALUATOR_MODEL", "evaluator")
+    monkeypatch.setenv("KALDRAX_SANDBOX_IMAGE", "kaldrax-verification:py313")
+    monkeypatch.setattr(cli, "RepositoryWorkspace", FakeWorkspace)
+    monkeypatch.setattr(cli, "WorkspaceSandboxRunner", FakeSandbox)
+    monkeypatch.setattr(
+        cli, "_client",
+        lambda *args, **kwargs: pytest.fail("provider clients must not be created before full-suite preflight"),
+    )
+    args = SimpleNamespace(
+        workspace=tmp_path,
+        apply=False,
+        objective="Verify repository",
+        criterion=["tests pass"],
+        verify_module="full",
+        verify_arg=None,
+        sandbox_workspace_root=tmp_path / "sandbox",
+    )
+
+    with pytest.raises(RuntimeError, match="Docker image preflight failed"):
+        cli._orchestrate(args)
+
+    assert [event[0] for event in events] == ["workspace", "clean-checkout", "sandbox", "preflight"]
