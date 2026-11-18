@@ -736,3 +736,10 @@ This file records implementation decisions, changes, commands, verification, and
 - Source, tests, and documentation were committed to main.
 - Local Python test execution remains unavailable in this environment; the repository files were accessed through GitHub's file API, not a local checkout.
 - The verification code paths and regression assertions were re-fetched from main for source-level inspection. Do not mark this milestone verified until the Python matrix and Docker-backed integration run complete.
+
+### Full verification preflight refinement
+- The CLI now checks the selected repository worktree is clean, verifies Docker daemon reachability, inspects the configured image without pulling, and starts a constrained no-network probe to confirm pytest imports.
+- Both team and DAG orchestration perform this before provider clients are created. A missing Docker daemon, image, or pytest installation cannot consume model budget.
+- The probe uses pull-never, network-none, read-only root, dropped capabilities, non-root UID, and explicit CPU/memory/PID bounds.
+- Added CLI regression tests proving both commands stop before provider clients when preflight fails, plus sandbox tests for missing images and missing pytest.
+- Full-suite total-deadline exhaustion is now recorded as a timeout rather than a generic failed stage.
