@@ -53,7 +53,23 @@ class WorkspaceSandboxRunner(SandboxRunner):
         ".tox", "dist", "build", "coverage", ".next", ".turbo",
         ".aws", ".ssh", ".docker", ".kube", "secrets", "credentials", "certs", "certificates",
     }
-    ALLOWED_MODULES = {"compileall", "unittest", "pytest", "desktop"}
+    ALLOWED_MODULES = {"compileall", "unittest", "pytest", "desktop", "ci-quality"}
+    CI_QUALITY_VERIFICATION_COMMAND = (
+        "failures=0; "
+        "run_check() { name=\\"$1\\"; shift; "
+        "printf '\\n=== %s ===\\n' \\"$name\\"; "
+        "\\"$@\\"; code=$?; "
+        "printf '=== %s exit_code=%s ===\\n' \\"$name\\" \\"$code\\"; "
+        "[ \\"$code\\" -eq 0 ] || failures=1; "
+        "}; "
+        "run_check memory-retrieval-benchmark python -B -m kaldrax.cli memory benchmark; "
+        "run_check lexical-hybrid-comparison python -B -m kaldrax.cli memory benchmark-compare; "
+        "run_check deterministic-evaluator python -B -m kaldrax.cli benchmark-evaluator --mode deterministic --min-accuracy 0.80; "
+        "run_check memory-ci-quality-report python -B -m kaldrax.cli memory quality-report --profile ci "
+        "--json-report /tmp/kaldrax-memory-quality.json "
+        "--markdown-report /tmp/kaldrax-memory-quality.md; "
+        "exit \\"$failures\\""
+    )
     DESKTOP_VERIFICATION_COMMAND = (
         "set -eu; "
         "cd /workspace/desktop; "
@@ -144,8 +160,8 @@ class WorkspaceSandboxRunner(SandboxRunner):
             for item in module_args
         ):
             raise ValueError("verification arguments are invalid or exceed the size limit")
-        if module == "desktop" and module_args:
-            raise ValueError("desktop verification uses a fixed command and accepts no module arguments")
+        if module in {"desktop", "ci-quality"} and module_args:
+            raise ValueError(f"{module} verification uses a fixed command and accepts no module arguments")
         if not 1 <= timeout_seconds <= 120:
             raise ValueError("timeout_seconds must be between 1 and 120")
         if not 64 <= memory_mb <= 1024:
@@ -180,10 +196,12 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 "--env", "PYTHONDONTWRITEBYTECODE=1",
                 "--env", "PYTHONPATH=/workspace/src:/workspace",
             ]
-            if module == "desktop":
-                command.extend([
-                    self.image, "/bin/sh", "-c", self.DESKTOP_VERIFICATION_COMMAND,
-                ])
+            if module in {"desktop", "ci-quality"}:
+                script = (
+                    self.DESKTOP_VERIFICATION_COMMAND
+                    if module == "desktop" else self.CI_QUALITY_VERIFICATION_COMMAND
+                )
+                command.extend([self.image, "/bin/sh", "-c", script])
             else:
                 command.extend([self.image, "python", "-B", "-m", module, *module_args])
             try:
@@ -358,6 +376,14 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 "name": "full_test_suite",
                 "module": "pytest",
                 "module_args": ("-q",),
+                "memory_mb": 512,
+                "cpu_count": 1.0,
+                "pids_limit": 128,
+            },
+            {
+                "name": "deterministic_ci_quality_checks",
+                "module": "ci-quality",
+                "module_args": (),
                 "memory_mb": 512,
                 "cpu_count": 1.0,
                 "pids_limit": 128,
