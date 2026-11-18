@@ -191,7 +191,7 @@ export function TeamRunsPage({ settings, apiKey, operation, onOperationStarted }
   const [agentNamespace, setAgentNamespace] = useState("team");
   const [useRepository, setUseRepository] = useState(false);
   const [applyChanges, setApplyChanges] = useState(false);
-  const [verifyModule, setVerifyModule] = useState<"unittest" | "pytest" | "compileall">("unittest");
+  const [verifyModule, setVerifyModule] = useState<"unittest" | "pytest" | "compileall" | "full">("unittest");
   const [sandboxTimeout, setSandboxTimeout] = useState(120);
   const [reports, setReports] = useState<SavedTeamReport[]>([]);
   const [busy, setBusy] = useState(false);
@@ -274,7 +274,7 @@ export function TeamRunsPage({ settings, apiKey, operation, onOperationStarted }
             <div className="kx-form-grid">
               <label className="kx-field">Verification command
                 <select value={verifyModule} onChange={event => setVerifyModule(event.target.value as typeof verifyModule)}>
-                  <option value="unittest">Python unittest</option><option value="pytest">pytest</option><option value="compileall">Python compileall</option>
+                  <option value="full">Full repository (pytest + compileall)</option><option value="unittest">Python unittest</option><option value="pytest">pytest</option><option value="compileall">Python compileall</option>
                 </select>
               </label>
               <label className="kx-field">Sandbox timeout (seconds)
