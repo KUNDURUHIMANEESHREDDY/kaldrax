@@ -216,7 +216,7 @@ def test_full_suite_preflight_requires_local_python_node_image_and_pytest_withou
         if command[1:3] == ["image", "inspect"]:
             return SimpleNamespace(returncode=0, stdout="sha256:local-image", stderr="")
         if command[1] == "run":
-            return SimpleNamespace(returncode=0, stdout="python=3.11.8\nv24.2.0\n10.8.2\n", stderr="")
+            return SimpleNamespace(returncode=0, stdout="python313=3.13.1\npython311=3.11.8\nv24.2.0\n10.8.2\n", stderr="")
         raise AssertionError(command)
 
     runner = WorkspaceSandboxRunner(
@@ -228,8 +228,9 @@ def test_full_suite_preflight_requires_local_python_node_image_and_pytest_withou
     assert evidence == {
         "image": "kaldrax-verification:full",
         "image_id": "sha256:local-image",
-        "python": "3.11.8",
-        "pytest": "available",
+        "python_3_13": "3.13.1",
+        "python_3_11": "3.11.8",
+        "pytest": "available_on_both_python_runtimes",
         "node": "v24.2.0",
         "npm": "10.8.2",
         "desktop_dependencies": "prebuilt",
@@ -341,7 +342,7 @@ def test_full_suite_preflight_rejects_wrong_node_major(monkeypatch, tmp_path):
             return SimpleNamespace(returncode=0, stdout="sha256:local-image", stderr="")
         return SimpleNamespace(
             returncode=0,
-            stdout="python=3.11.8\nv22.0.0\n10.8.2\n",
+            stdout="python313=3.13.1\npython311=3.11.8\nv22.0.0\n10.8.2\n",
             stderr="",
         )
 
@@ -426,3 +427,27 @@ def test_workspace_sandbox_runs_deterministic_ci_quality_checks_in_fixed_offline
     assert "memory quality-report --profile ci" in script
     assert "--live-extraction" not in script
     assert "/tmp/kaldrax-memory-quality.json" in script
+
+def test_full_suite_preflight_rejects_missing_python_311_runtime(monkeypatch, tmp_path):
+    import shutil
+
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/docker")
+
+    def run_factory(command, **kwargs):
+        if command[1] == "info":
+            return SimpleNamespace(returncode=0, stdout="29.0", stderr="")
+        if command[1:3] == ["image", "inspect"]:
+            return SimpleNamespace(returncode=0, stdout="sha256:local-image", stderr="")
+        return SimpleNamespace(
+            returncode=0,
+            stdout="python313=3.13.1\npython311=3.12.0\nv24.2.0\n10.8.2\n",
+            stderr="",
+        )
+
+    runner = WorkspaceSandboxRunner(
+        workspace_root=tmp_path / "sandbox",
+        image="kaldrax-verification:missing-python311",
+        run_factory=run_factory,
+    )
+    with pytest.raises(RuntimeError, match="requires the Python 3.11 CI runtime"):
+        runner.preflight_full_suite()
