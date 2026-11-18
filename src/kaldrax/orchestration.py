@@ -277,8 +277,26 @@ class ExecutionCheckpoint:
 class CheckpointStore:
     """Atomic JSON checkpoints; a checkpoint is bound to one exact graph."""
 
-    def __init__(self, path: Path | str) -> None:
+    def __init__(
+        self,
+        path: Path | str,
+        *,
+        repository_binding: dict[str, str] | None = None,
+    ) -> None:
+        if repository_binding is not None:
+            if (
+                not isinstance(repository_binding, dict)
+                or set(repository_binding) != {"root", "head"}
+                or not isinstance(repository_binding.get("root"), str)
+                or not Path(repository_binding["root"]).is_absolute()
+                or not isinstance(repository_binding.get("head"), str)
+                or len(repository_binding["head"]) not in {40, 64}
+                or any(char not in "0123456789abcdefABCDEF" for char in repository_binding["head"])
+            ):
+                raise TaskGraphError("repository checkpoint binding must contain an absolute root and full Git HEAD")
+            repository_binding = dict(repository_binding)
         self.path = Path(path)
+        self.repository_binding = repository_binding
         self._lock = threading.RLock()
 
     def load(self, graph: TaskGraph) -> ExecutionCheckpoint | None:
@@ -289,6 +307,10 @@ class CheckpointStore:
                 payload = json.loads(self.path.read_text(encoding="utf-8"))
                 if payload["schema_version"] != 1 or payload["graph_fingerprint"] != graph.fingerprint():
                     raise TaskGraphError("checkpoint does not match this task graph")
+                if payload.get("repository_binding") != self.repository_binding:
+                    raise TaskGraphError(
+                        "checkpoint does not match this repository checkout; repository root or HEAD changed"
+                    )
                 nodes = {
                     key: NodeCheckpoint(
                         state=TaskState(value["state"]), attempts=int(value["attempts"]),
@@ -311,6 +333,7 @@ class CheckpointStore:
             payload = {
                 "schema_version": checkpoint.schema_version,
                 "graph_fingerprint": checkpoint.graph_fingerprint,
+                "repository_binding": self.repository_binding,
                 "nodes": {
                     key: {**asdict(value), "state": value.state.value}
                     for key, value in checkpoint.nodes.items()
