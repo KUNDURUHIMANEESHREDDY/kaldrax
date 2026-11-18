@@ -52,7 +52,15 @@ class WorkspaceSandboxRunner(SandboxRunner):
         ".tox", "dist", "build", "coverage", ".next", ".turbo",
         ".aws", ".ssh", ".docker", ".kube", "secrets", "credentials", "certs", "certificates",
     }
-    ALLOWED_MODULES = {"compileall", "unittest", "pytest"}
+    ALLOWED_MODULES = {"compileall", "unittest", "pytest", "desktop"}
+    DESKTOP_VERIFICATION_COMMAND = (
+        "set -eu; "
+        "cd /workspace/desktop; "
+        "sha256sum -c /opt/kaldrax-desktop-deps.sha256; "
+        "ln -s /opt/kaldrax-deps/desktop/node_modules node_modules; "
+        "npm run lint; "
+        "npm run build"
+    )
 
     def __init__(self, *, image: str | None = None, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -106,9 +114,11 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 count += 1
                 total += size
                 if count > self.MAX_WORKSPACE_FILES:
-                    raise ValueError("sandbox workspace exceeds the 300-file limit")
+                    raise ValueError(f"sandbox workspace exceeds the {self.MAX_WORKSPACE_FILES}-file limit")
                 if total > self.MAX_WORKSPACE_BYTES:
-                    raise ValueError("sandbox workspace exceeds the 5 MB limit")
+                    raise ValueError(
+                        f"sandbox workspace exceeds the {self.MAX_WORKSPACE_BYTES}-byte limit"
+                    )
                 target = target_dir / name
                 shutil.copyfile(item, target)
                 target.chmod(0o755 if os.access(item, os.X_OK) else 0o644)
@@ -132,6 +142,8 @@ class WorkspaceSandboxRunner(SandboxRunner):
             for item in module_args
         ):
             raise ValueError("verification arguments are invalid or exceed the size limit")
+        if module == "desktop" and module_args:
+            raise ValueError("desktop verification uses a fixed command and accepts no module arguments")
         if not 1 <= timeout_seconds <= 120:
             raise ValueError("timeout_seconds must be between 1 and 120")
         if not 64 <= memory_mb <= 1024:
@@ -165,8 +177,13 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 "--env", "HOME=/tmp",
                 "--env", "PYTHONDONTWRITEBYTECODE=1",
                 "--env", "PYTHONPATH=/workspace/src:/workspace",
-                self.image, "python", "-B", "-m", module, *module_args,
             ]
+            if module == "desktop":
+                command.extend([
+                    self.image, "/bin/sh", "-c", self.DESKTOP_VERIFICATION_COMMAND,
+                ])
+            else:
+                command.extend([self.image, "python", "-B", "-m", module, *module_args])
             try:
                 process = self._popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             except OSError as exc:
@@ -262,6 +279,12 @@ class WorkspaceSandboxRunner(SandboxRunner):
             raise SandboxExecutionError(
                 "configured verification image is not available locally; build or pull it before running KALDRAX"
             )
+        probe_script = (
+            "python -B -c 'import pytest' && "
+            "node --version && npm --version && "
+            "test -d /opt/kaldrax-deps/desktop/node_modules && "
+            "test -f /opt/kaldrax-desktop-deps.sha256"
+        )
         probe = [
             docker, "run", "--rm", "--pull=never",
             "--network", "none",
@@ -271,8 +294,8 @@ class WorkspaceSandboxRunner(SandboxRunner):
             "--security-opt", "no-new-privileges",
             "--user", "65534:65534",
             "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=16m",
-            "--entrypoint", "python",
-            self.image, "-B", "-c", "import pytest",
+            "--entrypoint", "/bin/sh",
+            self.image, "-c", probe_script,
         ]
         try:
             checked = self._run(
@@ -282,12 +305,19 @@ class WorkspaceSandboxRunner(SandboxRunner):
             raise SandboxExecutionError("Unable to verify pytest availability in the configured image") from None
         if checked.returncode != 0:
             raise SandboxExecutionError(
-                "configured verification image does not provide an importable pytest installation"
+                "configured verification image must provide pytest, Node.js, npm, "
+                "and the prebuilt locked desktop dependencies"
             )
+        versions = str(checked.stdout).splitlines()
+        if len(versions) < 2:
+            raise SandboxExecutionError("configured verification image returned incomplete toolchain evidence")
         return {
             "image": self.image,
             "image_id": str(inspected.stdout).strip(),
             "pytest": "available",
+            "node": versions[0],
+            "npm": versions[1],
+            "desktop_dependencies": "prebuilt",
             "pull_policy": "never",
             "network": "none",
         }
@@ -317,6 +347,11 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 "name": "source_and_test_compilation",
                 "module": "compileall",
                 "module_args": ("-q", "."),
+            },
+            {
+                "name": "desktop_lint_and_production_build",
+                "module": "desktop",
+                "module_args": (),
             },
         )
         steps: list[dict[str, object]] = []
