@@ -527,6 +527,7 @@ class NodeCheckpoint:
     output: str = ""
     error: str = ""
     updated_at: str = ""
+    total_attempts: int = 0
 
 
 @dataclass
@@ -535,6 +536,8 @@ class ExecutionCheckpoint:
     graph_fingerprint: str
     nodes: dict[str, NodeCheckpoint] = field(default_factory=dict)
     events: list[dict[str, str]] = field(default_factory=list)
+    graph: TaskGraph | None = None
+    repair_history: list[dict[str, object]] = field(default_factory=list)
 
 
 class CheckpointStore:
@@ -545,6 +548,7 @@ class CheckpointStore:
         path: Path | str,
         *,
         repository_binding: dict[str, str] | None = None,
+        request_fingerprint: str | None = None,
     ) -> None:
         if repository_binding is not None:
             if (
@@ -558,8 +562,14 @@ class CheckpointStore:
             ):
                 raise TaskGraphError("repository checkpoint binding must contain an absolute root and full Git HEAD")
             repository_binding = dict(repository_binding)
+        if request_fingerprint is not None and (
+            not isinstance(request_fingerprint, str) or len(request_fingerprint) != 64
+            or any(char not in "0123456789abcdefABCDEF" for char in request_fingerprint)
+        ):
+            raise TaskGraphError("request fingerprint must be a 64-character SHA-256 digest")
         self.path = Path(path)
         self.repository_binding = repository_binding
+        self.request_fingerprint = request_fingerprint
         self._lock = threading.RLock()
 
     def load(self, graph: TaskGraph) -> ExecutionCheckpoint | None:
@@ -570,6 +580,12 @@ class CheckpointStore:
                 payload = json.loads(self.path.read_text(encoding="utf-8"))
                 if payload["schema_version"] != 1 or payload["graph_fingerprint"] != graph.fingerprint():
                     raise TaskGraphError("checkpoint does not match this task graph")
+                stored_request = payload.get("request_fingerprint")
+                if (
+                    stored_request is not None and self.request_fingerprint is not None
+                    and stored_request != self.request_fingerprint
+                ):
+                    raise TaskGraphError("checkpoint does not match this objective and acceptance criteria")
                 if payload.get("repository_binding") != self.repository_binding:
                     raise TaskGraphError(
                         "checkpoint does not match this repository checkout; repository root or HEAD changed"
@@ -579,16 +595,58 @@ class CheckpointStore:
                         state=TaskState(value["state"]), attempts=int(value["attempts"]),
                         output=value.get("output", ""), error=value.get("error", ""),
                         updated_at=value.get("updated_at", ""),
+                        total_attempts=int(value.get("total_attempts", value.get("attempts", 0))),
                     )
                     for key, value in payload["nodes"].items()
                 }
                 if set(nodes) != {task.id for task in graph.tasks}:
                     raise TaskGraphError("checkpoint task set is incomplete")
-                return ExecutionCheckpoint(1, graph.fingerprint(), nodes, payload.get("events", []))
+                stored_graph = (
+                    TaskGraph.from_dict(payload["graph"])
+                    if payload.get("graph") is not None else graph
+                )
+                if stored_graph.fingerprint() != graph.fingerprint():
+                    raise TaskGraphError("checkpoint stored graph does not match its graph fingerprint")
+                repair_history = payload.get("repair_history", [])
+                if not isinstance(repair_history, list) or any(not isinstance(item, dict) for item in repair_history):
+                    raise TaskGraphError("checkpoint repair history is invalid")
+                return ExecutionCheckpoint(
+                    1, graph.fingerprint(), nodes, payload.get("events", []),
+                    stored_graph, repair_history,
+                )
             except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
                 if isinstance(exc, TaskGraphError):
                     raise
                 raise TaskGraphError("checkpoint is corrupt or invalid") from exc
+
+    def load_latest(self) -> tuple[TaskGraph, ExecutionCheckpoint] | None:
+        """Load the most recent persisted graph revision for this request and repository."""
+        with self._lock:
+            if not self.path.exists():
+                return None
+            try:
+                payload = json.loads(self.path.read_text(encoding="utf-8"))
+                if payload.get("schema_version") != 1:
+                    raise TaskGraphError("checkpoint schema version is unsupported")
+                if payload.get("request_fingerprint") != self.request_fingerprint:
+                    raise TaskGraphError("checkpoint does not match this objective and acceptance criteria")
+                if payload.get("repository_binding") != self.repository_binding:
+                    raise TaskGraphError(
+                        "checkpoint does not match this repository checkout; repository root or HEAD changed"
+                    )
+                if payload.get("graph") is None:
+                    return None
+                graph = TaskGraph.from_dict(payload["graph"])
+                if payload.get("graph_fingerprint") != graph.fingerprint():
+                    raise TaskGraphError("checkpoint graph payload does not match its fingerprint")
+            except TaskGraphError:
+                raise
+            except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise TaskGraphError("checkpoint is corrupt or invalid") from exc
+        checkpoint = self.load(graph)
+        if checkpoint is None:
+            raise TaskGraphError("checkpoint disappeared while it was being loaded")
+        return graph, checkpoint
 
     def save(self, checkpoint: ExecutionCheckpoint) -> None:
         with self._lock:
@@ -596,7 +654,10 @@ class CheckpointStore:
             payload = {
                 "schema_version": checkpoint.schema_version,
                 "graph_fingerprint": checkpoint.graph_fingerprint,
+                "request_fingerprint": self.request_fingerprint,
                 "repository_binding": self.repository_binding,
+                "graph": checkpoint.graph.to_dict() if checkpoint.graph is not None else None,
+                "repair_history": checkpoint.repair_history,
                 "nodes": {
                     key: {**asdict(value), "state": value.state.value}
                     for key, value in checkpoint.nodes.items()
