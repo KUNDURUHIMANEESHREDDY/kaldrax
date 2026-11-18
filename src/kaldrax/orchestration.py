@@ -562,6 +562,16 @@ class TaskDecomposer:
                     raise TaskGraphError(
                         f"repair plan changed or removed successful task {task_id}; completed work is immutable"
                     )
+            diagnoses_by_id = {item["task_id"]: item for item in diagnoses}
+            for task_id, original in affected.items():
+                if (
+                    report.states.get(task_id) == TaskState.FAILED.value
+                    and diagnoses_by_id[task_id].get("retryable") is False
+                    and repaired_by_id.get(task_id) == original
+                ):
+                    raise TaskGraphError(
+                        f"non-retryable failed task {task_id} must be revised or retired, not blindly retried"
+                    )
             retired_set = set(retired)
             if retired_set - set(affected) or retired_set & set(successful):
                 raise TaskGraphError("repair plan attempted to retire a task that is not unfinished")
