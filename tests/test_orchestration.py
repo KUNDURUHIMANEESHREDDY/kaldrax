@@ -461,6 +461,9 @@ def test_cli_orchestration_passes_task_outputs_through_repository_patch_and_appl
                     )
                     return "Deliverable: implement subtract(left, right)."
                 assert payload["task_graph_context"]["task_outputs"]["implement-subtract"]
+                assert payload["task_graph_context"]["allowed_paths"] == [
+                    "src/operations.py", "tests/test_operations.py",
+                ]
                 return json.dumps({
                     "summary": "Implement integer subtraction instead of raising NotImplementedError.",
                     "patch": patch,
