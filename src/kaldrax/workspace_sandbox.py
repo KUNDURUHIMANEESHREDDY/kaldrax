@@ -17,7 +17,7 @@ from .sandbox import SandboxExecutionError, SandboxResult, SandboxRunner
 
 @dataclass(frozen=True)
 class WorkspaceVerificationSuiteResult:
-    """Combined test-suite and source-compilation evidence for a full repository run."""
+    """Structured evidence for the full Python, deterministic quality, and desktop verification gates."""
 
     exit_code: int
     stdout: str
@@ -286,7 +286,7 @@ class WorkspaceSandboxRunner(SandboxRunner):
             )
 
     def preflight_full_suite(self) -> dict[str, str]:
-        """Confirm Docker, the local image, and pytest availability without pulling or networking."""
+        """Confirm Docker, pytest, Node/npm, and cached desktop dependencies without pulling or networking."""
         docker = self._check_docker()
         try:
             inspected = self._run(
@@ -322,7 +322,7 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 probe, capture_output=True, text=True, timeout=15, check=False,
             )
         except (OSError, subprocess.TimeoutExpired):
-            raise SandboxExecutionError("Unable to verify pytest availability in the configured image") from None
+            raise SandboxExecutionError("Unable to verify the full Python/Node verification toolchain") from None
         if checked.returncode != 0:
             raise SandboxExecutionError(
                 "configured verification image must provide pytest, Node.js, npm, "
@@ -363,7 +363,7 @@ class WorkspaceSandboxRunner(SandboxRunner):
         timeout_seconds: int = 120,
         cancel_file: Path | str | None = None,
     ) -> WorkspaceVerificationSuiteResult:
-        """Run the complete Python suite, compile all Python files, and verify the desktop build.
+        """Run the Python suite, deterministic CI quality checks, full compile, and desktop build.
 
         The commands and discovery roots are fixed so callers cannot accidentally
         report a passing subset as a full-repository verification.
