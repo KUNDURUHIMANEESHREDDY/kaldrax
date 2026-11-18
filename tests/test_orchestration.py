@@ -1109,3 +1109,40 @@ def test_cli_orchestration_keeps_operator_gated_recovery_blocked_across_resume(
     assert clients["planner"].replan_calls == 0
     assert clients["builder"].builder_calls == 1
     capsys.readouterr()
+
+def test_replan_rejects_blind_retry_of_non_retryable_failed_task():
+    task = TaskNode("failed", "Run the incompatible implementation")
+    graph = TaskGraph("Build", (task,))
+    report = TaskGraphReport(
+        graph.objective,
+        {"failed": TaskState.FAILED.value},
+        {},
+        {"failed": 1},
+        {"failed": "ValueError: incompatible input"},
+        [],
+    )
+    planner = Planner(json.dumps({
+        "repair_summary": "Retry the exact same task.",
+        "retired_task_ids": [],
+        "tasks": [{
+            "id": "failed",
+            "description": "Run the incompatible implementation",
+            "depends_on": [],
+            "acceptance_criteria": [],
+        }],
+    }))
+
+    with pytest.raises(TaskGraphError, match="must be revised or retired"):
+        TaskDecomposer(planner).replan(
+            graph,
+            report,
+            [{
+                "task_id": "failed",
+                "category": "implementation",
+                "root_cause": "The implementation is incompatible.",
+                "evidence": {"type": "task_error", "excerpt": "incompatible input"},
+                "retryable": False,
+                "operator_input_required": False,
+                "repair_instruction": "Change the implementation instead of retrying unchanged code.",
+            }],
+        )
