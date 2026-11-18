@@ -56,11 +56,11 @@ class WorkspaceSandboxRunner(SandboxRunner):
     ALLOWED_MODULES = {"compileall", "unittest", "pytest", "desktop", "ci-quality"}
     CI_QUALITY_VERIFICATION_COMMAND = (
         "failures=0; "
-        "run_check() { name=\\"$1\\"; shift; "
-        "printf '\\n=== %s ===\\n' \\"$name\\"; "
-        "\\"$@\\"; code=$?; "
-        "printf '=== %s exit_code=%s ===\\n' \\"$name\\" \\"$code\\"; "
-        "[ \\"$code\\" -eq 0 ] || failures=1; "
+        "run_check() { name=\"$1\"; shift; "
+        "printf '\\n=== %s ===\\n' \"$name\"; "
+        "\"$@\"; code=$?; "
+        "printf '=== %s exit_code=%s ===\\n' \"$name\" \"$code\"; "
+        "[ \"$code\" -eq 0 ] || failures=1; "
         "}; "
         "run_check memory-retrieval-benchmark python -B -m kaldrax.cli memory benchmark; "
         "run_check lexical-hybrid-comparison python -B -m kaldrax.cli memory benchmark-compare; "
@@ -68,7 +68,7 @@ class WorkspaceSandboxRunner(SandboxRunner):
         "run_check memory-ci-quality-report python -B -m kaldrax.cli memory quality-report --profile ci "
         "--json-report /tmp/kaldrax-memory-quality.json "
         "--markdown-report /tmp/kaldrax-memory-quality.md; "
-        "exit \\"$failures\\""
+        "exit \"$failures\""
     )
     DESKTOP_VERIFICATION_COMMAND = (
         "set -eu; "
