@@ -320,7 +320,7 @@ kaldrax team --workspace . --objective "Fix CSV parsing" --criterion "csv.reader
 
 The apply flag modifies the working tree but does not create a Git commit. It rechecks that the original HEAD is unchanged and the checkout remains clean immediately before applying. Without apply, the report records a verified dry run and leaves the checkout untouched. Existing prose-only team operation remains available without a workspace argument.
 
-Supported single-stage verification modules are unittest, pytest, and compileall. The default remains unittest discovery under the tests directory. For a full Python repository gate, use --verify-module full; this runs the complete configured pytest discovery (pytest -q) and then compiles src and tests (compileall -q src tests). Both stages must pass, and at least one test must pass. The command set and discovery roots are fixed; --verify-arg is not accepted with the full profile.
+Supported single-stage verification modules are unittest, pytest, and compileall. The default remains unittest discovery under the tests directory. For a full Python repository gate, use --verify-module full; this runs the complete configured pytest discovery (pytest -q) and then compiles every Python file in the staged repository (compileall -q .). Both stages must pass, and at least one test must pass. The command set and discovery roots are fixed; --verify-arg is not accepted with the full profile.
 
 The full profile requires a pre-pulled Python image containing pytest. Build the included image once and configure it before starting the run:
 
