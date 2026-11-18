@@ -213,7 +213,49 @@ class RepositoryWorkspace:
         )
 
     @classmethod
-    def changed_paths(cls, patch: str) -> tuple[str, ...]:
+    def validate_file_scope(
+        cls, allowed_paths: tuple[str, ...] | None,
+    ) -> tuple[str, ...] | None:
+        """Validate and canonicalize an exact repository-relative path allowlist."""
+        if allowed_paths is None:
+            return None
+        if not isinstance(allowed_paths, tuple) or any(
+            not isinstance(path, str) for path in allowed_paths
+        ):
+            raise WorkspaceError("task file_scope must be a tuple of relative repository paths")
+        if len(allowed_paths) != len(set(allowed_paths)):
+            raise WorkspaceError("task file_scope contains duplicate repository paths")
+        for path in allowed_paths:
+            cls._validate_path(path)
+            if PurePosixPath(path).as_posix() != path:
+                raise WorkspaceError(f"task file_scope path is not canonical: {path!r}")
+        return tuple(sorted(allowed_paths))
+
+    @classmethod
+    def enforce_file_scope(
+        cls,
+        changed_paths: tuple[str, ...],
+        allowed_paths: tuple[str, ...] | None,
+    ) -> None:
+        """Reject every patch path not explicitly owned by the task graph."""
+        allowed = cls.validate_file_scope(allowed_paths)
+        if allowed is None:
+            return
+        unexpected = sorted(set(changed_paths) - set(allowed))
+        if unexpected:
+            preview = ", ".join(unexpected[:20])
+            suffix = f" (and {len(unexpected) - 20} more)" if len(unexpected) > 20 else ""
+            raise WorkspaceError(
+                f"patch exceeds task file_scope; out-of-scope paths: {preview}{suffix}"
+            )
+
+    @classmethod
+    def changed_paths(
+        cls,
+        patch: str,
+        *,
+        allowed_paths: tuple[str, ...] | None = None,
+    ) -> tuple[str, ...]:
         if not isinstance(patch, str) or not patch.strip():
             raise WorkspaceError("builder patch must be a non-empty unified Git diff")
         if len(patch.encode("utf-8")) > cls.MAX_PATCH_BYTES:
@@ -269,7 +311,9 @@ class RepositoryWorkspace:
         finish_section()
         if current_old is None:
             raise WorkspaceError("patch must contain at least one 'diff --git' section")
-        return tuple(sorted(changed))
+        result = tuple(sorted(changed))
+        cls.enforce_file_scope(result, allowed_paths)
+        return result
 
     @staticmethod
     def _validate_path(path: str) -> None:
@@ -286,11 +330,15 @@ class RepositoryWorkspace:
 
     @contextmanager
     def staged_patch(
-        self, snapshot: WorkspaceSnapshot, patch: str,
+        self,
+        snapshot: WorkspaceSnapshot,
+        patch: str,
+        *,
+        allowed_paths: tuple[str, ...] | None = None,
     ) -> Iterator[tuple[Path, tuple[str, ...]]]:
         if snapshot.root != self.root:
             raise WorkspaceError("snapshot belongs to a different repository")
-        changed = self.changed_paths(patch)
+        changed = self.changed_paths(patch, allowed_paths=allowed_paths)
         if any(
             path == submodule or path.startswith(f"{submodule}/")
             for path in changed for submodule in snapshot.submodule_paths
@@ -330,8 +378,14 @@ class RepositoryWorkspace:
             raise WorkspaceError(message[:1000])
         return result.stdout.decode("utf-8", errors="replace")
 
-    def apply_patch(self, snapshot: WorkspaceSnapshot, patch: str) -> tuple[str, ...]:
-        changed = self.changed_paths(patch)
+    def apply_patch(
+        self,
+        snapshot: WorkspaceSnapshot,
+        patch: str,
+        *,
+        allowed_paths: tuple[str, ...] | None = None,
+    ) -> tuple[str, ...]:
+        changed = self.changed_paths(patch, allowed_paths=allowed_paths)
         if snapshot.root != self.root:
             raise WorkspaceError("snapshot belongs to a different repository")
         if any(
