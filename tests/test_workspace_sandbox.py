@@ -90,14 +90,18 @@ def test_full_repository_suite_runs_pytest_and_compileall_with_fixed_full_scope(
     assert result.exit_code == 0
     assert result.test_count == 9
     assert [step["name"] for step in result.steps] == [
-        "full_test_suite", "source_and_test_compilation",
+        "full_test_suite",
+        "source_and_test_compilation",
+        "desktop_lint_and_production_build",
     ]
     assert runner.calls[0][0:2] == ("pytest", ("-q",))
     assert runner.calls[1][0:2] == ("compileall", ("-q", "."))
+    assert runner.calls[2][0:2] == ("desktop", ())
     assert all(call[2] <= 60 for call in runner.calls)
     assert all(call[3] is None for call in runner.calls)
     assert result.steps[0]["status"] == "passed"
     assert result.steps[1]["status"] == "passed"
+    assert result.steps[2]["status"] == "passed"
 
 
 def test_full_repository_suite_rejects_zero_passed_tests_but_still_compiles(tmp_path):
@@ -117,7 +121,7 @@ def test_full_repository_suite_rejects_zero_passed_tests_but_still_compiles(tmp_
     runner = EmptySuiteRunner()
     result = runner.run_workspace_full_suite(tmp_path, timeout_seconds=60)
 
-    assert runner.calls == ["pytest", "compileall"]
+    assert runner.calls == ["pytest", "compileall", "desktop"]
     assert result.test_count == 0
     assert result.exit_code != 0
     assert result.steps[0]["status"] == "failed"
@@ -146,7 +150,7 @@ def test_full_repository_suite_keeps_test_failures_and_runs_compilation(tmp_path
     runner = FailingTestsRunner()
     result = runner.run_workspace_full_suite(tmp_path, timeout_seconds=60)
 
-    assert runner.calls == ["pytest", "compileall"]
+    assert runner.calls == ["pytest", "compileall", "desktop"]
     assert result.exit_code == 1
     assert result.test_count == 7
     assert result.steps[0]["status"] == "failed"
@@ -165,7 +169,7 @@ def test_full_suite_preflight_requires_local_image_and_pytest_without_pulling(mo
         if command[1:3] == ["image", "inspect"]:
             return SimpleNamespace(returncode=0, stdout="sha256:local-image", stderr="")
         if command[1] == "run":
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
+            return SimpleNamespace(returncode=0, stdout="v24.2.0\\n10.8.2\\n", stderr="")
         raise AssertionError(command)
 
     runner = WorkspaceSandboxRunner(
@@ -179,6 +183,9 @@ def test_full_suite_preflight_requires_local_image_and_pytest_without_pulling(mo
         "image": "registry.example.test/kaldrax-verify:py313",
         "image_id": "sha256:local-image",
         "pytest": "available",
+        "node": "v24.2.0",
+        "npm": "10.8.2",
+        "desktop_dependencies": "prebuilt",
         "pull_policy": "never",
         "network": "none",
     }
@@ -186,8 +193,11 @@ def test_full_suite_preflight_requires_local_image_and_pytest_without_pulling(mo
     probe = calls[-1]
     assert "--pull=never" in probe
     assert probe[probe.index("--network") + 1] == "none"
-    assert probe[probe.index("--entrypoint") + 1] == "python"
-    assert probe[-3:] == ["-B", "-c", "import pytest"]
+    assert probe[probe.index("--entrypoint") + 1] == "/bin/sh"
+    assert probe[-2] == "-c"
+    assert "import pytest" in probe[-1]
+    assert "node --version" in probe[-1]
+    assert "/opt/kaldrax-deps/desktop/node_modules" in probe[-1]
 
 
 def test_full_suite_preflight_fails_when_image_is_not_pulled(monkeypatch, tmp_path):
@@ -231,6 +241,41 @@ def test_full_suite_preflight_fails_when_pytest_is_missing_from_image(monkeypatc
         image="registry.example.test/kaldrax/no-pytest:py313",
         run_factory=run_factory,
     )
-    with pytest.raises(RuntimeError, match="does not provide an importable pytest"):
+    with pytest.raises(RuntimeError, match="must provide pytest, Node.js"):
         runner.preflight_full_suite()
     assert [call[1] for call in calls] == ["info", "image", "run"]
+
+def test_workspace_sandbox_runs_desktop_lint_and_build_as_fixed_offline_command(monkeypatch, tmp_path):
+    import shutil
+
+    source = tmp_path / "project"
+    source.mkdir()
+    (source / "desktop").mkdir()
+    (source / "desktop" / "package.json").write_text('{"scripts": {}}\n', encoding="utf-8")
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/docker")
+    commands = []
+
+    def run_factory(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(returncode=0, stdout="29.0", stderr="")
+
+    def popen_factory(command, **kwargs):
+        commands.append(command)
+        return FakeProcess()
+
+    result = WorkspaceSandboxRunner(
+        workspace_root=tmp_path / "sandbox",
+        image="kaldrax-verification:full",
+        popen_factory=popen_factory,
+        run_factory=run_factory,
+    ).run_workspace(source, module="desktop", module_args=())
+
+    command = commands[-1]
+    assert result.exit_code == 0
+    assert command[command.index("--network") + 1] == "none"
+    assert command[-3] == "kaldrax-verification:full"
+    assert command[-2:] == ["-c", WorkspaceSandboxRunner.DESKTOP_VERIFICATION_COMMAND]
+    assert "sha256sum -c /opt/kaldrax-desktop-deps.sha256" in command[-1]
+    assert "npm run lint" in command[-1]
+    assert "npm run build" in command[-1]
+    assert "--pull=never" in command
