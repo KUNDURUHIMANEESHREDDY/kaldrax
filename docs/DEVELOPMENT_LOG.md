@@ -751,3 +751,10 @@ This file records implementation decisions, changes, commands, verification, and
 - Added the third fixed stage for desktop lint and production build. It executes from the staged desktop tree in a network-disabled, read-only-root, non-root container.
 - Updated preflight to require pytest, Node/npm, and the prebuilt desktop dependency directory before provider clients are created.
 - Added regression coverage for the desktop container command, three-stage order, desktop-stage acceptance failure, and expanded preflight evidence.
+
+### Deterministic CI quality checks added to the full profile
+- Added the same offline memory retrieval benchmark, lexical/hybrid comparison, deterministic evaluator benchmark, and CI-profile memory quality report used by the regular Python CI job.
+- The fixed commands do not receive provider credentials or inherit embedding-provider environment variables; live extraction is not requested.
+- The quality script records each command's own exit code and continues after a failed check so the stage report preserves all available findings.
+- The full profile now contains four ordered gates: pytest, deterministic CI quality checks, complete Python compilation, and desktop lint/production build.
+- Docker-nested integration tests and provider-backed smoke/validation remain separately gated because the verifier intentionally does not expose the host Docker socket or provider credentials.
