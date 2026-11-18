@@ -392,6 +392,11 @@ class RepositoryWorkspace:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target)
             target.chmod(0o755 if mode == "100755" else 0o644)
+        if count == 0:
+            raise WorkspaceError("no safe tracked files remain for full-repository verification")
+        self._assert_clean()
+        if self._git(["rev-parse", "HEAD"]).strip() != expected_head:
+            raise WorkspaceError("repository HEAD changed during full verification staging")
         return count, total_bytes
 
     @contextmanager
