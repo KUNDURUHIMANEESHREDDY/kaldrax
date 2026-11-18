@@ -1135,7 +1135,7 @@ def main() -> int:
     orchestrate.add_argument(
         "--verify-module", choices=("unittest", "pytest", "compileall", "full"),
         default="unittest",
-        help="full runs pytest, deterministic CI quality checks, full Python compileall, and desktop lint plus production build",
+        help="full runs pytest, deterministic CI checks, and compileall on Python 3.11/3.13, then desktop lint/build",
     )
     orchestrate.add_argument("--verify-arg", action="append", default=None, help="repeat to add a verification-module argument")
     orchestrate.add_argument("--sandbox-timeout", type=int, default=120)
@@ -1154,7 +1154,7 @@ def main() -> int:
     team.add_argument(
         "--verify-module", choices=("unittest", "pytest", "compileall", "full"),
         default="unittest",
-        help="full runs pytest, deterministic CI quality checks, full Python compileall, and desktop lint plus production build",
+        help="full runs pytest, deterministic CI checks, and compileall on Python 3.11/3.13, then desktop lint/build",
     )
     team.add_argument("--verify-arg", action="append", default=None, help="repeat to add a verification-module argument")
     team.add_argument("--sandbox-timeout", type=int, default=120)
