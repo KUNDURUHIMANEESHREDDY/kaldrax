@@ -282,7 +282,7 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 "configured verification image is not available locally; build or pull it before running KALDRAX"
             )
         probe_script = (
-            "python -B -c 'import pytest,sys; print(\\"python=\\"+sys.version.split()[0])' && "
+            "python -B -c 'import pytest,sys; print(\"python=\"+sys.version.split()[0])' && "
             "node --version && npm --version && "
             "test -d /opt/kaldrax-deps/desktop/node_modules && "
             "test -f /opt/kaldrax-desktop-deps.sha256"
