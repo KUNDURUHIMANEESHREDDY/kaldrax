@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from kaldrax.sandbox import SandboxResult
 from kaldrax.workspace_sandbox import WorkspaceSandboxRunner
 
 
@@ -65,4 +66,85 @@ def test_workspace_sandbox_accepts_a_configured_pre_pulled_image(tmp_path):
     runner = WorkspaceSandboxRunner(workspace_root=tmp_path, image="registry.example.test/tools/python:3.13")
     assert runner.image == "registry.example.test/tools/python:3.13"
     with pytest.raises(ValueError, match="valid Docker image"):
-        WorkspaceSandboxRunner(workspace_root=tmp_path, image="--privileged")
+        WorkspaceSandboxRunner(workspace_root=tmp_path, image="--privileged")def test_full_repository_suite_runs_pytest_and_compileall_with_fixed_full_scope(tmp_path):
+    class RecordingRunner(WorkspaceSandboxRunner):
+        def __init__(self):
+            super().__init__(workspace_root=tmp_path / "sandbox")
+            self.calls = []
+
+        def run_workspace(self, workspace, *, module, module_args, timeout_seconds, cancel_file=None):
+            self.calls.append((module, module_args, timeout_seconds, cancel_file))
+            stdout = "9 passed, 2 skipped in 0.31s\n" if module == "pytest" else ""
+            return SandboxResult(
+                exit_code=0, stdout=stdout, stderr="", duration_ms=20,
+                timed_out=False, output_truncated=False,
+                container_image="registry.example.test/python-pytest:3.13",
+            )
+
+    runner = RecordingRunner()
+    result = runner.run_workspace_full_suite(tmp_path, timeout_seconds=60)
+
+    assert result.exit_code == 0
+    assert result.test_count == 9
+    assert [step["name"] for step in result.steps] == [
+        "full_test_suite", "source_and_test_compilation",
+    ]
+    assert runner.calls[0][0:2] == ("pytest", ("-q",))
+    assert runner.calls[1][0:2] == ("compileall", ("-q", "src", "tests"))
+    assert all(call[2] <= 60 for call in runner.calls)
+    assert all(call[3] is None for call in runner.calls)
+    assert result.steps[0]["status"] == "passed"
+    assert result.steps[1]["status"] == "passed"
+
+
+def test_full_repository_suite_rejects_zero_passed_tests_but_still_compiles(tmp_path):
+    class EmptySuiteRunner(WorkspaceSandboxRunner):
+        def __init__(self):
+            super().__init__(workspace_root=tmp_path / "sandbox")
+            self.calls = []
+
+        def run_workspace(self, workspace, *, module, module_args, timeout_seconds, cancel_file=None):
+            self.calls.append(module)
+            stdout = "4 skipped in 0.01s\n" if module == "pytest" else ""
+            return SandboxResult(
+                exit_code=0, stdout=stdout, stderr="", duration_ms=10,
+                timed_out=False, output_truncated=False, container_image="python:3.13",
+            )
+
+    runner = EmptySuiteRunner()
+    result = runner.run_workspace_full_suite(tmp_path, timeout_seconds=60)
+
+    assert runner.calls == ["pytest", "compileall"]
+    assert result.test_count == 0
+    assert result.exit_code != 0
+    assert result.steps[0]["status"] == "failed"
+    assert result.steps[1]["status"] == "passed"
+
+
+def test_full_repository_suite_keeps_test_failures_and_runs_compilation(tmp_path):
+    class FailingTestsRunner(WorkspaceSandboxRunner):
+        def __init__(self):
+            super().__init__(workspace_root=tmp_path / "sandbox")
+            self.calls = []
+
+        def run_workspace(self, workspace, *, module, module_args, timeout_seconds, cancel_file=None):
+            self.calls.append(module)
+            if module == "pytest":
+                return SandboxResult(
+                    exit_code=1, stdout="2 failed, 7 passed\n", stderr="",
+                    duration_ms=25, timed_out=False, output_truncated=False,
+                    container_image="python:3.13",
+                )
+            return SandboxResult(
+                exit_code=0, stdout="", stderr="", duration_ms=5,
+                timed_out=False, output_truncated=False, container_image="python:3.13",
+            )
+
+    runner = FailingTestsRunner()
+    result = runner.run_workspace_full_suite(tmp_path, timeout_seconds=60)
+
+    assert runner.calls == ["pytest", "compileall"]
+    assert result.exit_code == 1
+    assert result.test_count == 7
+    assert result.steps[0]["status"] == "failed"
+    assert result.steps[1]["status"] == "passed"
