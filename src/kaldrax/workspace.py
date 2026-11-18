@@ -58,6 +58,9 @@ class RepositoryWorkspace:
     MAX_FILES = 240
     MAX_FILE_BYTES = 48_000
     MAX_TOTAL_BYTES = 45_000
+    MAX_STAGE_FILES = 5_000
+    MAX_STAGE_FILE_BYTES = 20_000_000
+    MAX_STAGE_TOTAL_BYTES = 100_000_000
     MAX_PATCH_BYTES = 750_000
     EXCLUDED_DIRS = {
         ".git", ".kaldrax", ".venv", "venv", "env", "node_modules",
@@ -328,6 +331,62 @@ class RepositoryWorkspace:
         if RepositoryWorkspace._is_private(path):
             raise WorkspaceError("patch cannot modify private environment or credential files")
 
+    def _copy_tracked_files(self, destination: Path, *, expected_head: str) -> tuple[int, int]:
+        """Copy the complete safe tracked checkout, independently of the prompt-sized snapshot."""
+        self._assert_clean()
+        current_head = self._git(["rev-parse", "HEAD"]).strip()
+        if current_head != expected_head:
+            raise WorkspaceError("repository HEAD changed before full verification staging")
+        index = self._git(["ls-files", "--stage", "-z"])
+        entries = [entry for entry in index.split("\\0") if entry]
+        if not entries:
+            raise WorkspaceError("repository has no tracked files to verify")
+        count = 0
+        total_bytes = 0
+        for entry in entries:
+            try:
+                metadata, relative = entry.split("\\t", 1)
+                mode = metadata.split(" ", 1)[0]
+            except ValueError:
+                raise WorkspaceError("Git returned an invalid tracked-file index entry") from None
+            self._validate_path(relative)
+            parts = PurePosixPath(relative).parts
+            if any(part.casefold() in self.EXCLUDED_DIRS for part in parts) or self._is_private(relative):
+                continue
+            if mode == "160000":
+                raise WorkspaceError(
+                    f"full-repository verification cannot omit submodule contents: {relative}"
+                )
+            if mode == "120000":
+                raise WorkspaceError(
+                    f"full-repository verification does not support tracked symlinks: {relative}"
+                )
+            if mode not in {"100644", "100755"}:
+                raise WorkspaceError(f"unsupported tracked file mode {mode} for {relative}")
+            source = self.root.joinpath(*parts)
+            if source.is_symlink() or not source.is_file():
+                raise WorkspaceError(f"tracked file is missing or unsafe: {relative}")
+            size = source.stat().st_size
+            if size > self.MAX_STAGE_FILE_BYTES:
+                raise WorkspaceError(
+                    f"tracked file exceeds the {self.MAX_STAGE_FILE_BYTES}-byte verification limit: {relative}"
+                )
+            count += 1
+            total_bytes += size
+            if count > self.MAX_STAGE_FILES:
+                raise WorkspaceError(
+                    f"full repository exceeds the {self.MAX_STAGE_FILES}-file verification limit"
+                )
+            if total_bytes > self.MAX_STAGE_TOTAL_BYTES:
+                raise WorkspaceError(
+                    f"full repository exceeds the {self.MAX_STAGE_TOTAL_BYTES}-byte verification limit"
+                )
+            target = destination.joinpath(*parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
+            target.chmod(0o755 if mode == "100755" else 0o644)
+        return count, total_bytes
+
     @contextmanager
     def staged_patch(
         self,
@@ -347,10 +406,7 @@ class RepositoryWorkspace:
         with tempfile.TemporaryDirectory(prefix="kaldrax-stage-") as temporary:
             stage = Path(temporary) / "workspace"
             stage.mkdir()
-            for item in snapshot.files:
-                destination = stage / item.path
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_text(item.content, encoding="utf-8", newline="")
+            self._copy_tracked_files(stage, expected_head=snapshot.head)
             self._run_git_in(stage, ["init", "--quiet"])
             self._run_git_in(stage, ["add", "--all"])
             self._run_git_in(
