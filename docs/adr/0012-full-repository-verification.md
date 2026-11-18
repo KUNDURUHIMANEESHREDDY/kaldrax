@@ -23,20 +23,23 @@ The full staged checkout is bounded to 5,000 files, 20 MB per file, and 100 MB t
 
 ### Fixed full verification profile
 
-The full profile runs four ordered gates against the staged full repository:
+The full profile runs seven ordered stages against the staged full repository:
 
-1. python -m pytest -q, using the repository's configured complete test discovery.
-2. The checked-in deterministic CI memory retrieval benchmark, lexical/hybrid comparison, evaluator benchmark, and memory quality report using the CI threshold profile.
-3. python -m compileall -q ., covering all staged Python files.
-4. npm run lint and npm run build from desktop/, using Node.js 24 and locked preinstalled dependencies.
+1. Python 3.11: python311 -m pytest -q, using the repository's configured complete test discovery.
+2. Python 3.11: deterministic memory retrieval benchmark, lexical/hybrid comparison, and deterministic evaluator benchmark.
+3. Python 3.11: python311 -m compileall -q ., covering all staged Python files.
+4. Python 3.13: python -m pytest -q, using the same complete test discovery.
+5. Python 3.13: the same deterministic benchmarks plus the memory quality report using the CI threshold profile.
+6. Python 3.13: python -m compileall -q ., covering all staged Python files.
+7. Node.js 24: npm run lint and npm run build from desktop/, using locked preinstalled dependencies.
 
-The memory/evaluator quality commands, compilation, and desktop checks are attempted even when an earlier gate fails, unless cancellation or the shared timeout prevents them. The report records each stage separately, including command, exit code, duration, test count (for pytest), timeout, cancellation, truncation, image and bounded output. At least one passed test is required; zero-test or all-skipped green exits do not qualify. All four gates, reviewer approval and independent evaluator PASS are mandatory.
+The memory/evaluator quality commands, compilation, and later desktop checks are attempted even when an earlier stage fails, unless cancellation or the shared timeout prevents them. The report records each stage separately, including Python/Node runtime, command, exit code, duration, per-runtime test count, timeout, cancellation, truncation, image and bounded output. Each Python version must report at least one passed test; zero-test or all-skipped green exits on either runtime do not qualify. All seven stages, reviewer approval and independent evaluator PASS are mandatory.
 
 - Keep legacy single-module modes (unittest, pytest, compileall) available.
 - Do not permit custom --verify-arg values to narrow the fixed full profile.
-- Require a prebuilt image with pytest, Node.js 24/npm, and dependencies installed from desktop/package-lock.json. The image checks staged desktop/package.json and package-lock.json against hashes captured at image build time.
+- Require a prebuilt image with Python 3.11 and 3.13 (each with pytest), Node.js 24/npm, and dependencies installed from desktop/package-lock.json. The image checks staged desktop/package.json and package-lock.json against hashes captured at image build time.
 - Provide docker/verification.Dockerfile; runtime Docker execution uses --pull=never and network isolation.
-- Before provider clients are created, verify Docker daemon availability, inspect the image locally, and run a constrained no-network probe for pytest, Node/npm, and prebuilt desktop dependencies. Missing infrastructure or packages must fail before model-provider calls.
+- Before provider clients are created, verify Docker daemon availability, inspect the image locally, and run a constrained no-network probe for pytest on both Python runtimes, Node/npm, and prebuilt desktop dependencies. Missing infrastructure or packages must fail before model-provider calls.
 - If the desktop manifest or lockfile changes, the operator must rebuild the image so verification dependencies match the candidate repository.
 - The desktop exposes the same full profile through the repository workflow selector.
 
@@ -53,7 +56,7 @@ The memory/evaluator quality commands, compilation, and desktop checks are attem
 Regression coverage is added for:
 - staging a tracked test file omitted from the bounded prompt snapshot;
 - rejection of tracked symlinks;
-- fixed full-suite command selection, non-empty pytest results, deterministic CI quality checks, and Docker/image/pytest preflight;
+- fixed seven-stage ordering, positive tests on both Python versions, deterministic CI quality checks, and Docker/image/toolchain preflight;
 - running compilation after test failures;
 - coordinator acceptance rejection for zero tests or compilation failure;
 - CLI and desktop exposure of the full profile.
