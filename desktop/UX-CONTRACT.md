@@ -41,7 +41,8 @@
 ## Team workflow rules
 - Planner, builder, reviewer and evaluator must use four distinct model identifiers.
 - All roles share the run budget and execute sequentially.
-- Repository mode requires a selected clean Git worktree and Docker. The engine captures a bounded snapshot and verifies a proposed unified patch in a disposable copy.
+- Repository mode requires a selected clean Git worktree and Docker. The engine captures a bounded model-context snapshot, stages the patch against the complete safe tracked checkout, and verifies a disposable copy.
+- The optional full verification profile runs repository-wide pytest discovery followed by Python source/test compilation; it requires a pre-pulled sandbox image with pytest installed.
 - Repository mode is dry-run by default. Applying requires a separate confirmation, successful sandbox verification, reviewer approval and independent evaluator PASS.
 - The engine rechecks the base commit and clean worktree before patch application. It does not create commits or push branches.
 - Cancellation is checked at role boundaries and inside the Docker workspace runner. A provider request already submitted may finish before the next cancellation check.
