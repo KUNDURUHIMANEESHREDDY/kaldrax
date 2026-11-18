@@ -325,7 +325,8 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 "configured verification image is not available locally; build or pull it before running KALDRAX"
             )
         probe_script = (
-            "python -B -c 'import pytest,sys; print(\"python=\"+sys.version.split()[0])' && "
+            "python -B -c 'import pytest,sys; print(\"python313=\"+sys.version.split()[0])' && "
+            "python311 -B -c 'import pytest,sys; print(\"python311=\"+sys.version.split()[0])' && "
             "node --version && npm --version && "
             "test -d /opt/kaldrax-deps/desktop/node_modules && "
             "test -f /opt/kaldrax-desktop-deps.sha256"
@@ -354,24 +355,36 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 "and the prebuilt locked desktop dependencies"
             )
         versions = str(checked.stdout).splitlines()
-        if len(versions) < 3 or not versions[0].startswith("python="):
+        if (
+            len(versions) < 4
+            or not versions[0].startswith("python313=")
+            or not versions[1].startswith("python311=")
+        ):
             raise SandboxExecutionError("configured verification image returned incomplete toolchain evidence")
-        python_version = versions[0].removeprefix("python=")
-        python_match = re.match(r"^(\d+)\.(\d+)", python_version)
-        node_version, npm_version = versions[1], versions[2]
+        python313 = versions[0].removeprefix("python313=")
+        python311 = versions[1].removeprefix("python311=")
+        python313_match = re.match(r"^(\d+)\.(\d+)", python313)
+        python311_match = re.match(r"^(\d+)\.(\d+)", python311)
+        node_version, npm_version = versions[2], versions[3]
         node_match = re.match(r"^v?(\d+)\.", node_version)
         if (
-            python_match is None
-            or (int(python_match.group(1)), int(python_match.group(2))) < (3, 11)
+            python313_match is None
+            or (int(python313_match.group(1)), int(python313_match.group(2))) != (3, 13)
         ):
-            raise SandboxExecutionError("full verification requires Python 3.11 or newer")
+            raise SandboxExecutionError("full verification requires the Python 3.13 CI runtime")
+        if (
+            python311_match is None
+            or (int(python311_match.group(1)), int(python311_match.group(2))) != (3, 11)
+        ):
+            raise SandboxExecutionError("full verification requires the Python 3.11 CI runtime")
         if node_match is None or int(node_match.group(1)) != 24:
             raise SandboxExecutionError("full verification requires Node.js 24 to match desktop CI")
         evidence = {
             "image": self.image,
             "image_id": str(inspected.stdout).strip(),
-            "python": python_version,
-            "pytest": "available",
+            "python_3_13": python313,
+            "python_3_11": python311,
+            "pytest": "available_on_both_python_runtimes",
             "node": node_version,
             "npm": npm_version,
             "desktop_dependencies": "prebuilt",
