@@ -839,6 +839,7 @@ def test_repaired_checkpoint_resumes_only_unfinished_work_and_persists_graph(tmp
         return "base-output"
 
     failed = TaskGraphScheduler(
+        max_workers=1,
         retry_policy=RetryPolicy(max_attempts=1),
     ).run(initial, first_executor, checkpoint_store=store)
     assert failed.states["base"] == TaskState.SUCCEEDED.value
