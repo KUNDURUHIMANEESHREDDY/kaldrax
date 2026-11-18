@@ -277,6 +277,7 @@ The GitHub Actions matrix runs on Python 3.11 and 3.13, executes the full test s
 - [ADR 0007: Repository-aware engineering loop](docs/adr/0007-repository-engineering-loop.md)
 - [ADR 0008: Repository intelligence and dependency mapping](docs/adr/0008-repository-intelligence.md)
 - [ADR 0010: Task file-scope enforcement](docs/adr/0010-task-file-scope-enforcement.md)
+- [ADR 0011: Autonomous task recovery and replanning](docs/adr/0011-autonomous-task-recovery.md)
 - [Repository structure](docs/REPOSITORY_STRUCTURE.md)
 
 
@@ -433,9 +434,9 @@ $env:KALDRAX_EVALUATOR_MODEL = "evaluator-model"
 kaldrax orchestrate --objective "Build a CSV import feature" --criterion "quoted fields are preserved" --max-workers 4
 ```
 
-Each task has a bounded retry policy (default three attempts) with exponential backoff for transient transport failures. Permanent failures are escalated to the planner for a recovery recommendation and remain failed until explicitly retried. Tasks depending on failed work are marked blocked; independent tasks continue. After all tasks succeed, the aggregate deliverable must pass a separate reviewer and evidence-backed independent evaluator; either gate can fail the overall run.
+Each task has a bounded retry policy (default three attempts) with exponential backoff for transient transport failures. When work remains failed or blocked, KALDRAX asks the planner for structured root-cause diagnoses tied to task-error or dependency-state evidence, then requests a revised dependency graph. The repair plan may replace unfinished tasks and recalculate dependencies, but every successful task definition is immutable and its output is reused without rerunning it. Tasks depending on failed work remain blocked until the graph is repaired. Recovery is bounded by `--max-replans` (default 2, allowed range 0–3); the limit is persisted in the checkpoint across restarts. If the diagnosis requires operator input, automatic replanning stops. After all tasks succeed, the aggregate deliverable must pass a separate reviewer and evidence-backed independent evaluator; either gate can fail the overall run.
 
-A graph-fingerprint-bound atomic JSON checkpoint is written under `.kaldrax/checkpoints/` by default. Re-running the same objective resumes successful work and retries interrupted work within its remaining attempt budget. Use `--retry-failed` to explicitly reset failed tasks, `--fresh` to ignore a prior checkpoint, `--checkpoint PATH` to select a checkpoint, and `--progress-jsonl PATH` to stream task events. A changed decomposition is rejected against an existing checkpoint rather than mixing results from different graphs.
+A graph-fingerprint-bound atomic JSON checkpoint is written under `.kaldrax/checkpoints/` by default. It stores the active task graph revision, node outputs, cumulative attempts, repository binding, and bounded repair history. Re-running the same objective resumes the latest persisted graph revision; successful outputs are preserved while only unfinished work is scheduled. Use `--retry-failed` to explicitly reset failed tasks, `--max-replans 0` to disable automatic graph repair, `--fresh` to ignore a prior checkpoint, `--checkpoint PATH` to select a checkpoint, and `--progress-jsonl PATH` to stream task events. A changed or corrupt graph/checkpoint binding is rejected rather than mixing results from different requests or repositories.
 
 To carry completed task outputs into actual repository changes, pass a clean Git repository root:
 
