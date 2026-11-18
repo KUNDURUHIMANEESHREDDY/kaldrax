@@ -77,55 +77,64 @@ def test_full_repository_suite_runs_all_fixed_ci_and_desktop_stages(tmp_path):
 
         def run_workspace(self, workspace, *, module, module_args, timeout_seconds, cancel_file=None, **kwargs):
             self.calls.append((module, module_args, timeout_seconds, cancel_file, kwargs))
-            stdout = "9 passed, 2 skipped in 0.31s\n" if module == "pytest" else ""
+            stdout = (
+                "9 passed, 2 skipped in 0.31s\n" if module == "pytest311"
+                else "10 passed, 1 skipped in 0.31s\n" if module == "pytest"
+                else ""
+            )
             return SandboxResult(
                 exit_code=0, stdout=stdout, stderr="", duration_ms=20,
                 timed_out=False, output_truncated=False,
-                container_image="registry.example.test/python-pytest:3.13",
+                container_image="kaldrax-verification:full",
             )
 
     runner = RecordingRunner()
     runner._full_suite_preflight = {
         "image": "kaldrax-verification:full",
         "image_id": "sha256:full-image",
-        "python": "3.11.8",
-        "pytest": "available",
+        "python_3_11": "3.11.8",
+        "python_3_13": "3.13.1",
+        "pytest": "available_on_both_python_runtimes",
         "node": "v24.2.0",
         "npm": "10.8.2",
         "desktop_dependencies": "prebuilt",
         "pull_policy": "never",
         "network": "none",
     }
-    result = runner.run_workspace_full_suite(tmp_path, timeout_seconds=60)
+    result = runner.run_workspace_full_suite(tmp_path, timeout_seconds=120)
 
     assert result.preflight == runner._full_suite_preflight
     assert result.exit_code == 0
-    assert result.test_count == 9
+    assert result.test_counts == {"3.11": 9, "3.13": 10}
+    assert result.test_count == 19
     assert [step["name"] for step in result.steps] == [
-        "full_test_suite",
-        "deterministic_ci_quality_checks",
-        "source_and_test_compilation",
+        "python_3_11_full_test_suite",
+        "python_3_11_deterministic_ci_quality",
+        "python_3_11_source_compilation",
+        "python_3_13_full_test_suite",
+        "python_3_13_deterministic_ci_quality",
+        "python_3_13_source_compilation",
         "desktop_lint_and_production_build",
     ]
-    assert runner.calls[0][0:2] == ("pytest", ("-q",))
-    assert runner.calls[1][0:2] == ("ci-quality", ())
-    assert runner.calls[2][0:2] == ("compileall", ("-q", "."))
-    assert runner.calls[3][0:2] == ("desktop", ())
+    assert [call[0] for call in runner.calls] == [
+        "pytest311", "ci-quality311", "compileall311",
+        "pytest", "ci-quality", "compileall", "desktop",
+    ]
+    assert runner.calls[0][0:2] == ("pytest311", ("-q",))
+    assert runner.calls[2][0:2] == ("compileall311", ("-q", "."))
+    assert runner.calls[5][0:2] == ("compileall", ("-q", "."))
+    assert runner.calls[6][0:2] == ("desktop", ())
     assert runner.calls[1][4]["memory_mb"] == 512
     assert runner.calls[1][4]["cpu_count"] == 1.0
-    assert runner.calls[3][4]["memory_mb"] == 1024
-    assert runner.calls[3][4]["cpu_count"] == 2.0
-    assert runner.calls[3][4]["pids_limit"] == 128
-    assert all(call[2] <= 60 for call in runner.calls)
+    assert runner.calls[6][4]["memory_mb"] == 1024
+    assert runner.calls[6][4]["cpu_count"] == 2.0
+    assert runner.calls[6][4]["pids_limit"] == 128
+    assert all(call[2] <= 120 for call in runner.calls)
     assert all(call[3] is None for call in runner.calls)
-    assert result.steps[0]["status"] == "passed"
-    assert result.steps[1]["status"] == "passed"
-    assert result.steps[2]["status"] == "passed"
-    assert result.steps[3]["status"] == "passed"
-    assert result.preflight == runner._full_suite_preflight
+    assert all(step["status"] == "passed" for step in result.steps)
 
 
-def test_full_repository_suite_rejects_zero_passed_tests_but_still_compiles(tmp_path):
+def test_full_repository_suite_rejects_zero_passed_tests_on_either_python_runtime(tmp_path):
     class EmptySuiteRunner(WorkspaceSandboxRunner):
         def __init__(self):
             super().__init__(workspace_root=tmp_path / "sandbox")
@@ -133,24 +142,31 @@ def test_full_repository_suite_rejects_zero_passed_tests_but_still_compiles(tmp_
 
         def run_workspace(self, workspace, *, module, module_args, timeout_seconds, cancel_file=None, **kwargs):
             self.calls.append(module)
-            stdout = "4 skipped in 0.01s\n" if module == "pytest" else ""
+            stdout = "4 skipped in 0.01s\n" if module in {"pytest311", "pytest"} else ""
             return SandboxResult(
                 exit_code=0, stdout=stdout, stderr="", duration_ms=10,
-                timed_out=False, output_truncated=False, container_image="python:3.13",
+                timed_out=False, output_truncated=False, container_image="kaldrax-verification:full",
             )
 
     runner = EmptySuiteRunner()
-    result = runner.run_workspace_full_suite(tmp_path, timeout_seconds=60)
+    result = runner.run_workspace_full_suite(tmp_path, timeout_seconds=120)
 
-    assert runner.calls == ["pytest", "ci-quality", "compileall", "desktop"]
+    assert runner.calls == [
+        "pytest311", "ci-quality311", "compileall311",
+        "pytest", "ci-quality", "compileall", "desktop",
+    ]
     assert result.test_count == 0
+    assert result.test_counts == {"3.11": 0, "3.13": 0}
     assert result.exit_code != 0
     assert result.steps[0]["status"] == "failed"
+    assert result.steps[3]["status"] == "failed"
     assert result.steps[1]["status"] == "passed"
     assert result.steps[2]["status"] == "passed"
+    assert result.steps[4]["status"] == "passed"
+    assert result.steps[5]["status"] == "passed"
 
 
-def test_full_repository_suite_keeps_test_failures_and_runs_compilation(tmp_path):
+def test_full_repository_suite_keeps_python_test_failures_and_runs_remaining_gates(tmp_path):
     class FailingTestsRunner(WorkspaceSandboxRunner):
         def __init__(self):
             super().__init__(workspace_root=tmp_path / "sandbox")
@@ -158,26 +174,34 @@ def test_full_repository_suite_keeps_test_failures_and_runs_compilation(tmp_path
 
         def run_workspace(self, workspace, *, module, module_args, timeout_seconds, cancel_file=None, **kwargs):
             self.calls.append(module)
-            if module == "pytest":
+            if module in {"pytest311", "pytest"}:
                 return SandboxResult(
                     exit_code=1, stdout="2 failed, 7 passed\n", stderr="",
                     duration_ms=25, timed_out=False, output_truncated=False,
-                    container_image="python:3.13",
+                    container_image="kaldrax-verification:full",
                 )
             return SandboxResult(
                 exit_code=0, stdout="", stderr="", duration_ms=5,
-                timed_out=False, output_truncated=False, container_image="python:3.13",
+                timed_out=False, output_truncated=False, container_image="kaldrax-verification:full",
             )
 
     runner = FailingTestsRunner()
-    result = runner.run_workspace_full_suite(tmp_path, timeout_seconds=60)
+    result = runner.run_workspace_full_suite(tmp_path, timeout_seconds=120)
 
-    assert runner.calls == ["pytest", "ci-quality", "compileall", "desktop"]
+    assert runner.calls == [
+        "pytest311", "ci-quality311", "compileall311",
+        "pytest", "ci-quality", "compileall", "desktop",
+    ]
     assert result.exit_code == 1
-    assert result.test_count == 7
+    assert result.test_count == 14
+    assert result.test_counts == {"3.11": 7, "3.13": 7}
     assert result.steps[0]["status"] == "failed"
+    assert result.steps[3]["status"] == "failed"
     assert result.steps[1]["status"] == "passed"
     assert result.steps[2]["status"] == "passed"
+    assert result.steps[4]["status"] == "passed"
+    assert result.steps[5]["status"] == "passed"
+
 
 def test_full_suite_preflight_requires_local_python_node_image_and_pytest_without_pulling(monkeypatch, tmp_path):
     import shutil
