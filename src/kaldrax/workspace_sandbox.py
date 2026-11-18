@@ -360,11 +360,12 @@ class WorkspaceSandboxRunner(SandboxRunner):
             (step for step in steps if step.get("status") != "passed"),
             None,
         )
-        exit_code = 0 if passed else (
+        failure_code = (
             int(first_failure["exit_code"])
             if first_failure is not None and isinstance(first_failure.get("exit_code"), int)
             else 124 if timed_out else 130 if cancelled else 1
         )
+        exit_code = 0 if passed else (failure_code if failure_code != 0 else 1)
         image = next(
             (str(step["container_image"]) for step in steps if step.get("container_image")),
             self.image,
