@@ -123,6 +123,14 @@ class RepositoryWorkspace:
             return True
         return PurePosixPath(name).suffix in RepositoryWorkspace.PRIVATE_SUFFIXES
 
+    def checkpoint_binding(self) -> dict[str, str]:
+        """Return the canonical repository root and full HEAD for safe checkpoint resume."""
+        self._assert_clean()
+        head = self._git(["rev-parse", "HEAD"]).strip()
+        if len(head) not in {40, 64} or any(char not in "0123456789abcdefABCDEF" for char in head):
+            raise WorkspaceError("Git returned an invalid repository HEAD")
+        return {"root": str(self.root), "head": head}
+
     def capture(self) -> WorkspaceSnapshot:
         self._assert_clean()
         head = self._git(["rev-parse", "HEAD"]).strip()
