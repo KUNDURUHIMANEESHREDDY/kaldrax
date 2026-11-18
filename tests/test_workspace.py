@@ -275,3 +275,19 @@ def test_repository_file_apply_refuses_a_symlinked_backup_subdirectory(tmp_path)
         workspace.apply_file("app.py", "print('changed')\n", expected_sha256=original["sha256"])
     assert (root / "app.py").read_text(encoding="utf-8") == "print('safe')\n"
     assert list(outside.iterdir()) == []
+
+def test_checkpoint_binding_uses_full_head_and_refuses_dirty_worktree(tmp_path):
+    root = tmp_path / "repo"
+    workspace = init_repo(root, {"app.py": "print('safe')\\n"})
+
+    binding = workspace.checkpoint_binding()
+    expected_head = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    assert binding == {"root": str(root.resolve()), "head": expected_head}
+    assert len(binding["head"]) in {40, 64}
+
+    (root / "app.py").write_text("print('changed')\\n", encoding="utf-8")
+    with pytest.raises(WorkspaceError, match="uncommitted or untracked"):
+        workspace.checkpoint_binding()
