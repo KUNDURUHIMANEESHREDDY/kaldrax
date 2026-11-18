@@ -42,7 +42,7 @@
 - Planner, builder, reviewer and evaluator must use four distinct model identifiers.
 - All roles share the run budget and execute sequentially.
 - Repository mode requires a selected clean Git worktree and Docker. The engine captures a bounded model-context snapshot, stages the patch against the complete safe tracked checkout, and verifies a disposable copy.
-- The optional full verification profile runs repository-wide pytest discovery, deterministic CI memory/evaluator quality checks, compiles all staged Python files, and runs desktop Oxlint plus the production build. It requires a prebuilt offline image with pytest, Node.js/npm, and dependencies matching desktop/package-lock.json.
+- The optional full verification profile runs repository-wide pytest discovery, deterministic CI memory/evaluator quality checks, and full staged Python compilation on both Python 3.11 and 3.13, then runs desktop Oxlint plus the production build on Node.js 24. It requires a prebuilt offline image with pytest for both Python versions and dependencies matching desktop/package-lock.json.
 - Repository mode is dry-run by default. Applying requires a separate confirmation, successful sandbox verification, reviewer approval and independent evaluator PASS.
 - The engine rechecks the base commit and clean worktree before patch application. It does not create commits or push branches.
 - Cancellation is checked at role boundaries and inside the Docker workspace runner. A provider request already submitted may finish before the next cancellation check.
