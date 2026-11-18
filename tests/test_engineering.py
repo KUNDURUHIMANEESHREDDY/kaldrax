@@ -250,10 +250,13 @@ new file mode 100644
     assert coordinator.builder.prompts[0][1]["allowed_paths"] == ["csv_reader.py"]
     assert not (root / "docs" / "extra.md").exists()
     assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")class FullSuiteSandbox(SuccessfulSandbox):
-    def __init__(self, *, exit_code=0, test_count=9, suite_exit_code=None):
+    def __init__(
+        self, *, exit_code=0, test_count=9, suite_exit_code=None, desktop_exit_code=0,
+    ):
         super().__init__(exit_code=exit_code)
         self.test_count = test_count
         self.suite_exit_code = suite_exit_code
+        self.desktop_exit_code = desktop_exit_code
         self.full_calls = []
 
     def run_workspace_full_suite(self, workspace, *, timeout_seconds, cancel_file=None):
@@ -269,8 +272,15 @@ new file mode 100644
                 "module_args": ["-q", "."], "exit_code": self.exit_code,
                 "status": "passed" if self.exit_code == 0 else "failed",
             },
+            {
+                "name": "desktop_lint_and_production_build", "module": "desktop",
+                "module_args": [], "exit_code": self.desktop_exit_code,
+                "status": "passed" if self.desktop_exit_code == 0 else "failed",
+            },
         )
-        calculated = 0 if self.exit_code == 0 and self.test_count > 0 else 1
+        calculated = (
+            0 if self.exit_code == 0 and self.desktop_exit_code == 0 and self.test_count > 0 else 1
+        )
         overall = calculated if self.suite_exit_code is None else self.suite_exit_code
         return WorkspaceVerificationSuiteResult(
             exit_code=overall,
@@ -279,7 +289,7 @@ new file mode 100644
             duration_ms=25,
             timed_out=False,
             output_truncated=False,
-            container_image="registry.example.test/python-pytest:3.13",
+            container_image="registry.example.test/kaldrax-full:latest",
             cancelled=False,
             test_count=self.test_count,
             steps=steps,
@@ -300,7 +310,9 @@ def test_repository_team_full_profile_requires_tests_and_compilation(tmp_path):
     assert report.verification["profile"] == "full-repository"
     assert report.verification["test_count"] == 9
     assert [step["name"] for step in report.verification["steps"]] == [
-        "full_test_suite", "source_and_test_compilation",
+        "full_test_suite",
+        "source_and_test_compilation",
+        "desktop_lint_and_production_build",
     ]
     assert coordinator.reviewer.prompts[0][1]["verification"]["profile"] == "full-repository"
 
@@ -334,4 +346,20 @@ def test_repository_team_full_profile_rejects_compile_failure(tmp_path):
     assert report.applied is False
     assert report.verification["test_count"] == 9
     assert report.verification["exit_code"] == 1
+    assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")
+
+def test_repository_team_full_profile_rejects_desktop_build_failure(tmp_path):
+    root = tmp_path / "repo"
+    init_csv_repo(root)
+    sandbox = FullSuiteSandbox(exit_code=0, test_count=9, desktop_exit_code=2)
+    coordinator, task = make_coordinator(root, sandbox)
+    coordinator.verify_module = "full"
+
+    report = coordinator.run(task, apply_changes=True)
+
+    assert report.status is RunStatus.LIMIT_REACHED
+    assert report.applied is False
+    assert report.verification["test_count"] == 9
+    assert report.verification["exit_code"] == 1
+    assert report.verification["steps"][2]["status"] == "failed"
     assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")
