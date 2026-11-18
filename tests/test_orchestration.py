@@ -678,6 +678,7 @@ def test_failure_diagnosis_requires_complete_structured_results():
             "task_id": "implementation",
             "category": "implementation",
             "root_cause": "The implementation rejected a supported input shape.",
+            "evidence": {"type": "task_error", "excerpt": "unsupported input"},
             "retryable": False,
             "operator_input_required": False,
             "repair_instruction": "Handle both supported input variants and add a regression case.",
@@ -686,6 +687,9 @@ def test_failure_diagnosis_requires_complete_structured_results():
             "task_id": "integration",
             "category": "dependency",
             "root_cause": "The implementation prerequisite failed.",
+            "evidence": {
+                "type": "dependency_state", "dependency_id": "implementation", "state": "failed",
+            },
             "retryable": False,
             "operator_input_required": False,
             "repair_instruction": "Rewire integration to the repaired implementation task.",
@@ -933,6 +937,10 @@ def test_cli_orchestration_repairs_failed_work_without_repeating_successful_task
                         "task_id": "fragile",
                         "category": "implementation",
                         "root_cause": "The first implementation did not satisfy its contract.",
+                        "evidence": {
+                            "type": "task_error",
+                            "excerpt": "initial implementation rejected an input",
+                        },
                         "retryable": False,
                         "operator_input_required": False,
                         "repair_instruction": "Revise the task implementation to honor the input contract.",
