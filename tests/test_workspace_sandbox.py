@@ -362,7 +362,7 @@ def test_full_repository_suite_rejects_desktop_build_failure(tmp_path):
 
         def run_workspace(self, workspace, *, module, module_args, timeout_seconds, cancel_file=None, **kwargs):
             self.calls.append(module)
-            if module == "pytest":
+            if module in {"pytest311", "pytest"}:
                 return SandboxResult(
                     exit_code=0, stdout="3 passed in 0.1s\n", stderr="",
                     duration_ms=10, timed_out=False, output_truncated=False,
@@ -381,15 +381,18 @@ def test_full_repository_suite_rejects_desktop_build_failure(tmp_path):
             )
 
     runner = FailingDesktopRunner()
-    result = runner.run_workspace_full_suite(tmp_path, timeout_seconds=60)
+    result = runner.run_workspace_full_suite(tmp_path, timeout_seconds=120)
 
-    assert runner.calls == ["pytest", "ci-quality", "compileall", "desktop"]
+    assert runner.calls == [
+        "pytest311", "ci-quality311", "compileall311",
+        "pytest", "ci-quality", "compileall", "desktop",
+    ]
     assert result.exit_code == 2
-    assert result.steps[0]["status"] == "passed"
-    assert result.steps[1]["status"] == "passed"
-    assert result.steps[2]["status"] == "passed"
-    assert result.steps[3]["status"] == "failed"
+    assert result.test_counts == {"3.11": 3, "3.13": 3}
+    assert all(step["status"] == "passed" for step in result.steps[:6])
+    assert result.steps[6]["status"] == "failed"
     assert result.stderr.endswith("vite build failed")
+
 
 def test_workspace_sandbox_runs_deterministic_ci_quality_checks_in_fixed_offline_script(monkeypatch, tmp_path):
     source = tmp_path / "project"
