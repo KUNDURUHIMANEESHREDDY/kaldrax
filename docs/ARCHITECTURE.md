@@ -155,16 +155,19 @@ The repository path is a separate coordinator from the prose-only team flow. It 
 
 ### Full-repository verification profile
 
-The full profile is a fixed four-gate verification plan against the full staged repository:
+The full profile is a fixed seven-stage verification plan against the full staged repository:
 
-1. Run python -m pytest -q using the repository's configured full test discovery.
-2. Run the checked-in CI retrieval benchmark, lexical/hybrid comparison, deterministic evaluator benchmark, and memory quality report with the CI threshold profile.
-3. Run python -m compileall -q . to compile all staged Python files.
-4. Run npm run lint and npm run build from desktop/ with Node.js 24.
+1. Python 3.11: run python311 -m pytest -q using the repository's configured full test discovery.
+2. Python 3.11: run the checked-in memory retrieval benchmark, lexical/hybrid comparison, and deterministic evaluator benchmark.
+3. Python 3.11: run python311 -m compileall -q . across the staged repository.
+4. Python 3.13: run python -m pytest -q using the same full test discovery.
+5. Python 3.13: run the same deterministic benchmarks and the memory quality report with the CI threshold profile.
+6. Python 3.13: run python -m compileall -q . across the staged repository.
+7. Node.js 24: run npm run lint and npm run build from desktop/.
 
-The deterministic quality commands run without provider credentials. Compilation and desktop checks are attempted even when an earlier gate fails, unless cancellation or the shared timeout prevents them. A positive pytest passed count is mandatory even if a runner exits zero. The combined report records each stage's command, exit code, duration, test count, timeout/truncation/cancellation status, image identity, and bounded output. Every gate must pass; zero passed tests, timeout, truncated output, failed CI quality thresholds, compilation errors, lint errors, or a production build failure rejects the patch.
+The deterministic quality commands run without provider credentials. Compilation and later stages are attempted even when an earlier stage fails, unless cancellation or the shared timeout prevents them. Each Python runtime must report at least one passed test even if pytest exits zero. The combined report records each stage's runtime/command, exit code, duration, per-runtime test count, timeout/truncation/cancellation status, image identity, and bounded output. Every stage must pass; zero passed tests on either Python version, timeout, truncated output, failed CI quality thresholds, compilation errors, lint errors, or a production build failure rejects the patch.
 
-The full profile requires a prebuilt image containing pytest, Node.js/npm, and desktop dependencies installed from the repository lockfile. docker/verification.Dockerfile creates that image. Before provider clients are created, the CLI verifies Docker availability, checks that the image is already present locally, and runs a constrained no-network probe for pytest, Node/npm, and the prebuilt desktop dependency tree. At verification time, the staged desktop/package.json and package-lock.json must match hashes stored in the image; changing either file requires rebuilding the image. A missing daemon, image, toolchain, or cache blocks the run before provider spending.
+The full profile requires a prebuilt image containing Python 3.11 and 3.13 (both with pytest), Node.js 24/npm, and desktop dependencies installed from the repository lockfile. docker/verification.Dockerfile creates that image. Before provider clients are created, the CLI verifies Docker availability, checks that the image is already present locally, and runs a constrained no-network probe for pytest on both Python versions, Node/npm, and the prebuilt desktop dependency tree. At verification time, the staged desktop/package.json and package-lock.json must match hashes stored in the image; changing either file requires rebuilding the image. A missing daemon, image, toolchain, or cache blocks the run before provider spending.
 
 The profile intentionally does not expose the host Docker socket or provider credentials to the sandbox. Docker-backed integration tests and live-provider smoke/validation therefore remain separate, explicitly gated CI workflows; they are not represented as having run in this offline profile. The test command and discovery root are not overrideable through --verify-arg; single-module overrides remain available for legacy/constrained workflows.
 
