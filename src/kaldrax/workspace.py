@@ -338,14 +338,14 @@ class RepositoryWorkspace:
         if current_head != expected_head:
             raise WorkspaceError("repository HEAD changed before full verification staging")
         index = self._git(["ls-files", "--stage", "-z"])
-        entries = [entry for entry in index.split("\\0") if entry]
+        entries = [entry for entry in index.split("\0") if entry]
         if not entries:
             raise WorkspaceError("repository has no tracked files to verify")
         count = 0
         total_bytes = 0
         for entry in entries:
             try:
-                metadata, relative = entry.split("\\t", 1)
+                metadata, relative = entry.split("\t", 1)
                 mode = metadata.split(" ", 1)[0]
             except ValueError:
                 raise WorkspaceError("Git returned an invalid tracked-file index entry") from None
