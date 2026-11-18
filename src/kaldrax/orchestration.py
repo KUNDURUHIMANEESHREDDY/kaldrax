@@ -346,6 +346,12 @@ class TaskDecomposer:
                     "task_id": "one failed or blocked task id",
                     "category": "implementation | dependency | specification | scope | provider | verification | unknown",
                     "root_cause": "evidence-grounded cause, or state what evidence is missing",
+                    "evidence": {
+                        "type": "task_error | dependency_state | task_state",
+                        "excerpt": "exact excerpt when type is task_error",
+                        "dependency_id": "failed or blocked prerequisite when type is dependency_state",
+                        "state": "exact scheduler state when type is dependency_state or task_state",
+                    },
                     "retryable": "boolean",
                     "operator_input_required": "boolean",
                     "repair_instruction": "bounded corrective direction",
@@ -380,25 +386,61 @@ class TaskDecomposer:
                 task_id = row.get("task_id")
                 category = row.get("category")
                 root_cause = row.get("root_cause")
+                evidence = row.get("evidence")
                 retryable = row.get("retryable")
                 operator_required = row.get("operator_input_required")
                 repair = row.get("repair_instruction")
+                affected_node = next((node for node in affected if node.id == task_id), None)
                 if (
                     not isinstance(task_id, str)
-                    or task_id not in {node.id for node in affected}
+                    or affected_node is None
                     or task_id in seen
                     or category not in allowed_categories
                     or not isinstance(root_cause, str) or not root_cause.strip() or len(root_cause) > 1200
+                    or not isinstance(evidence, dict)
                     or not isinstance(retryable, bool)
                     or not isinstance(operator_required, bool)
                     or not isinstance(repair, str) or not repair.strip() or len(repair) > 1200
                 ):
+                    raise TypeError
+                evidence_type = evidence.get("type")
+                if evidence_type == "task_error":
+                    excerpt = evidence.get("excerpt")
+                    source = report.errors.get(task_id, "")
+                    if (
+                        not isinstance(excerpt, str) or not excerpt.strip()
+                        or len(excerpt) > 500 or excerpt not in source
+                    ):
+                        raise TypeError
+                    normalized_evidence = {"type": "task_error", "excerpt": excerpt}
+                elif evidence_type == "dependency_state":
+                    dependency_id = evidence.get("dependency_id")
+                    state = evidence.get("state")
+                    if (
+                        not isinstance(dependency_id, str)
+                        or dependency_id not in affected_node.depends_on
+                        or state != report.states.get(dependency_id)
+                        or state not in {TaskState.FAILED.value, TaskState.BLOCKED.value}
+                    ):
+                        raise TypeError
+                    normalized_evidence = {
+                        "type": "dependency_state",
+                        "dependency_id": dependency_id,
+                        "state": state,
+                    }
+                elif evidence_type == "task_state":
+                    state = evidence.get("state")
+                    if state != report.states.get(task_id):
+                        raise TypeError
+                    normalized_evidence = {"type": "task_state", "state": state}
+                else:
                     raise TypeError
                 seen.add(task_id)
                 diagnoses.append({
                     "task_id": task_id,
                     "category": category,
                     "root_cause": root_cause.strip(),
+                    "evidence": normalized_evidence,
                     "retryable": retryable,
                     "operator_input_required": operator_required,
                     "repair_instruction": repair.strip(),
@@ -429,6 +471,15 @@ class TaskDecomposer:
         }
         if not affected:
             raise TaskGraphError("there are no failed or blocked tasks to replan")
+        diagnosis_ids = [
+            item.get("task_id") for item in diagnoses if isinstance(item, dict)
+        ] if isinstance(diagnoses, list) else []
+        if (
+            len(diagnosis_ids) != len(affected)
+            or len(set(diagnosis_ids)) != len(diagnosis_ids)
+            or set(diagnosis_ids) != set(affected)
+        ):
+            raise TaskGraphError("repair planning requires exactly one diagnosis for every failed or blocked task")
         context = {
             "objective": graph.objective,
             "acceptance_criteria": list(acceptance_criteria),
