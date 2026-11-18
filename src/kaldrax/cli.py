@@ -406,14 +406,20 @@ def _orchestrate(args: argparse.Namespace) -> int:
     task_file_scopes = {
         node.id: tuple(node.file_scope) for node in graph.execution_order
     }
-    allowed_paths = (
-        tuple(sorted({path for paths in task_file_scopes.values() for path in paths}))
-        if repository_workspace is not None else None
-    )
-    if repository_workspace is not None and (
-        not allowed_paths or any(not paths for paths in task_file_scopes.values())
-    ):
-        raise ValueError("every repository-backed task must declare a non-empty file_scope")
+    allowed_paths = None
+    if repository_workspace is not None:
+        if any(not paths for paths in task_file_scopes.values()):
+            raise ValueError("every repository-backed task must declare a non-empty file_scope")
+        try:
+            for paths in task_file_scopes.values():
+                RepositoryWorkspace.validate_file_scope(paths)
+            allowed_paths = RepositoryWorkspace.validate_file_scope(tuple(sorted({
+                path for paths in task_file_scopes.values() for path in paths
+            })))
+        except WorkspaceError as exc:
+            raise ValueError(f"task graph contains an unsafe file_scope: {exc}") from exc
+        if not allowed_paths:
+            raise ValueError("every repository-backed task must declare a non-empty file_scope")
 
     task = Task(args.objective, tuple(args.criterion))
     outputs: dict[str, str] = {}
