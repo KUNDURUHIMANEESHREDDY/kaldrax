@@ -628,7 +628,10 @@ class CheckpointStore:
                 payload = json.loads(self.path.read_text(encoding="utf-8"))
                 if payload.get("schema_version") != 1:
                     raise TaskGraphError("checkpoint schema version is unsupported")
-                if payload.get("request_fingerprint") != self.request_fingerprint:
+                stored_request = payload.get("request_fingerprint")
+                if stored_request is None:
+                    return None
+                if stored_request != self.request_fingerprint:
                     raise TaskGraphError("checkpoint does not match this objective and acceptance criteria")
                 if payload.get("repository_binding") != self.repository_binding:
                     raise TaskGraphError(
