@@ -272,7 +272,7 @@ class WorkspaceSandboxRunner(SandboxRunner):
             {
                 "name": "source_and_test_compilation",
                 "module": "compileall",
-                "module_args": ("-q", "src", "tests"),
+                "module_args": ("-q", "."),
             },
         )
         steps: list[dict[str, object]] = []
