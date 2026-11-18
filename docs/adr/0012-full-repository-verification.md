@@ -23,17 +23,20 @@ The full staged checkout is bounded to 5,000 files, 20 MB per file, and 100 MB t
 
 ### Fixed full verification profile
 
-The full profile runs two ordered stages against the staged full repository:
+The full profile runs three ordered stages against the staged full repository:
 
 1. python -m pytest -q, using the repository's configured complete test discovery.
-2. python -m compileall -q ., covering all tracked Python files in the staged repository.
+2. python -m compileall -q ., covering all staged Python files.
+3. npm run lint and npm run build from desktop/, using Node.js 24 and locked preinstalled dependencies.
 
-Compilation is attempted even when the test suite fails, unless cancellation or the total timeout prevents it. The report records each stage separately, including command, exit code, duration, test count (for pytest), timeout, cancellation, truncation, image and bounded output. At least one passed test is required; zero-test or all-skipped green exits do not qualify. Both stages, reviewer approval and independent evaluator PASS are mandatory.
+Compilation and desktop checks are attempted even when an earlier stage fails, unless cancellation or the shared timeout prevents them. The report records each stage separately, including command, exit code, duration, test count (for pytest), timeout, cancellation, truncation, image and bounded output. At least one passed test is required; zero-test or all-skipped green exits do not qualify. All three stages, reviewer approval and independent evaluator PASS are mandatory.
 
 - Keep legacy single-module modes (unittest, pytest, compileall) available.
 - Do not permit custom --verify-arg values to narrow the fixed full profile.
-- Require a pre-pulled image with pytest installed. Provide docker/verification.Dockerfile; runtime Docker execution continues using --pull=never and network isolation.
-- Before provider clients are created, verify Docker daemon availability, inspect the image locally, and run a constrained no-network container probe that imports pytest. A missing daemon, image, or pytest installation must fail before model-provider calls.
+- Require a prebuilt image with pytest, Node.js 24/npm, and dependencies installed from desktop/package-lock.json. The image checks staged desktop/package.json and package-lock.json against hashes captured at image build time.
+- Provide docker/verification.Dockerfile; runtime Docker execution uses --pull=never and network isolation.
+- Before provider clients are created, verify Docker daemon availability, inspect the image locally, and run a constrained no-network probe for pytest, Node/npm, and prebuilt desktop dependencies. Missing infrastructure or packages must fail before model-provider calls.
+- If the desktop manifest or lockfile changes, the operator must rebuild the image so verification dependencies match the candidate repository.
 - The desktop exposes the same full profile through the repository workflow selector.
 
 ## Consequences
@@ -57,7 +60,7 @@ Regression coverage is added for:
 Build the local verification image before invoking the full profile:
 
 ~~~bash
-docker build -f docker/verification.Dockerfile -t kaldrax-verification:py313 docker
+docker build -f docker/verification.Dockerfile -t kaldrax-verification:full .
 ~~~
 
 Automated test execution and hosted CI status must be recorded separately from source-level implementation.
