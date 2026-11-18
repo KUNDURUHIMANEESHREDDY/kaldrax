@@ -266,7 +266,7 @@ new file mode 100644
             },
             {
                 "name": "source_and_test_compilation", "module": "compileall",
-                "module_args": ["-q", "src", "tests"], "exit_code": self.exit_code,
+                "module_args": ["-q", "."], "exit_code": self.exit_code,
                 "status": "passed" if self.exit_code == 0 else "failed",
             },
         )
