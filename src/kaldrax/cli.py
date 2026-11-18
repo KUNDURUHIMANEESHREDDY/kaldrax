@@ -222,7 +222,7 @@ def _team(args: argparse.Namespace) -> int:
         image = os.getenv("KALDRAX_SANDBOX_IMAGE", "").strip()
         if not image:
             raise ValueError(
-                "full verification requires KALDRAX_SANDBOX_IMAGE pointing to a pre-pulled Python image with pytest installed"
+                "full verification requires KALDRAX_SANDBOX_IMAGE pointing to a prebuilt Python/Node image with pytest and lockfile-matched desktop dependencies"
             )
         RepositoryWorkspace(args.workspace).checkpoint_binding()
         repository_sandbox = WorkspaceSandboxRunner(
@@ -414,7 +414,7 @@ def _orchestrate(args: argparse.Namespace) -> int:
         image = os.getenv("KALDRAX_SANDBOX_IMAGE", "").strip()
         if not image:
             raise ValueError(
-                "full verification requires KALDRAX_SANDBOX_IMAGE pointing to a pre-pulled Python image with pytest installed"
+                "full verification requires KALDRAX_SANDBOX_IMAGE pointing to a prebuilt Python/Node image with pytest and lockfile-matched desktop dependencies"
             )
         repository_sandbox = WorkspaceSandboxRunner(
             workspace_root=getattr(args, "sandbox_workspace_root", Path(".kaldrax/sandbox")),
@@ -1135,7 +1135,7 @@ def main() -> int:
     orchestrate.add_argument(
         "--verify-module", choices=("unittest", "pytest", "compileall", "full"),
         default="unittest",
-        help="full runs the entire pytest suite plus compileall over the full staged repository",
+        help="full runs pytest, full Python compileall, and desktop lint plus production build",
     )
     orchestrate.add_argument("--verify-arg", action="append", default=None, help="repeat to add a verification-module argument")
     orchestrate.add_argument("--sandbox-timeout", type=int, default=120)
@@ -1154,7 +1154,7 @@ def main() -> int:
     team.add_argument(
         "--verify-module", choices=("unittest", "pytest", "compileall", "full"),
         default="unittest",
-        help="full runs the entire pytest suite plus compileall over the full staged repository",
+        help="full runs pytest, full Python compileall, and desktop lint plus production build",
     )
     team.add_argument("--verify-arg", action="append", default=None, help="repeat to add a verification-module argument")
     team.add_argument("--sandbox-timeout", type=int, default=120)
