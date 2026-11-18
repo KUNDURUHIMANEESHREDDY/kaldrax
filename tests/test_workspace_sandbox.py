@@ -161,7 +161,7 @@ def test_full_repository_suite_keeps_test_failures_and_runs_compilation(tmp_path
     assert result.steps[1]["status"] == "passed"
     assert result.steps[2]["status"] == "passed"
 
-def test_full_suite_preflight_requires_local_image_and_pytest_without_pulling(monkeypatch, tmp_path):
+def test_full_suite_preflight_requires_local_python_node_image_and_pytest_without_pulling(monkeypatch, tmp_path):
     import shutil
 
     monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/docker")
@@ -174,7 +174,7 @@ def test_full_suite_preflight_requires_local_image_and_pytest_without_pulling(mo
         if command[1:3] == ["image", "inspect"]:
             return SimpleNamespace(returncode=0, stdout="sha256:local-image", stderr="")
         if command[1] == "run":
-            return SimpleNamespace(returncode=0, stdout="v24.2.0\n10.8.2\n", stderr="")
+            return SimpleNamespace(returncode=0, stdout="python=3.11.8\nv24.2.0\n10.8.2\n", stderr="")
         raise AssertionError(command)
 
     runner = WorkspaceSandboxRunner(
@@ -187,6 +187,7 @@ def test_full_suite_preflight_requires_local_image_and_pytest_without_pulling(mo
     assert evidence == {
         "image": "kaldrax-verification:full",
         "image_id": "sha256:local-image",
+        "python": "3.11.8",
         "pytest": "available",
         "node": "v24.2.0",
         "npm": "10.8.2",
@@ -285,3 +286,27 @@ def test_workspace_sandbox_runs_desktop_lint_and_build_as_fixed_offline_command(
     assert "npm run lint" in command[-1]
     assert "npm run build" in command[-1]
     assert "--pull=never" in command
+
+def test_full_suite_preflight_rejects_wrong_node_major(monkeypatch, tmp_path):
+    import shutil
+
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/docker")
+
+    def run_factory(command, **kwargs):
+        if command[1] == "info":
+            return SimpleNamespace(returncode=0, stdout="29.0", stderr="")
+        if command[1:3] == ["image", "inspect"]:
+            return SimpleNamespace(returncode=0, stdout="sha256:local-image", stderr="")
+        return SimpleNamespace(
+            returncode=0,
+            stdout="python=3.11.8\nv22.0.0\n10.8.2\n",
+            stderr="",
+        )
+
+    runner = WorkspaceSandboxRunner(
+        workspace_root=tmp_path / "sandbox",
+        image="kaldrax-verification:old-node",
+        run_factory=run_factory,
+    )
+    with pytest.raises(RuntimeError, match="requires Node.js 24"):
+        runner.preflight_full_suite()
