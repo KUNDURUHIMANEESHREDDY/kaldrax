@@ -719,7 +719,7 @@ This file records implementation decisions, changes, commands, verification, and
 ### Decisions
 - Separate prompt context from the verification workspace. Stage all safe tracked Git-index files independently of the prompt snapshot.
 - Keep full verification bounded at 5,000 files, 20 MB per file, and 100 MB total. Fail closed on tracked symlinks, submodules, unsafe/missing tracked paths, unsupported modes, and bound violations.
-- Add a fixed full profile: entire pytest discovery followed by compileall over src and tests. Continue to compile after test failures unless cancelled or the total timeout is exhausted.
+- Add a fixed full profile: entire pytest discovery followed by compileall over the complete staged repository. Continue to compile after test failures unless cancelled or the total timeout is exhausted.
 - Require at least one passed pytest test and both verification stages to pass. Preserve existing reviewer and independent evaluator gates.
 - Keep legacy single-module modes; expose the full profile in CLI and desktop UI. A pre-pulled pytest-enabled image is required.
 
