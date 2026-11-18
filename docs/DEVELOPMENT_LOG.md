@@ -758,3 +758,10 @@ This file records implementation decisions, changes, commands, verification, and
 - The quality script records each command's own exit code and continues after a failed check so the stage report preserves all available findings.
 - The full profile now contains four ordered gates: pytest, deterministic CI quality checks, complete Python compilation, and desktop lint/production build.
 - Docker-nested integration tests and provider-backed smoke/validation remain separately gated because the verifier intentionally does not expose the host Docker socket or provider credentials.
+### Python matrix coverage completed in the full profile
+- The regular CI workflow supports Python 3.11 and 3.13. The verification image now contains both runtimes, each with pytest, plus Node.js 24/npm and prebuilt desktop dependencies from the lockfile.
+- The full profile records seven stages: pytest, deterministic retrieval/lexical-hybrid/evaluator checks, and complete Python compilation on 3.11; the same on 3.13 with its CI-profile memory quality report; then desktop lint and production build on Node 24.
+- Both Python versions must independently produce at least one passing test. The aggregate report exposes per-version counts and per-stage runtime/resource/exit/timeout/truncation evidence.
+- Preflight reports both Python versions and rejects an image that does not match Python 3.11, Python 3.13, Node 24, pytest, or the preinstalled lockfile-derived desktop cache.
+- Added test fixtures for both runtime command sequences, per-runtime test counts, zero-test rejection on either version, desktop failure after the Python matrix, and missing-runtime preflight.
+- Docker-nested integration and live-provider validation remain separate gated CI jobs; the isolated full profile does not claim to run them.
