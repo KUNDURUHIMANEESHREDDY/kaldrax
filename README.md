@@ -320,9 +320,15 @@ kaldrax team --workspace . --objective "Fix CSV parsing" --criterion "csv.reader
 
 The apply flag modifies the working tree but does not create a Git commit. It rechecks that the original HEAD is unchanged and the checkout remains clean immediately before applying. Without apply, the report records a verified dry run and leaves the checkout untouched. Existing prose-only team operation remains available without a workspace argument.
 
-Supported single-stage verification modules are unittest, pytest, and compileall. The default remains unittest discovery under the tests directory. For a full repository gate, use --verify-module full. It runs four fixed gates against the complete safe tracked checkout: the complete pytest discovery (pytest -q); deterministic CI quality checks (memory retrieval benchmark, lexical/hybrid comparison, deterministic evaluator benchmark, and the memory CI-threshold report); compilation of every staged Python file (compileall -q .); and the desktop CI commands (npm run lint and npm run build). All gates must pass, and at least one test must pass. The desktop stage first verifies that desktop/package.json and package-lock.json match the dependencies preinstalled in the image. The command set is fixed; --verify-arg is not accepted with the full profile.
+Supported single-stage verification modules are unittest, pytest, and compileall. The default remains unittest discovery under the tests directory. For a full repository gate, use --verify-module full. It executes seven fixed stages against the complete safe tracked checkout:
 
-The full profile requires a prebuilt image containing Python/pytest, Node.js/npm, and the locked desktop frontend dependencies. Build the included image once from the repository root, then configure it before starting the run:
+- Python 3.11: the complete pytest suite, deterministic retrieval/lexical-hybrid/evaluator benchmarks, and compileall -q ..
+- Python 3.13: the same full pytest suite and deterministic benchmarks, the CI-profile memory quality-threshold report, and compileall -q ..
+- Node.js 24: desktop Oxlint (npm run lint) and the Vite production build (npm run build).
+
+Each Python version must report at least one passing test. Every stage must pass. The desktop stage first verifies that desktop/package.json and package-lock.json match the dependencies preinstalled in the image. The command set is fixed; --verify-arg is not accepted with the full profile.
+
+The full profile requires a prebuilt image containing Python 3.11 and 3.13 (each with pytest), Node.js/npm 24, and the locked desktop frontend dependencies. Build the included image once from the repository root, then configure it before starting the run:
 
 ~~~powershell
 docker build -f docker/verification.Dockerfile -t kaldrax-verification:full .
@@ -330,7 +336,7 @@ $env:KALDRAX_SANDBOX_IMAGE = "kaldrax-verification:full"
 kaldrax team --workspace . --objective "Review the repository change" --criterion "all tests pass" --verify-module full
 ~~~
 
-The image build installs the Python test runner and prebuilds desktop node_modules from desktop/package-lock.json. The deterministic quality gate runs without API credentials and uses the checked-in CI datasets and thresholds. Before any provider clients are created, KALDRAX checks Docker availability, confirms the image exists locally, and runs a constrained no-network probe for pytest, Node.js, npm, and the cached desktop dependencies. During verification, the staged package files must match the image's lockfile hash; dependency changes require rebuilding the image. A missing daemon, image, toolchain, or matching dependency cache blocks the run before provider spending. KALDRAX never pulls images or installs dependencies during a run. All verification containers have networking disabled.
+The image build installs pytest into both Python runtimes and prebuilds desktop node_modules from desktop/package-lock.json. The deterministic quality gate runs without API credentials and uses the checked-in CI datasets and thresholds. Before any provider clients are created, KALDRAX checks Docker availability, confirms the image exists locally, and runs a constrained no-network probe for pytest, Node.js, npm, and the cached desktop dependencies. During verification, the staged package files must match the image's lockfile hash; dependency changes require rebuilding the image. A missing daemon, image, toolchain, or matching dependency cache blocks the run before provider spending. KALDRAX never pulls images or installs dependencies during a run. All verification containers have networking disabled.
 
 The model-context snapshot is deliberately bounded to 240 files, 48 KB per file, and 45 KB total. This limit no longer defines the test workspace: patch staging separately reconstructs the complete safe tracked checkout from the Git index before applying the diff. Full verification staging is capped at 5,000 files, 20 MB per file, and 100 MB total. Tracked credentials/private files and excluded dependency/build/runtime directories are omitted. Tracked symlinks, submodules, unsafe paths, missing tracked files, or an exceeded size limit fail closed rather than silently producing a partial verification tree.
 
