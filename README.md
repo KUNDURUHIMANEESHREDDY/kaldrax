@@ -320,11 +320,21 @@ kaldrax team --workspace . --objective "Fix CSV parsing" --criterion "csv.reader
 
 The apply flag modifies the working tree but does not create a Git commit. It rechecks that the original HEAD is unchanged and the checkout remains clean immediately before applying. Without apply, the report records a verified dry run and leaves the checkout untouched. Existing prose-only team operation remains available without a workspace argument.
 
-Supported verification modules are unittest, pytest, and compileall. The default is unittest discovery under the tests directory. Pytest requires an image that already contains pytest and the project's test dependencies. Configure a pre-pulled image with KALDRAX_SANDBOX_IMAGE; KALDRAX never pulls arbitrary images during a run. The image must contain Python and the selected verification module. Additional module arguments can be supplied with repeated verify-arg options.
+Supported single-stage verification modules are unittest, pytest, and compileall. The default remains unittest discovery under the tests directory. For a full Python repository gate, use --verify-module full; this runs the complete configured pytest discovery (pytest -q) and then compiles src and tests (compileall -q src tests). Both stages must pass, and at least one test must pass. The command set and discovery roots are fixed; --verify-arg is not accepted with the full profile.
 
-The snapshot is bounded to 240 files, 48 KB per file, and 45 KB total. Source and test paths take priority over docs and examples. Common credential locations, environment files (except the example file), key/certificate/database files, Git metadata, and KALDRAX runtime state are excluded or rejected. A repository that is dirty, has unsupported submodules/symlinks in touched paths, or changes HEAD during the run is refused.
+The full profile requires a pre-pulled Python image containing pytest. Build the included image once and configure it before starting the run:
 
-The sandbox disables networking, uses an unprivileged UID, drops capabilities, applies CPU/memory/PID/time/output limits, and mounts only a disposable copy (never the operator's checkout). Docker and its host kernel remain trusted; this is not a VM boundary. The workspace is a bounded snapshot, not an unrestricted clone: omitted files are unavailable to the model and may make a patch unverifiable.
+~~~powershell
+docker build -f docker/verification.Dockerfile -t kaldrax-verification:py313 .
+$env:KALDRAX_SANDBOX_IMAGE = "kaldrax-verification:py313"
+kaldrax team --workspace . --objective "Review the repository change" --criterion "all tests pass" --verify-module full
+~~~
+
+KALDRAX never pulls images or installs dependencies during a run. Custom images must be pre-pulled, include Python plus the selected test dependencies, and are executed without network access.
+
+The model-context snapshot is deliberately bounded to 240 files, 48 KB per file, and 45 KB total. This limit no longer defines the test workspace: patch staging separately reconstructs the complete safe tracked checkout from the Git index before applying the diff. Full verification staging is capped at 5,000 files, 20 MB per file, and 100 MB total. Tracked credentials/private files and excluded dependency/build/runtime directories are omitted. Tracked symlinks, submodules, unsafe paths, missing tracked files, or an exceeded size limit fail closed rather than silently producing a partial verification tree.
+
+The sandbox copies that complete safe staged checkout into a disposable Docker workspace (never the operator's checkout), then runs each verification stage with networking disabled, an unprivileged UID, dropped capabilities, and CPU/memory/PID/time/output limits. Docker and its host kernel remain trusted; this is not a VM boundary. The model still receives only the smaller source-context snapshot.
 
 
 ## Memory evaluation and v0.6 release gate
