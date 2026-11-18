@@ -250,9 +250,10 @@ new file mode 100644
     assert coordinator.builder.prompts[0][1]["allowed_paths"] == ["csv_reader.py"]
     assert not (root / "docs" / "extra.md").exists()
     assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")class FullSuiteSandbox(SuccessfulSandbox):
-    def __init__(self, *, exit_code=0, test_count=9):
+    def __init__(self, *, exit_code=0, test_count=9, suite_exit_code=None):
         super().__init__(exit_code=exit_code)
         self.test_count = test_count
+        self.suite_exit_code = suite_exit_code
         self.full_calls = []
 
     def run_workspace_full_suite(self, workspace, *, timeout_seconds, cancel_file=None):
@@ -269,7 +270,8 @@ new file mode 100644
                 "status": "passed" if self.exit_code == 0 else "failed",
             },
         )
-        overall = 0 if self.exit_code == 0 and self.test_count > 0 else 1
+        calculated = 0 if self.exit_code == 0 and self.test_count > 0 else 1
+        overall = calculated if self.suite_exit_code is None else self.suite_exit_code
         return WorkspaceVerificationSuiteResult(
             exit_code=overall,
             stdout=f"{self.test_count} passed\n",
@@ -306,7 +308,7 @@ def test_repository_team_full_profile_requires_tests_and_compilation(tmp_path):
 def test_repository_team_full_profile_rejects_zero_test_suite_even_on_green_exit(tmp_path):
     root = tmp_path / "repo"
     init_csv_repo(root)
-    sandbox = FullSuiteSandbox(exit_code=0, test_count=0)
+    sandbox = FullSuiteSandbox(exit_code=0, test_count=0, suite_exit_code=0)
     coordinator, task = make_coordinator(root, sandbox)
     coordinator.verify_module = "full"
 
@@ -314,7 +316,7 @@ def test_repository_team_full_profile_rejects_zero_test_suite_even_on_green_exit
 
     assert report.status is RunStatus.LIMIT_REACHED
     assert report.applied is False
-    assert report.verification["exit_code"] == 1
+    assert report.verification["exit_code"] == 0
     assert report.verification["test_count"] == 0
     assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")
 
