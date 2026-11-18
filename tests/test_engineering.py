@@ -265,18 +265,38 @@ new file mode 100644
         self.full_calls.append((workspace, timeout_seconds, cancel_file))
         steps = (
             {
-                "name": "full_test_suite", "module": "pytest", "module_args": ["-q"],
+                "name": "python_3_11_full_test_suite", "module": "pytest311", "module_args": ["-q"],
                 "exit_code": 0 if self.test_count else 1, "test_count": self.test_count,
+                "python_version": "3.11",
                 "status": "passed" if self.test_count else "failed",
             },
             {
-                "name": "deterministic_ci_quality_checks", "module": "ci-quality",
+                "name": "python_3_11_deterministic_ci_quality", "module": "ci-quality311",
+                "module_args": [], "exit_code": 0, "python_version": "3.11",
+                "status": "passed",
+            },
+            {
+                "name": "python_3_11_source_compilation", "module": "compileall311",
+                "module_args": ["-q", "."], "exit_code": self.exit_code,
+                "python_version": "3.11",
+                "status": "passed" if self.exit_code == 0 else "failed",
+            },
+            {
+                "name": "python_3_13_full_test_suite", "module": "pytest", "module_args": ["-q"],
+                "exit_code": 0 if self.test_count else 1, "test_count": self.test_count,
+                "python_version": "3.13",
+                "status": "passed" if self.test_count else "failed",
+            },
+            {
+                "name": "python_3_13_deterministic_ci_quality", "module": "ci-quality",
                 "module_args": [], "exit_code": self.ci_quality_exit_code,
+                "python_version": "3.13",
                 "status": "passed" if self.ci_quality_exit_code == 0 else "failed",
             },
             {
-                "name": "source_and_test_compilation", "module": "compileall",
+                "name": "python_3_13_source_compilation", "module": "compileall",
                 "module_args": ["-q", "."], "exit_code": self.exit_code,
+                "python_version": "3.13",
                 "status": "passed" if self.exit_code == 0 else "failed",
             },
             {
@@ -299,7 +319,8 @@ new file mode 100644
             output_truncated=False,
             container_image="registry.example.test/kaldrax-full:latest",
             cancelled=False,
-            test_count=self.test_count,
+            test_count=self.test_count * 2,
+            test_counts={"3.11": self.test_count, "3.13": self.test_count},
             steps=steps,
         )
 
