@@ -29,6 +29,7 @@ class WorkspaceVerificationSuiteResult:
     cancelled: bool
     test_count: int
     steps: tuple[dict[str, object], ...]
+    preflight: dict[str, str] | None = None
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -68,6 +69,7 @@ class WorkspaceSandboxRunner(SandboxRunner):
         if not isinstance(selected, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9./:_@-]{0,255}", selected):
             raise ValueError("sandbox image must be a valid Docker image reference")
         self.image = selected
+        self._full_suite_preflight: dict[str, str] | None = None
 
     def _copy_workspace(self, source: Path, destination: Path) -> None:
         if not source.is_dir():
@@ -280,7 +282,7 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 "configured verification image is not available locally; build or pull it before running KALDRAX"
             )
         probe_script = (
-            "python -B -c 'import pytest' && "
+            "python -B -c 'import pytest,sys; print(\\"python=\\"+sys.version.split()[0])' && "
             "node --version && npm --version && "
             "test -d /opt/kaldrax-deps/desktop/node_modules && "
             "test -f /opt/kaldrax-desktop-deps.sha256"
@@ -309,18 +311,32 @@ class WorkspaceSandboxRunner(SandboxRunner):
                 "and the prebuilt locked desktop dependencies"
             )
         versions = str(checked.stdout).splitlines()
-        if len(versions) < 2:
+        if len(versions) < 3 or not versions[0].startswith("python="):
             raise SandboxExecutionError("configured verification image returned incomplete toolchain evidence")
-        return {
+        python_version = versions[0].removeprefix("python=")
+        python_match = re.match(r"^(\\d+)\\.(\\d+)", python_version)
+        node_version, npm_version = versions[1], versions[2]
+        node_match = re.match(r"^v?(\\d+)\\.", node_version)
+        if (
+            python_match is None
+            or (int(python_match.group(1)), int(python_match.group(2))) < (3, 11)
+        ):
+            raise SandboxExecutionError("full verification requires Python 3.11 or newer")
+        if node_match is None or int(node_match.group(1)) != 24:
+            raise SandboxExecutionError("full verification requires Node.js 24 to match desktop CI")
+        evidence = {
             "image": self.image,
             "image_id": str(inspected.stdout).strip(),
+            "python": python_version,
             "pytest": "available",
-            "node": versions[0],
-            "npm": versions[1],
+            "node": node_version,
+            "npm": npm_version,
             "desktop_dependencies": "prebuilt",
             "pull_policy": "never",
             "network": "none",
         }
+        self._full_suite_preflight = dict(evidence)
+        return evidence
 
     def run_workspace_full_suite(
         self,
@@ -486,5 +502,6 @@ class WorkspaceSandboxRunner(SandboxRunner):
             cancelled=cancelled,
             test_count=test_count,
             steps=tuple(steps),
+            preflight=dict(self._full_suite_preflight) if self._full_suite_preflight is not None else None,
         )
 
