@@ -212,8 +212,24 @@ def _benchmark_evaluator(args: argparse.Namespace) -> int:
 
 
 def _team(args: argparse.Namespace) -> int:
-    if args.verify_module == "full" and args.workspace is None:
-        raise ValueError("--verify-module full requires --workspace")
+    verify_module = getattr(args, "verify_module", "unittest")
+    repository_sandbox = None
+    if verify_module == "full":
+        if args.workspace is None:
+            raise ValueError("--verify-module full requires --workspace")
+        if args.verify_arg is not None:
+            raise ValueError("--verify-arg cannot be combined with the fixed full verification profile")
+        image = os.getenv("KALDRAX_SANDBOX_IMAGE", "").strip()
+        if not image:
+            raise ValueError(
+                "full verification requires KALDRAX_SANDBOX_IMAGE pointing to a pre-pulled Python image with pytest installed"
+            )
+        RepositoryWorkspace(args.workspace).checkpoint_binding()
+        repository_sandbox = WorkspaceSandboxRunner(
+            workspace_root=getattr(args, "sandbox_workspace_root", Path(".kaldrax/sandbox")),
+            image=image,
+        )
+        repository_sandbox.preflight_full_suite()
     _, builder_model, evaluator_model = _require_provider()
     planner_model = os.getenv("KALDRAX_PLANNER_MODEL", "")
     reviewer_model = os.getenv("KALDRAX_REVIEWER_MODEL", "")
@@ -227,14 +243,6 @@ def _team(args: argparse.Namespace) -> int:
         raise ValueError("planner, builder, reviewer, and evaluator model identifiers must all differ")
     if args.apply and args.workspace is None:
         raise ValueError("--apply requires --workspace; the existing prose-only team workflow cannot modify files")
-    if args.workspace is not None and args.verify_module == "full":
-        if args.verify_arg is not None:
-            raise ValueError("--verify-arg cannot be combined with the fixed full verification profile")
-        if not os.getenv("KALDRAX_SANDBOX_IMAGE", "").strip():
-            raise ValueError(
-                "full verification requires KALDRAX_SANDBOX_IMAGE pointing to a pre-pulled Python image with pytest installed"
-            )
-
     budget = _budget_from_env()
     task = Task(args.objective, tuple(args.criterion), project_id=args.project)
     if args.workspace is not None:
@@ -253,7 +261,7 @@ def _team(args: argparse.Namespace) -> int:
             reviewer=_client(reviewer_model, budget),
             evaluator=LLMEvaluator(_client(evaluator_model, budget)),
             workspace_root=args.workspace,
-            sandbox=WorkspaceSandboxRunner(
+            sandbox=repository_sandbox or WorkspaceSandboxRunner(
                 workspace_root=args.sandbox_workspace_root,
                 image=os.getenv("KALDRAX_SANDBOX_IMAGE") or None,
             ),
@@ -372,6 +380,7 @@ def _orchestrate(args: argparse.Namespace) -> int:
         raise ValueError("--apply requires --workspace")
     repository_workspace = None
     repository_binding: dict[str, str] | None = None
+    repository_sandbox = None
     if workspace_root is not None:
         repository_workspace = RepositoryWorkspace(workspace_root)
         try:
@@ -402,10 +411,16 @@ def _orchestrate(args: argparse.Namespace) -> int:
     if workspace_root is not None and verify_module == "full":
         if getattr(args, "verify_arg", None) is not None:
             raise ValueError("--verify-arg cannot be combined with the fixed full verification profile")
-        if not os.getenv("KALDRAX_SANDBOX_IMAGE", "").strip():
+        image = os.getenv("KALDRAX_SANDBOX_IMAGE", "").strip()
+        if not image:
             raise ValueError(
                 "full verification requires KALDRAX_SANDBOX_IMAGE pointing to a pre-pulled Python image with pytest installed"
             )
+        repository_sandbox = WorkspaceSandboxRunner(
+            workspace_root=getattr(args, "sandbox_workspace_root", Path(".kaldrax/sandbox")),
+            image=image,
+        )
+        repository_sandbox.preflight_full_suite()
     max_replans = getattr(args, "max_replans", 2)
     if not isinstance(max_replans, int) or isinstance(max_replans, bool) or not 0 <= max_replans <= 3:
         raise ValueError("--max-replans must be an integer between 0 and 3")
@@ -810,7 +825,7 @@ def _orchestrate(args: argparse.Namespace) -> int:
                 ),
                 evaluator=evaluator,
                 workspace_root=workspace_root,
-                sandbox=WorkspaceSandboxRunner(
+                sandbox=repository_sandbox or WorkspaceSandboxRunner(
                     workspace_root=getattr(
                         args, "sandbox_workspace_root", Path(".kaldrax/sandbox")
                     ),
