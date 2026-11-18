@@ -31,7 +31,7 @@ Fields map to the Python task and CLI: objective; one or more unique acceptance 
 
 The desktop launches the bounded local sequence: planner → builder → reviewer → independent evaluator. Four distinct model identifiers and a cycle limit from 1 to 5 are required. The final report is a pass only when reviewer approval and the independent evaluator both pass. Team runs share configured call/token/time/cost budgets and write per-role provenance to project/agent-scoped memory.
 
-Optional repository mode requires a clean selected Git worktree. The planner receives a bounded path manifest; the builder receives the allowed source snapshot and returns a unified diff. KALDRAX stages that patch in isolation, verifies a disposable copy in Docker, then requires reviewer approval and an independent evaluator PASS. Dry-run is the default. Applying requires a separate confirmation and a clean/base-commit recheck. It never commits or pushes.
+Optional repository mode requires a clean selected Git worktree. The planner receives a bounded path manifest; the builder receives the allowed source snapshot and returns a unified diff. KALDRAX stages that patch against the complete safe tracked checkout, verifies a disposable copy in Docker, then requires reviewer approval and an independent evaluator PASS. The optional full profile runs the complete pytest suite and Python source/test compilation; it requires a pre-pulled image with pytest installed. Dry-run is the default. Applying requires a separate confirmation and a clean/base-commit recheck. It never commits or pushes.
 
 ## Memory safeguards
 
