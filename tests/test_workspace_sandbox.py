@@ -126,6 +126,7 @@ def test_full_repository_suite_rejects_zero_passed_tests_but_still_compiles(tmp_
     assert result.exit_code != 0
     assert result.steps[0]["status"] == "failed"
     assert result.steps[1]["status"] == "passed"
+    assert result.steps[2]["status"] == "passed"
 
 
 def test_full_repository_suite_keeps_test_failures_and_runs_compilation(tmp_path):
@@ -155,6 +156,7 @@ def test_full_repository_suite_keeps_test_failures_and_runs_compilation(tmp_path
     assert result.test_count == 7
     assert result.steps[0]["status"] == "failed"
     assert result.steps[1]["status"] == "passed"
+    assert result.steps[2]["status"] == "passed"
 
 def test_full_suite_preflight_requires_local_image_and_pytest_without_pulling(monkeypatch, tmp_path):
     import shutil
@@ -169,18 +171,18 @@ def test_full_suite_preflight_requires_local_image_and_pytest_without_pulling(mo
         if command[1:3] == ["image", "inspect"]:
             return SimpleNamespace(returncode=0, stdout="sha256:local-image", stderr="")
         if command[1] == "run":
-            return SimpleNamespace(returncode=0, stdout="v24.2.0\\n10.8.2\\n", stderr="")
+            return SimpleNamespace(returncode=0, stdout="v24.2.0\n10.8.2\n", stderr="")
         raise AssertionError(command)
 
     runner = WorkspaceSandboxRunner(
         workspace_root=tmp_path / "sandbox",
-        image="registry.example.test/kaldrax-verify:py313",
+        image="kaldrax-verification:full",
         run_factory=run_factory,
     )
     evidence = runner.preflight_full_suite()
 
     assert evidence == {
-        "image": "registry.example.test/kaldrax-verify:py313",
+        "image": "kaldrax-verification:full",
         "image_id": "sha256:local-image",
         "pytest": "available",
         "node": "v24.2.0",
@@ -238,7 +240,7 @@ def test_full_suite_preflight_fails_when_pytest_is_missing_from_image(monkeypatc
 
     runner = WorkspaceSandboxRunner(
         workspace_root=tmp_path / "sandbox",
-        image="registry.example.test/kaldrax/no-pytest:py313",
+        image="kaldrax-verification:no-pytest",
         run_factory=run_factory,
     )
     with pytest.raises(RuntimeError, match="must provide pytest, Node.js"):
