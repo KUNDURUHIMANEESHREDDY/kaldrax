@@ -23,13 +23,14 @@ The full staged checkout is bounded to 5,000 files, 20 MB per file, and 100 MB t
 
 ### Fixed full verification profile
 
-The full profile runs three ordered stages against the staged full repository:
+The full profile runs four ordered gates against the staged full repository:
 
 1. python -m pytest -q, using the repository's configured complete test discovery.
-2. python -m compileall -q ., covering all staged Python files.
-3. npm run lint and npm run build from desktop/, using Node.js 24 and locked preinstalled dependencies.
+2. The checked-in deterministic CI memory retrieval benchmark, lexical/hybrid comparison, evaluator benchmark, and memory quality report using the CI threshold profile.
+3. python -m compileall -q ., covering all staged Python files.
+4. npm run lint and npm run build from desktop/, using Node.js 24 and locked preinstalled dependencies.
 
-Compilation and desktop checks are attempted even when an earlier stage fails, unless cancellation or the shared timeout prevents them. The report records each stage separately, including command, exit code, duration, test count (for pytest), timeout, cancellation, truncation, image and bounded output. At least one passed test is required; zero-test or all-skipped green exits do not qualify. All three stages, reviewer approval and independent evaluator PASS are mandatory.
+The memory/evaluator quality commands, compilation, and desktop checks are attempted even when an earlier gate fails, unless cancellation or the shared timeout prevents them. The report records each stage separately, including command, exit code, duration, test count (for pytest), timeout, cancellation, truncation, image and bounded output. At least one passed test is required; zero-test or all-skipped green exits do not qualify. All four gates, reviewer approval and independent evaluator PASS are mandatory.
 
 - Keep legacy single-module modes (unittest, pytest, compileall) available.
 - Do not permit custom --verify-arg values to narrow the fixed full profile.
@@ -52,7 +53,7 @@ Compilation and desktop checks are attempted even when an earlier stage fails, u
 Regression coverage is added for:
 - staging a tracked test file omitted from the bounded prompt snapshot;
 - rejection of tracked symlinks;
-- fixed full-suite command selection, non-empty pytest results, and Docker/image/pytest preflight;
+- fixed full-suite command selection, non-empty pytest results, deterministic CI quality checks, and Docker/image/pytest preflight;
 - running compilation after test failures;
 - coordinator acceptance rejection for zero tests or compilation failure;
 - CLI and desktop exposure of the full profile.
@@ -64,3 +65,5 @@ docker build -f docker/verification.Dockerfile -t kaldrax-verification:full .
 ~~~
 
 Automated test execution and hosted CI status must be recorded separately from source-level implementation.
+
+The offline full profile intentionally does not mount the host Docker socket or receive provider credentials. Docker-nested integration tests and live-provider smoke/validation remain separate gated workflows and are not claimed as part of this profile.
