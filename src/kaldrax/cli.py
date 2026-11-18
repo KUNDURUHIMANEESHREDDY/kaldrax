@@ -225,6 +225,13 @@ def _team(args: argparse.Namespace) -> int:
         raise ValueError("planner, builder, reviewer, and evaluator model identifiers must all differ")
     if args.apply and args.workspace is None:
         raise ValueError("--apply requires --workspace; the existing prose-only team workflow cannot modify files")
+    if args.workspace is not None and args.verify_module == "full":
+        if args.verify_arg is not None:
+            raise ValueError("--verify-arg cannot be combined with the fixed full verification profile")
+        if not os.getenv("KALDRAX_SANDBOX_IMAGE", "").strip():
+            raise ValueError(
+                "full verification requires KALDRAX_SANDBOX_IMAGE pointing to a pre-pulled Python image with pytest installed"
+            )
 
     budget = _budget_from_env()
     task = Task(args.objective, tuple(args.criterion), project_id=args.project)
@@ -387,6 +394,14 @@ def _orchestrate(args: argparse.Namespace) -> int:
         raise ValueError("planner, builder, reviewer, and evaluator model identifiers must all differ")
     if not args.criterion:
         raise ValueError("orchestrate requires at least one --criterion for independent evaluation")
+    verify_module = getattr(args, "verify_module", "unittest")
+    if workspace_root is not None and verify_module == "full":
+        if getattr(args, "verify_arg", None) is not None:
+            raise ValueError("--verify-arg cannot be combined with the fixed full verification profile")
+        if not os.getenv("KALDRAX_SANDBOX_IMAGE", "").strip():
+            raise ValueError(
+                "full verification requires KALDRAX_SANDBOX_IMAGE pointing to a pre-pulled Python image with pytest installed"
+            )
     max_replans = getattr(args, "max_replans", 2)
     if not isinstance(max_replans, int) or isinstance(max_replans, bool) or not 0 <= max_replans <= 3:
         raise ValueError("--max-replans must be an integer between 0 and 3")
@@ -762,9 +777,6 @@ def _orchestrate(args: argparse.Namespace) -> int:
             "compileall": ("-q", "."),
             "full": (),
         }
-        verify_module = getattr(args, "verify_module", "unittest")
-        if verify_module == "full" and getattr(args, "verify_arg", None) is not None:
-            raise ValueError("--verify-arg cannot be combined with the fixed full verification profile")
         verify_args = (
             tuple(args.verify_arg)
             if getattr(args, "verify_arg", None) is not None
