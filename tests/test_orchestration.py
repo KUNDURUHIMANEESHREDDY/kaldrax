@@ -594,3 +594,56 @@ def test_cli_orchestration_rejects_dirty_workspace_before_provider_calls(tmp_pat
     args = SimpleNamespace(workspace=root, apply=False)
     with pytest.raises(ValueError, match="workspace must be clean"):
         cli._orchestrate(args)
+
+def test_repository_checkpoint_is_bound_to_canonical_root_and_full_head(tmp_path):
+    graph = TaskGraph("build", (TaskNode("a", "A"),))
+    checkpoint_path = tmp_path / "run.json"
+    root = tmp_path / "repo"
+    other_root = tmp_path / "other-repo"
+    root.mkdir()
+    other_root.mkdir()
+    original = {
+        "root": str(root.resolve()),
+        "head": "a" * 40,
+    }
+    store = CheckpointStore(checkpoint_path, repository_binding=original)
+
+    report = TaskGraphScheduler().run(
+        graph, lambda task: "completed", checkpoint_store=store,
+    )
+    assert report.passed
+    payload = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    assert payload["repository_binding"] == original
+    assert CheckpointStore(
+        checkpoint_path, repository_binding=original,
+    ).load(graph) is not None
+
+    changed_head = {**original, "head": "b" * 40}
+    with pytest.raises(TaskGraphError, match="repository root or HEAD changed"):
+        CheckpointStore(
+            checkpoint_path, repository_binding=changed_head,
+        ).load(graph)
+
+    changed_root = {**original, "root": str(other_root.resolve())}
+    with pytest.raises(TaskGraphError, match="repository root or HEAD changed"):
+        CheckpointStore(
+            checkpoint_path, repository_binding=changed_root,
+        ).load(graph)
+
+    with pytest.raises(TaskGraphError, match="repository root or HEAD changed"):
+        CheckpointStore(checkpoint_path).load(graph)
+
+
+def test_unbound_legacy_checkpoint_remains_loadable(tmp_path):
+    graph = TaskGraph("build", (TaskNode("a", "A"),))
+    checkpoint_path = tmp_path / "legacy.json"
+    store = CheckpointStore(checkpoint_path)
+    TaskGraphScheduler().run(
+        graph, lambda task: "completed", checkpoint_store=store,
+    )
+
+    payload = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    payload.pop("repository_binding", None)
+    checkpoint_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert CheckpointStore(checkpoint_path).load(graph) is not None
