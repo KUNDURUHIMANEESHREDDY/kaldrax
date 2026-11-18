@@ -325,12 +325,12 @@ Supported single-stage verification modules are unittest, pytest, and compileall
 The full profile requires a pre-pulled Python image containing pytest. Build the included image once and configure it before starting the run:
 
 ~~~powershell
-docker build -f docker/verification.Dockerfile -t kaldrax-verification:py313 .
+docker build -f docker/verification.Dockerfile -t kaldrax-verification:py313 docker
 $env:KALDRAX_SANDBOX_IMAGE = "kaldrax-verification:py313"
 kaldrax team --workspace . --objective "Review the repository change" --criterion "all tests pass" --verify-module full
 ~~~
 
-KALDRAX never pulls images or installs dependencies during a run. Custom images must be pre-pulled, include Python plus the selected test dependencies, and are executed without network access.
+Before any provider clients are created, KALDRAX checks that Docker is available, the configured image exists locally, and an isolated no-network probe can import pytest. A missing Docker daemon, image, or pytest installation blocks the run before provider spending. KALDRAX never pulls images or installs dependencies during a run. Custom images must be pre-pulled, include Python plus the selected test dependencies, and are executed without network access.
 
 The model-context snapshot is deliberately bounded to 240 files, 48 KB per file, and 45 KB total. This limit no longer defines the test workspace: patch staging separately reconstructs the complete safe tracked checkout from the Git index before applying the diff. Full verification staging is capped at 5,000 files, 20 MB per file, and 100 MB total. Tracked credentials/private files and excluded dependency/build/runtime directories are omitted. Tracked symlinks, submodules, unsafe paths, missing tracked files, or an exceeded size limit fail closed rather than silently producing a partial verification tree.
 
