@@ -431,6 +431,19 @@ def test_workspace_sandbox_runs_deterministic_ci_quality_checks_in_fixed_offline
     assert "--live-extraction" not in script
     assert "/tmp/kaldrax-memory-quality.json" in script
 
+    runner311 = WorkspaceSandboxRunner(
+        workspace_root=tmp_path / "sandbox-311",
+        image="kaldrax-verification:full",
+        popen_factory=popen_factory,
+        run_factory=run_factory,
+    )
+    result311 = runner311.run_workspace(source, module="ci-quality311", module_args=())
+    script311 = commands[-1][-1]
+    assert result311.exit_code == 0
+    assert "python311 -B -m kaldrax.cli memory benchmark" in script311
+    assert "python311 -B -m kaldrax.cli benchmark-evaluator" in script311
+    assert "memory quality-report" not in script311
+
 def test_full_suite_preflight_rejects_missing_python_311_runtime(monkeypatch, tmp_path):
     import shutil
 
