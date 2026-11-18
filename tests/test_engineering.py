@@ -77,7 +77,7 @@ def init_csv_repo(root):
     subprocess.run(["git", "-C", str(root), "commit", "-qm", "baseline"], check=True)
 
 
-def make_coordinator(root, sandbox, artifacts=None):
+def make_coordinator(root, sandbox, artifacts=None, *, allowed_paths=None):
     task = Task(
         "Fix CSV parsing for quoted fields and empty rows",
         ("csv.reader", "any(field.strip() for field in row)", "Sandbox verification exit code: 0"),
@@ -94,6 +94,7 @@ def make_coordinator(root, sandbox, artifacts=None):
         verify_args=("discover", "-s", "tests", "-v"),
         max_cycles=1,
         artifact_dir=artifacts,
+        allowed_paths=allowed_paths,
     ), task
 
 
@@ -199,4 +200,52 @@ def test_repository_team_cancellation_after_planner_stops_before_builder(tmp_pat
     assert report.events[-1] == "repository_team_run_cancelled"
     assert coordinator.builder.prompts == []
     assert sandbox.calls == []
+    assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")
+
+def test_repository_team_rejects_out_of_scope_patch_before_sandbox_or_review(tmp_path):
+    root = tmp_path / "repo"
+    init_csv_repo(root)
+    sandbox = SuccessfulSandbox()
+
+    unauthorized_patch = """diff --git a/csv_reader.py b/csv_reader.py
+--- a/csv_reader.py
++++ b/csv_reader.py
+@@ -1,2 +1,2 @@
+ def parse_rows(source: str) -> list[list[str]]:
+-    return [line.split(",") for line in source.splitlines() if line.strip()]
++    return []
+diff --git a/docs/extra.md b/docs/extra.md
+new file mode 100644
+--- /dev/null
++++ b/docs/extra.md
+@@ -0,0 +1 @@
++# outside scope
+"""
+
+    class OutOfScopeBuilder(FixedClient):
+        def complete(self, *, system_prompt, user_prompt):
+            self.prompts.append((system_prompt, json.loads(user_prompt)))
+            if "repository implementation agent" in system_prompt:
+                return json.dumps({
+                    "summary": "Attempt to change a file outside the task scope.",
+                    "patch": unauthorized_patch,
+                })
+            return self.response
+
+    coordinator, task = make_coordinator(
+        root, sandbox, allowed_paths=("csv_reader.py",),
+    )
+    coordinator.builder = OutOfScopeBuilder("unused")
+
+    report = coordinator.run(task, apply_changes=True)
+
+    assert report.status is RunStatus.LIMIT_REACHED
+    assert report.applied is False
+    assert report.allowed_paths == ["csv_reader.py"]
+    assert report.changed_files == []
+    assert sandbox.calls == []
+    assert coordinator.reviewer.prompts == []
+    assert any("task file_scope" in event for event in report.events)
+    assert coordinator.builder.prompts[0][1]["allowed_paths"] == ["csv_reader.py"]
+    assert not (root / "docs" / "extra.md").exists()
     assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")
