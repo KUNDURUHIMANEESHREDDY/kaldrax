@@ -33,6 +33,7 @@ Compilation is attempted even when the test suite fails, unless cancellation or 
 - Keep legacy single-module modes (unittest, pytest, compileall) available.
 - Do not permit custom --verify-arg values to narrow the fixed full profile.
 - Require a pre-pulled image with pytest installed. Provide docker/verification.Dockerfile; runtime Docker execution continues using --pull=never and network isolation.
+- Before provider clients are created, verify Docker daemon availability, inspect the image locally, and run a constrained no-network container probe that imports pytest. A missing daemon, image, or pytest installation must fail before model-provider calls.
 - The desktop exposes the same full profile through the repository workflow selector.
 
 ## Consequences
@@ -48,9 +49,15 @@ Compilation is attempted even when the test suite fails, unless cancellation or 
 Regression coverage is added for:
 - staging a tracked test file omitted from the bounded prompt snapshot;
 - rejection of tracked symlinks;
-- fixed full-suite command selection and non-empty pytest results;
+- fixed full-suite command selection, non-empty pytest results, and Docker/image/pytest preflight;
 - running compilation after test failures;
 - coordinator acceptance rejection for zero tests or compilation failure;
 - CLI and desktop exposure of the full profile.
+
+Build the local verification image before invoking the full profile:
+
+~~~bash
+docker build -f docker/verification.Dockerfile -t kaldrax-verification:py313 docker
+~~~
 
 Automated test execution and hosted CI status must be recorded separately from source-level implementation.
