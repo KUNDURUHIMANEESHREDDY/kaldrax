@@ -88,6 +88,254 @@ def _write_export(data: dict[str, Any], cases: list[dict[str, Any]], *,
     return output
 
 
+def _load_structured_session(
+    contradiction_path: str | Path,
+    extraction_path: str | Path,
+    *,
+    reviewer: str,
+    session_path: str | Path,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], Path]:
+    reviewer = reviewer.strip()
+    if not reviewer:
+        raise ValueError("reviewer identity is required")
+    contradiction, contradiction_raw = _read(Path(contradiction_path), "contradiction dataset")
+    extraction, extraction_raw = _read(Path(extraction_path), "extraction dataset")
+    source_hashes = {
+        "contradiction": hashlib.sha256(contradiction_raw).hexdigest(),
+        "extraction": hashlib.sha256(extraction_raw).hexdigest(),
+    }
+    path = Path(session_path)
+    if path.exists():
+        try:
+            session = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            raise ValueError("review session is unreadable") from None
+        if (
+            not isinstance(session, dict)
+            or session.get("schema_version") != 1
+            or session.get("source_hashes") != source_hashes
+        ):
+            raise ValueError(
+                "source datasets changed since review began; preserve the old session and start a new one"
+            )
+        if session.get("reviewer") != reviewer:
+            raise ValueError("review session belongs to a different reviewer identity")
+    else:
+        session = {
+            "schema_version": 1,
+            "reviewer": reviewer,
+            "source_hashes": source_hashes,
+            "contradiction": {},
+            "extraction": {},
+        }
+
+    for kind, dataset in (("contradiction", contradiction), ("extraction", extraction)):
+        decisions = session.setdefault(kind, {})
+        if not isinstance(decisions, dict):
+            raise ValueError(f"review session {kind} decisions are invalid")
+        case_ids = {case["id"] for case in dataset["cases"]}
+        if set(decisions) - case_ids:
+            raise ValueError(f"review session contains unknown {kind} case IDs")
+    approvals = session.setdefault("approvals", {})
+    exports = session.setdefault("exports", {})
+    if not isinstance(approvals, dict) or not isinstance(exports, dict):
+        raise ValueError("review session approval/export metadata is invalid")
+    for kind in ("contradiction", "extraction"):
+        approvals.setdefault(kind, {"status": "pending", "reviewer": None, "reviewed_at": None})
+        if not isinstance(approvals[kind], dict):
+            raise ValueError(f"review session {kind} approval is invalid")
+        if kind in exports and not isinstance(exports[kind], str):
+            raise ValueError(f"review session {kind} export path is invalid")
+    _save_session(path, session)
+    return contradiction, extraction, session, path
+
+
+def _structured_quality_state(
+    contradiction: dict[str, Any],
+    extraction: dict[str, Any],
+    session: dict[str, Any],
+    path: Path,
+) -> dict[str, Any]:
+    datasets: dict[str, Any] = {}
+    for kind, source in (("contradiction", contradiction), ("extraction", extraction)):
+        cases = []
+        decisions = session[kind]
+        for case in source["cases"]:
+            decision = decisions.get(case["id"])
+            reviewed = isinstance(decision, dict)
+            item = {
+                "id": case["id"],
+                "category": case.get("category", "uncategorized"),
+                "reviewed": reviewed,
+                "review_status": decision.get("review_status") if reviewed else "pending",
+                "reviewer": decision.get("reviewer") if reviewed else None,
+                "reviewed_at": decision.get("reviewed_at") if reviewed else None,
+                "note": decision.get("note") if reviewed else None,
+            }
+            if kind == "contradiction":
+                item.update({
+                    "left": case.get("left", ""),
+                    "right": case.get("right", ""),
+                    "proposed_expected_conflict": case.get("expected_conflict"),
+                    "expected_conflict": (
+                        decision.get("expected_conflict") if reviewed
+                        else case.get("expected_conflict")
+                    ),
+                })
+            else:
+                item.update({
+                    "objective": case.get("objective", ""),
+                    "candidate": case.get("candidate", ""),
+                    "proposed_expected": case.get("expected", []),
+                    "expected": decision.get("expected") if reviewed else case.get("expected", []),
+                })
+            cases.append(item)
+        approval = dict(session["approvals"][kind])
+        export_path = session["exports"].get(kind)
+        datasets[kind] = {
+            "name": source.get("name", kind),
+            "version": source.get("version"),
+            "total": len(source["cases"]),
+            "reviewed": len(decisions),
+            "review_ready": len(decisions) == len(source["cases"]),
+            "approval": approval,
+            "export_path": export_path,
+            "cases": cases,
+        }
+    complete = all(
+        datasets[kind]["approval"].get("status") == "approved"
+        and datasets[kind]["export_path"]
+        for kind in ("contradiction", "extraction")
+    )
+    return {
+        "reviewer": session["reviewer"],
+        "session_path": str(path),
+        "source_hashes": dict(session["source_hashes"]),
+        "contradiction": datasets["contradiction"],
+        "extraction": datasets["extraction"],
+        "status": "validated_exported" if complete else "review_pending",
+    }
+
+
+def get_quality_review_state(
+    contradiction_path: str | Path,
+    extraction_path: str | Path,
+    *,
+    reviewer: str,
+    session_path: str | Path = ".kaldrax/memory-quality-review.desktop.session.json",
+) -> dict[str, Any]:
+    """Return resumable, source-hash-bound review state for desktop/API clients."""
+    contradiction, extraction, session, path = _load_structured_session(
+        contradiction_path, extraction_path, reviewer=reviewer, session_path=session_path,
+    )
+    return _structured_quality_state(contradiction, extraction, session, path)
+
+
+def update_quality_review(
+    contradiction_path: str | Path,
+    extraction_path: str | Path,
+    *,
+    reviewer: str,
+    action: str,
+    kind: str,
+    session_path: str | Path = ".kaldrax/memory-quality-review.desktop.session.json",
+    export_dir: str | Path = ".kaldrax/memory-quality-exports",
+    case_id: str | None = None,
+    decision: str | None = None,
+    expected_conflict: bool | None = None,
+    expected_claims: Any = None,
+    note: str | None = None,
+    confirmation: str | None = None,
+    approval: str | None = None,
+) -> dict[str, Any]:
+    """Record one explicit label or dataset-approval decision and export only after approval."""
+    if kind not in {"contradiction", "extraction"}:
+        raise ValueError("kind must be contradiction or extraction")
+    contradiction, extraction, session, path = _load_structured_session(
+        contradiction_path, extraction_path, reviewer=reviewer, session_path=session_path,
+    )
+    source = contradiction if kind == "contradiction" else extraction
+
+    if action == "case":
+        if not isinstance(case_id, str) or not case_id.strip():
+            raise ValueError("case_id is required")
+        case = next((item for item in source["cases"] if item["id"] == case_id), None)
+        if case is None:
+            raise ValueError(f"unknown {kind} case ID: {case_id}")
+        if decision not in {"approve", "modify"}:
+            raise ValueError("case decision must be approve or modify")
+        if kind == "contradiction":
+            proposed = case.get("expected_conflict")
+            if not isinstance(proposed, bool):
+                raise ValueError(f"contradiction case {case_id} has no boolean expected_conflict label")
+            if decision == "modify" and not isinstance(expected_conflict, bool):
+                raise ValueError("modified contradiction labels must be boolean")
+            label = expected_conflict if decision == "modify" else proposed
+            reviewed = {"expected_conflict": label}
+        else:
+            proposed = case.get("expected")
+            if not _valid_expected(proposed):
+                raise ValueError(f"extraction case {case_id} has invalid proposed expected claims")
+            if decision == "modify" and not _valid_expected(expected_claims):
+                raise ValueError("modified expected claims must be a non-empty list of match_terms objects")
+            reviewed = {"expected": expected_claims if decision == "modify" else proposed}
+        reviewed.update({
+            "review_status": "modified" if decision == "modify" else "approved",
+            "reviewer": reviewer.strip(),
+            "reviewed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "note": note.strip() if isinstance(note, str) and note.strip() else None,
+        })
+        session[kind][case_id] = reviewed
+        session["approvals"][kind] = {"status": "pending", "reviewer": None, "reviewed_at": None}
+        session["exports"].pop(kind, None)
+        _save_session(path, session)
+    elif action == "dataset-approval":
+        if approval not in {"approve", "reject"}:
+            raise ValueError("dataset approval must be approve or reject")
+        if approval == "approve":
+            case_ids = {item["id"] for item in source["cases"]}
+            if set(session[kind]) != case_ids:
+                raise ValueError(f"all {kind} cases must be reviewed before dataset approval")
+            required_confirmation = f"APPROVE {kind.upper()}"
+            if confirmation != required_confirmation:
+                raise ValueError(f"type {required_confirmation} to confirm this dataset approval")
+            reviewed_cases = []
+            for case in source["cases"]:
+                reviewed = dict(case)
+                reviewed.update(session[kind][case["id"]])
+                reviewed.update({
+                    "annotation_status": "human_reviewed",
+                    "review_status": session[kind][case["id"]]["review_status"],
+                    "reviewer": session[kind][case["id"]]["reviewer"],
+                    "reviewed_at": session[kind][case["id"]]["reviewed_at"],
+                })
+                reviewed_cases.append(reviewed)
+            export_path = _write_export(
+                source, reviewed_cases,
+                source_hash=session["source_hashes"][kind],
+                reviewer=reviewer.strip(),
+                destination=Path(export_dir),
+            )
+            session["approvals"][kind] = {
+                "status": "approved",
+                "reviewer": reviewer.strip(),
+                "reviewed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            }
+            session["exports"][kind] = str(export_path)
+        else:
+            session["approvals"][kind] = {
+                "status": "rejected",
+                "reviewer": reviewer.strip(),
+                "reviewed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            }
+            session["exports"].pop(kind, None)
+        _save_session(path, session)
+    else:
+        raise ValueError("action must be case or dataset-approval")
+
+    return _structured_quality_state(contradiction, extraction, session, path)
+
+
 def run_quality_label_review(
     contradiction_path: str | Path,
     extraction_path: str | Path,
