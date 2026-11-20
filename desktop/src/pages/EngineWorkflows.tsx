@@ -4,9 +4,12 @@ import { Icon } from "../components/Icons";
 import {
   benchmarkReviewState,
   benchmarkReviewUpdate,
+  qualityReviewState,
+  qualityReviewUpdate,
   listTeamRuns,
   memoryConflicts,
   type BenchmarkReviewState,
+  type QualityReviewState,
   memoryResolveConflict,
   memoryReview,
   memorySearch,
@@ -337,12 +340,252 @@ function BenchmarkReviewPanel({
   </>;
 }
 
+
+function QualityBenchmarkReviewPanel({
+  settings,
+  reviewer,
+}: {
+  settings: WorkflowSettings;
+  reviewer: string;
+}) {
+  const [review, setReview] = useState<QualityReviewState | null>(null);
+  const [kind, setKind] = useState<"contradiction" | "extraction">("contradiction");
+  const [activeCaseId, setActiveCaseId] = useState("");
+  const [draftClaims, setDraftClaims] = useState("[]");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const refresh = useCallback(async () => {
+    if (!reviewer.trim()) {
+      setError("Enter a reviewer identity before opening the quality benchmark review.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const result = await qualityReviewState({
+        enginePath: settings.enginePath,
+        pythonExecutable: settings.pythonExecutable,
+        reviewer,
+      });
+      setReview(result);
+      const current = result[kind];
+      setActiveCaseId(id => current.cases.some(item => item.id === id)
+        ? id : current.cases[0]?.id ?? "");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  }, [settings.enginePath, settings.pythonExecutable, reviewer, kind]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  const dataset = review?.[kind] ?? null;
+  const activeCase = dataset?.cases.find(item => item.id === activeCaseId) ?? null;
+  useEffect(() => {
+    if (!activeCase || kind !== "extraction") return;
+    setDraftClaims(JSON.stringify(activeCase.expected ?? [], null, 2));
+  }, [activeCase?.id, activeCase?.reviewed, kind]);
+
+  const update = async (input: {
+    action: "case" | "dataset-approval";
+    kind: "contradiction" | "extraction";
+    caseId?: string;
+    decision?: "approve" | "modify";
+    expectedConflict?: boolean;
+    expectedClaims?: Array<{ match_terms: string[] }>;
+    confirmation?: string;
+    approval?: "approve" | "reject";
+    successMessage: string;
+  }) => {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await qualityReviewUpdate({
+        enginePath: settings.enginePath,
+        pythonExecutable: settings.pythonExecutable,
+        reviewer,
+        action: input.action,
+        kind: input.kind,
+        caseId: input.caseId,
+        decision: input.decision,
+        expectedConflict: input.expectedConflict,
+        expectedClaims: input.expectedClaims,
+        confirmation: input.confirmation,
+        approval: input.approval,
+      });
+      setReview(result);
+      const currentDataset = result[input.kind];
+      setNotice(currentDataset.export_path
+        ? "Immutable human-reviewed export created: " + currentDataset.export_path
+        : input.successMessage);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const approveDataset = () => {
+    if (!dataset?.review_ready) return;
+    const required = "APPROVE " + kind.toUpperCase();
+    const confirmation = window.prompt(
+      "Review every " + kind + " label and type " + required + " to attest that the dataset has been inspected."
+    );
+    if (confirmation !== required) return;
+    void update({
+      action: "dataset-approval",
+      kind,
+      approval: "approve",
+      confirmation,
+      successMessage: kind + " dataset approval recorded.",
+    });
+  };
+
+  if (!review && busy) {
+    return <section className="kx-panel"><div className="kx-loading">Loading contradiction and extraction review…</div></section>;
+  }
+
+  return <>
+    {error && <Alert error>{error}</Alert>}
+    {notice && <Alert>{notice}</Alert>}
+    {review && <>
+      <section className="kx-panel">
+        <div className="kx-panel__head">
+          <div>
+            <h2>Memory quality-label review</h2>
+            <p>Review the synthetic contradiction and extraction evaluation labels. Proposed labels are not trusted until a human approves each dataset.</p>
+          </div>
+          <Badge tone={review.status === "validated_exported" ? "passed" : "warning"}>
+            {review.status === "validated_exported" ? "Reviewed exports" : "Human review pending"}
+          </Badge>
+        </div>
+        <p className="kx-muted">Session: <code>{review.session_path}</code></p>
+        <div className="kx-form-grid">
+          <div><small>CONTRADICTION SOURCE SHA-256</small><p><code>{review.source_hashes.contradiction}</code></p></div>
+          <div><small>EXTRACTION SOURCE SHA-256</small><p><code>{review.source_hashes.extraction}</code></p></div>
+        </div>
+        <div className="kw-tabs" role="tablist" aria-label="Quality benchmark datasets">
+          <button type="button" role="tab" aria-selected={kind === "contradiction"} className={kind === "contradiction" ? "active" : ""} onClick={() => { setKind("contradiction"); setActiveCaseId(""); }}>
+            Contradictions · {review.contradiction.reviewed}/{review.contradiction.total}
+          </button>
+          <button type="button" role="tab" aria-selected={kind === "extraction"} className={kind === "extraction" ? "active" : ""} onClick={() => { setKind("extraction"); setActiveCaseId(""); }}>
+            Extraction · {review.extraction.reviewed}/{review.extraction.total}
+          </button>
+        </div>
+      </section>
+
+      {dataset && <>
+        <section className="kx-panel">
+          <div className="kx-panel__head">
+            <div>
+              <h2>{dataset.name}</h2>
+              <p>{dataset.total} cases · {dataset.reviewed} reviewed · version {dataset.version ?? "unspecified"}</p>
+            </div>
+            <Badge tone={dataset.approval.status === "approved" ? "passed" : "warning"}>{dataset.approval.status}</Badge>
+          </div>
+          <div className="kw-tabs" role="tablist" aria-label={kind + " cases"}>
+            {dataset.cases.map(item => <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={item.id === activeCaseId}
+              className={item.id === activeCaseId ? "active" : ""}
+              onClick={() => setActiveCaseId(item.id)}
+            >
+              {item.id} · {item.reviewed ? item.review_status : "pending"}
+            </button>)}
+          </div>
+          {activeCase && <>
+            <div className="kw-memory-card">
+              <div className="kw-memory-card__head">
+                <div><span className="kw-memory-type">{activeCase.category} · {activeCase.id}</span><h3>{kind === "contradiction" ? "Does this pair express a real conflict?" : activeCase.objective}</h3></div>
+                <Badge tone={activeCase.reviewed ? "passed" : "warning"}>{activeCase.review_status}</Badge>
+              </div>
+              {kind === "contradiction" ? <>
+                <p><strong>LEFT</strong></p><p>{activeCase.left}</p>
+                <p><strong>RIGHT</strong></p><p>{activeCase.right}</p>
+                <p>Proposed label: <strong>{String(activeCase.proposed_expected_conflict)}</strong></p>
+                <p>Current reviewed label: <strong>{String(activeCase.expected_conflict)}</strong></p>
+                <div className="kx-settings-actions">
+                  <button className="kx-button kx-button--quiet" disabled={busy} onClick={() => void update({
+                    action: "case", kind, caseId: activeCase.id, decision: "approve",
+                    successMessage: "Proposed conflict label accepted for " + activeCase.id + ".",
+                  })}>Accept proposed label</button>
+                  <button className="kx-button kx-button--quiet" disabled={busy} onClick={() => void update({
+                    action: "case", kind, caseId: activeCase.id, decision: "modify",
+                    expectedConflict: true,
+                    successMessage: "Conflict label set to true for " + activeCase.id + ".",
+                  })}>Mark as conflict</button>
+                  <button className="kx-button kx-button--quiet" disabled={busy} onClick={() => void update({
+                    action: "case", kind, caseId: activeCase.id, decision: "modify",
+                    expectedConflict: false,
+                    successMessage: "Conflict label set to false for " + activeCase.id + ".",
+                  })}>Mark as unrelated</button>
+                </div>
+              </> : <>
+                <p><strong>Candidate</strong></p><p>{activeCase.candidate}</p>
+                <p><strong>Proposed expected claims</strong></p>
+                <pre className="kx-output">{JSON.stringify(activeCase.proposed_expected, null, 2)}</pre>
+                <label className="kx-field">Reviewed expected claims (JSON)
+                  <textarea rows={9} value={draftClaims} onChange={event => setDraftClaims(event.target.value)} spellCheck={false}/>
+                </label>
+                <div className="kx-settings-actions">
+                  <button className="kx-button kx-button--quiet" disabled={busy} onClick={() => void update({
+                    action: "case", kind, caseId: activeCase.id, decision: "approve",
+                    successMessage: "Proposed extraction claims accepted for " + activeCase.id + ".",
+                  })}>Accept proposed claims</button>
+                  <button className="kx-button kx-button--primary" disabled={busy} onClick={() => {
+                    try {
+                      const expectedClaims = JSON.parse(draftClaims) as Array<{ match_terms: string[] }>;
+                      void update({
+                        action: "case", kind, caseId: activeCase.id, decision: "modify",
+                        expectedClaims,
+                        successMessage: "Corrected extraction claims saved for " + activeCase.id + ".",
+                      });
+                    } catch {
+                      setError("Expected claims must be valid JSON.");
+                    }
+                  }}>Save corrected claims</button>
+                </div>
+              </>}
+              {activeCase.reviewed && <p className="kx-muted">Reviewed by {activeCase.reviewer ?? "unknown"} at {formatTime(activeCase.reviewed_at)}{activeCase.note ? " · " + activeCase.note : ""}</p>}
+            </div>
+          </>}
+        </section>
+
+        <section className="kx-panel">
+          <div className="kx-panel__head">
+            <div><h2>Separate dataset approval</h2><p>Every case must have a human-reviewed label before this dataset can be approved and exported.</p></div>
+            <Badge tone={dataset.approval.status === "approved" ? "passed" : "warning"}>{dataset.approval.status}</Badge>
+          </div>
+          {dataset.approval.reviewer && <p className="kx-muted">Approved by {dataset.approval.reviewer} at {formatTime(dataset.approval.reviewed_at)}</p>}
+          {!dataset.review_ready && <Alert>Review all {dataset.total} cases before approving this dataset ({dataset.reviewed} currently reviewed).</Alert>}
+          <div className="kx-settings-actions">
+            <button className="kx-button kx-button--primary" disabled={busy || !dataset.review_ready || dataset.approval.status === "approved"} onClick={approveDataset}>Approve reviewed dataset</button>
+            <button className="kx-button kx-button--quiet" disabled={busy || dataset.approval.status === "approved"} onClick={() => void update({
+              action: "dataset-approval", kind, approval: "reject",
+              successMessage: kind + " dataset approval rejected.",
+            })}>Reject dataset</button>
+            <button className="kx-button kx-button--quiet" disabled={busy} onClick={() => void refresh()}><Icon name="refresh" size={14}/> Refresh</button>
+          </div>
+          {dataset.export_path && <div className="kx-evidence-list"><p>Immutable export</p><code>{dataset.export_path}</code></div>}
+        </section>
+      </>}
+    </>}
+    {!review && !busy && <section className="kx-panel"><div className="kx-empty"><Icon name="database" size={24}/><strong>Quality review unavailable</strong><p>Check that the KALDRAX source checkout contains both evaluation datasets and that the local Python engine is connected.</p></div></section>}
+  </>;
+}
+
 export function MemoryPage({ settings }: Pick<WorkflowProps, "settings">) {
   const [query, setQuery] = useState(settings.projectId);
   const [includePending, setIncludePending] = useState(true);
   const [items, setItems] = useState<MemoryItem[]>([]);
   const [conflicts, setConflicts] = useState<MemoryConflict[]>([]);
-  const [activeTab, setActiveTab] = useState<"search" | "conflicts" | "benchmark">("search");
+  const [activeTab, setActiveTab] = useState<"search" | "conflicts" | "benchmark" | "quality-benchmark">("search");
   const [reviewer, setReviewer] = useState("local-user");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -429,7 +672,7 @@ export function MemoryPage({ settings }: Pick<WorkflowProps, "settings">) {
   return <>
     <Header title="Project memory" subtitle="Search provenance-backed memory, review pending extraction and resolve contradictions explicitly."/>
     <div className="kx-engine-status is-connected"><span className="kx-status-dot"/><strong>Project scope</strong><span>{settings.projectId}</span><span className="kx-strip-spacer"/><label className="kw-reviewer">Reviewer <input value={reviewer} onChange={event => setReviewer(event.target.value)} /></label></div>
-    <div className="kw-tabs" role="tablist" aria-label="Memory views"><button role="tab" aria-selected={activeTab === "search"} className={activeTab === "search" ? "active" : ""} onClick={() => setActiveTab("search")}>Search & review</button><button role="tab" aria-selected={activeTab === "conflicts"} className={activeTab === "conflicts" ? "active" : ""} onClick={() => setActiveTab("conflicts")}>Contradictions <span>{conflicts.length}</span></button><button role="tab" aria-selected={activeTab === "benchmark"} className={activeTab === "benchmark" ? "active" : ""} onClick={() => setActiveTab("benchmark")}>Benchmark review</button></div>
+    <div className="kw-tabs" role="tablist" aria-label="Memory views"><button role="tab" aria-selected={activeTab === "search"} className={activeTab === "search" ? "active" : ""} onClick={() => setActiveTab("search")}>Search & review</button><button role="tab" aria-selected={activeTab === "conflicts"} className={activeTab === "conflicts" ? "active" : ""} onClick={() => setActiveTab("conflicts")}>Contradictions <span>{conflicts.length}</span></button><button role="tab" aria-selected={activeTab === "benchmark"} className={activeTab === "benchmark" ? "active" : ""} onClick={() => setActiveTab("benchmark")}>Retrieval review</button><button role="tab" aria-selected={activeTab === "quality-benchmark"} className={activeTab === "quality-benchmark" ? "active" : ""} onClick={() => setActiveTab("quality-benchmark")}>Quality labels</button></div>
     {error && <Alert error>{error}</Alert>}{notice && <Alert>{notice}</Alert>}
     {activeTab === "search" ? <section className="kx-panel">
       <form className="kw-memory-search" onSubmit={search}><input aria-label="Search project memory" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search approved project knowledge…"/><label><input type="checkbox" checked={includePending} onChange={event => setIncludePending(event.target.checked)}/> Include pending</label><button className="kx-button kx-button--primary" type="submit" disabled={busy}>{busy ? "Searching…" : "Search memory"}</button></form>
@@ -441,7 +684,7 @@ export function MemoryPage({ settings }: Pick<WorkflowProps, "settings">) {
       </article>)}</div>}
     </section> : activeTab === "conflicts" ? <section className="kx-panel"><div className="kx-panel__head"><div><h2>Open contradiction candidates</h2><p>Heuristic matches only. Human review is required before either side is superseded.</p></div><button className="kx-button kx-button--quiet" onClick={loadConflicts} disabled={busy}><Icon name="refresh" size={14}/> Refresh</button></div>
       {conflicts.length === 0 ? <div className="kx-empty"><Icon name="shield" size={24}/><strong>No open conflicts</strong><p>The engine found no unresolved contradiction candidates for this project.</p></div> : conflicts.map(conflict => <article className="kw-conflict-card" key={conflict.id}><div className="kw-conflict-card__head"><Badge tone="warning">Open conflict</Badge><span>{formatTime(conflict.created_at)}</span></div><p>{conflict.reason}</p><div className="kw-conflict-sides"><div><small>LEFT MEMORY</small><code>{conflict.left_memory_id}</code><button className="kx-button kx-button--quiet" disabled={busy} onClick={() => resolve(conflict, conflict.left_memory_id)}>Keep left</button></div><div><small>RIGHT MEMORY</small><code>{conflict.right_memory_id}</code><button className="kx-button kx-button--quiet" disabled={busy} onClick={() => resolve(conflict, conflict.right_memory_id)}>Keep right</button></div></div></article>)}
-    </section> : <BenchmarkReviewPanel settings={settings} reviewer={reviewer}/>}
+    </section> : activeTab === "benchmark" ? <BenchmarkReviewPanel settings={settings} reviewer={reviewer}/> : <QualityBenchmarkReviewPanel settings={settings} reviewer={reviewer}/>}
   </>;
 }
 
