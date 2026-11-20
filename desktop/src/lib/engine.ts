@@ -100,21 +100,6 @@ export interface RepositoryApplyResult {
   backup_path?: string | null; diff: string; size: number;
 }
 
-export function isLoopbackHttpUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    if (url.protocol !== "http:" || url.username || url.password || url.search || url.hash) return false;
-    const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase().replace(/\.$/, "");
-    if (host === "localhost" || host === "::1") return true;
-    const octets = host.split(".").map(Number);
-    return octets.length === 4 &&
-      octets[0] === 127 &&
-      octets.every(value => Number.isInteger(value) && value >= 0 && value <= 255);
-  } catch {
-    return false;
-  }
-}
-
 export async function verifyEngine(enginePath: string, pythonExecutable: string): Promise<EngineStatus> {
   return invoke<EngineStatus>("verify_engine", { enginePath, pythonExecutable });
 }

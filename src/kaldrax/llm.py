@@ -1,7 +1,6 @@
 """Small OpenAI-compatible chat-completions client using the standard library."""
 from __future__ import annotations
 
-import ipaddress
 import json
 from dataclasses import dataclass
 from typing import Callable, Protocol
@@ -12,28 +11,6 @@ from urllib.request import Request, urlopen
 from .budgets import BudgetExceeded, BudgetReservation, RunBudget
 
 _MAX_RESPONSE_BYTES = 4 * 1024 * 1024
-
-
-def is_loopback_http_url(base_url: str) -> bool:
-    """Return whether an HTTP endpoint is explicitly bound to a loopback host."""
-    try:
-        parsed = urlsplit(base_url)
-        if (
-            parsed.scheme.lower() != "http"
-            or not parsed.hostname
-            or parsed.username is not None
-            or parsed.password is not None
-            or parsed.query
-            or parsed.fragment
-        ):
-            return False
-        parsed.port
-        host = parsed.hostname.rstrip(".").lower()
-        if host == "localhost":
-            return True
-        return ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        return False
 
 
 class ChatClient(Protocol):
@@ -74,34 +51,27 @@ class OpenAICompatibleClient:
         opener: Callable[..., object] = urlopen,
         budget: RunBudget | None = None,
     ) -> None:
+        if not api_key.strip():
+            raise ValueError("api_key must not be empty")
         if not model.strip():
             raise ValueError("model must not be empty")
         parsed = urlsplit(base_url)
-        local_http = is_loopback_http_url(base_url)
-        try:
-            parsed.port
-        except ValueError:
-            raise ValueError("base_url must use a valid port") from None
         if (
-            not parsed.hostname
+            parsed.scheme != "https"
+            or not parsed.hostname
             or parsed.username is not None
             or parsed.password is not None
             or parsed.query
             or parsed.fragment
-            or (parsed.scheme.lower() != "https" and not local_http)
         ):
-            raise ValueError(
-                "base_url must be HTTPS, or HTTP on localhost/loopback, without credentials, query, or fragment"
-            )
-        if not api_key.strip() and not local_http:
-            raise ValueError("api_key is required for non-local providers")
+            raise ValueError("base_url must be an HTTPS URL without credentials, query, or fragment")
         if timeout <= 0:
             raise ValueError("timeout must be greater than zero")
         if max_tokens < 1:
             raise ValueError("max_tokens must be at least 1")
         if token_parameter not in {"max_completion_tokens", "max_tokens"}:
             raise ValueError("token_parameter must be max_completion_tokens or max_tokens")
-        self._api_key = api_key.strip()
+        self._api_key = api_key
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
@@ -145,7 +115,7 @@ class OpenAICompatibleClient:
             f"{self.base_url}/chat/completions",
             data=payload,
             headers={
-                **({"Authorization": f"Bearer {self._api_key}"} if self._api_key else {}),
+                "Authorization": f"Bearer {self._api_key}",
                 "Content-Type": "application/json",
                 "Accept": "application/json",
             },

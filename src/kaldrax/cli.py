@@ -18,7 +18,7 @@ from .embeddings import HostedEmbeddingProvider
 from .engine import RecursiveEngine
 from .evaluation import CriteriaEvaluator, LLMEvaluator
 from .execution import ExampleExecutor, LLMExecutor
-from .llm import OpenAICompatibleClient, is_loopback_http_url
+from .llm import OpenAICompatibleClient
 from .memory import MemoryReviewConflict, SQLiteMemoryStore
 from .memory_benchmarks import run_retrieval_benchmark
 from .memory_benchmark_comparison import run_retrieval_comparison
@@ -66,11 +66,10 @@ def _embedding_provider() -> HostedEmbeddingProvider | None:
             "KALDRAX_EMBEDDING_API_KEY or KALDRAX_API_KEY is required "
             "when KALDRAX_EMBEDDING_MODEL is configured"
         )
-    chat_base_url = os.getenv("KALDRAX_BASE_URL") or "https://api.openai.com/v1"
-    base_url = os.getenv("KALDRAX_EMBEDDING_BASE_URL") or (
-        chat_base_url
-        if not is_loopback_http_url(chat_base_url)
-        else "https://api.openai.com/v1"
+    base_url = (
+        os.getenv("KALDRAX_EMBEDDING_BASE_URL")
+        or os.getenv("KALDRAX_BASE_URL")
+        or "https://api.openai.com/v1"
     )
     return HostedEmbeddingProvider(
         api_key=api_key,
@@ -131,32 +130,24 @@ def _budget_from_env() -> RunBudget:
     )
 
 
-def _provider_base_url() -> str:
-    return os.getenv("KALDRAX_BASE_URL") or "https://api.openai.com/v1"
-
-
 def _client(model: str, budget: RunBudget) -> OpenAICompatibleClient:
-    base_url = _provider_base_url()
-    token_parameter = os.getenv("KALDRAX_TOKEN_PARAMETER") or (
-        "max_tokens" if is_loopback_http_url(base_url) else "max_completion_tokens"
-    )
     return OpenAICompatibleClient(
         api_key=os.getenv("KALDRAX_API_KEY", ""),
         model=model,
-        base_url=base_url,
+        base_url=os.getenv("KALDRAX_BASE_URL") or "https://api.openai.com/v1",
         timeout=float(os.getenv("KALDRAX_TIMEOUT_SECONDS", "60")),
         max_tokens=int(os.getenv("KALDRAX_MAX_TOKENS", "2048")),
-        token_parameter=token_parameter,
+        token_parameter=os.getenv("KALDRAX_TOKEN_PARAMETER", "max_completion_tokens"),
         budget=budget,
     )
 
 
 def _require_provider() -> tuple[str, str, str]:
-    api_key = os.getenv("KALDRAX_API_KEY", "").strip()
-    executor_model = os.getenv("KALDRAX_MODEL", "").strip()
-    evaluator_model = os.getenv("KALDRAX_EVALUATOR_MODEL", "").strip()
-    if not api_key and not is_loopback_http_url(_provider_base_url()):
-        raise ValueError("KALDRAX_API_KEY is required for non-local providers")
+    api_key = os.getenv("KALDRAX_API_KEY", "")
+    executor_model = os.getenv("KALDRAX_MODEL", "")
+    evaluator_model = os.getenv("KALDRAX_EVALUATOR_MODEL", "")
+    if not api_key:
+        raise ValueError("KALDRAX_API_KEY is required")
     if not executor_model:
         raise ValueError("KALDRAX_MODEL is required")
     if not evaluator_model:
@@ -202,11 +193,8 @@ def _benchmark_evaluator(args: argparse.Namespace) -> int:
     cases = load_cases(args.fixture)
     budget = None
     if args.mode == "llm":
-        if (
-            not os.getenv("KALDRAX_API_KEY", "").strip()
-            and not is_loopback_http_url(_provider_base_url())
-        ):
-            raise ValueError("KALDRAX_API_KEY is required for non-local LLM evaluator benchmarks")
+        if not os.getenv("KALDRAX_API_KEY", "").strip():
+            raise ValueError("KALDRAX_API_KEY is required for an LLM evaluator benchmark")
         evaluator_model = os.getenv("KALDRAX_EVALUATOR_MODEL", "").strip()
         if not evaluator_model:
             raise ValueError("KALDRAX_EVALUATOR_MODEL is required for an LLM evaluator benchmark")

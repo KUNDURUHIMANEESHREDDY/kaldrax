@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from
 import { open } from "@tauri-apps/plugin-dialog";
 import { Icon } from "../components/Icons";
 import {
-  isLoopbackHttpUrl,
   listTeamRuns,
   memoryConflicts,
   memoryResolveConflict,
@@ -215,9 +214,8 @@ export function TeamRunsPage({ settings, apiKey, operation, onOperationStarted }
   const criteriaUnique = new Set(criteria.map(value => value.toLocaleLowerCase())).size === criteria.length;
   const models = [settings.plannerModel, settings.executorModel, settings.reviewerModel, settings.evaluatorModel].map(value => value.trim().toLowerCase());
   const distinctModels = models.every(Boolean) && new Set(models).size === 4;
-  const localProvider = isLoopbackHttpUrl(settings.baseUrl);
   const canRun = Boolean(
-    (apiKey.trim() || localProvider) && objective.trim() && criteria.length && criteriaUnique &&
+    apiKey.trim() && objective.trim() && criteria.length && criteriaUnique &&
     maxCycles >= 1 && maxCycles <= 5 && distinctModels && agentNamespace.trim() &&
     (!useRepository || settings.repositoryPath.trim()) &&
     sandboxTimeout >= 1 && sandboxTimeout <= 120
@@ -264,7 +262,7 @@ export function TeamRunsPage({ settings, apiKey, operation, onOperationStarted }
         {!criteriaUnique && <Alert>Acceptance criteria must be unique.</Alert>}
         <div className="kx-form-grid"><label className="kx-field">Maximum cycles<input type="number" min={1} max={5} value={maxCycles} onChange={event => setMaxCycles(Number(event.target.value))}/></label><label className="kx-field">Agent namespace<input value={agentNamespace} onChange={event => setAgentNamespace(event.target.value)}/></label></div>
         <div className="kw-role-grid">{["Planner", "Builder", "Reviewer", "Evaluator"].map((role, index) => <div key={role}><small>{role}</small><strong>{[settings.plannerModel, settings.executorModel, settings.reviewerModel, settings.evaluatorModel][index] || "Not configured"}</strong></div>)}</div>
-        {!apiKey && !localProvider && <Alert>Enter a hosted provider API key in Settings, or configure a loopback Ollama URL to run without a key.</Alert>}
+        {!apiKey && <Alert>Enter the provider API key in Settings. It is session-only and is not stored.</Alert>}
         {!distinctModels && <Alert>Configure four different model identifiers in Settings. Planner, builder, reviewer and evaluator must all be distinct.</Alert>}
         <section className="kw-repo-team-mode">
           <label className="kw-repo-team-mode__toggle">

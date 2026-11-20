@@ -82,30 +82,6 @@ def test_live_validation_rejects_duplicate_role_models(tmp_path, monkeypatch):
     assert "not-written-to-report" not in serialized
 
 
-def test_live_validation_accepts_keyless_loopback_provider_configuration(tmp_path, monkeypatch):
-    import os
-
-    for key in (
-        "KALDRAX_API_KEY", "KALDRAX_PLANNER_MODEL", "KALDRAX_MODEL",
-        "KALDRAX_REVIEWER_MODEL", "KALDRAX_EVALUATOR_MODEL",
-    ):
-        monkeypatch.delenv(key, raising=False)
-    monkeypatch.setenv("KALDRAX_BASE_URL", "http://127.0.0.1:11434/v1")
-    monkeypatch.setenv("KALDRAX_PLANNER_MODEL", "qwen3:8b-planner")
-    monkeypatch.setenv("KALDRAX_MODEL", "qwen3:8b-builder")
-    monkeypatch.setenv("KALDRAX_REVIEWER_MODEL", "qwen3:8b-reviewer")
-    monkeypatch.setenv("KALDRAX_EVALUATOR_MODEL", "qwen3:4b")
-    monkeypatch.setattr("kaldrax.live_validation._check_docker", lambda report: False)
-    monkeypatch.setattr("kaldrax.live_validation._check_memory", lambda report, artifacts: True)
-
-    code, report = run_live_validation(artifacts=tmp_path)
-
-    assert code == 2
-    assert report["checks"]["provider_configuration"]["status"] == "passed"
-    assert report["checks"]["provider_configuration"]["authentication"] == "not_required_loopback"
-    assert not os.getenv("KALDRAX_API_KEY")
-
-
 @pytest.mark.skipif(
     __import__("os").getenv("KALDRAX_RUN_DOCKER_INTEGRATION") != "1",
     reason="set KALDRAX_RUN_DOCKER_INTEGRATION=1 to run the full Docker-backed validation harness",
