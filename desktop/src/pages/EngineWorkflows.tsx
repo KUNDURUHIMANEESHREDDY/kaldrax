@@ -586,7 +586,7 @@ export function MemoryPage({ settings }: Pick<WorkflowProps, "settings">) {
   const [items, setItems] = useState<MemoryItem[]>([]);
   const [conflicts, setConflicts] = useState<MemoryConflict[]>([]);
   const [activeTab, setActiveTab] = useState<"search" | "conflicts" | "benchmark" | "quality-benchmark">("search");
-  const [reviewer, setReviewer] = useState("local-user");
+  const [reviewer, setReviewer] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
