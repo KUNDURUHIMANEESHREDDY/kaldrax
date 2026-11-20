@@ -302,6 +302,176 @@ def export_approved_dataset(
     return output_path
 
 
+def get_annotation_review_state(
+    dataset_path: str | Path,
+    *,
+    reviewer: str,
+    session_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Load or initialize the durable, human-reviewed retrieval benchmark session."""
+    reviewer = reviewer.strip()
+    if not reviewer:
+        raise ValueError("reviewer identity must be non-empty")
+    source_path = Path(dataset_path)
+    dataset, raw = _read_dataset(source_path)
+    review_path = Path(session_path) if session_path else (
+        Path(".kaldrax") / "benchmark-reviews" / f"{source_path.stem}.review.json"
+    )
+    is_new = not review_path.exists()
+    session = _load_session(dataset, source_path, raw, review_path)
+    if is_new:
+        _save_session(review_path, session)
+
+    queries = []
+    for query in dataset["queries"]:
+        state = session["queries"][query["id"]]
+        queries.append({
+            "id": query["id"],
+            "category": query.get("category", "uncategorized"),
+            "query": query["query"],
+            "rationale": query.get("rationale", ""),
+            "proposed_relevant": list(state.get("proposed_relevant", [])),
+            "relevant": list(state.get("relevant", [])),
+            "status": state.get("status", "pending"),
+            "reviewer": state.get("reviewer"),
+            "reviewed_at": state.get("reviewed_at"),
+            "review_note": state.get("review_note"),
+        })
+
+    return {
+        "dataset_name": session["dataset_name"],
+        "dataset_version": dataset.get("version", "1.0.0"),
+        "source_revision": session.get("source_revision"),
+        "source_sha256": session["source_sha256"],
+        "session_path": str(review_path),
+        "memories": [
+            {
+                "id": memory["id"],
+                "category": memory.get("category", "uncategorized"),
+                "content": memory["content"],
+                "summary": memory.get("summary", ""),
+                "source": memory.get("source") or {},
+                "tags": list(memory.get("tags", [])),
+            }
+            for memory in dataset["memories"]
+        ],
+        "queries": queries,
+        "dataset_approval": dict(session["dataset_approval"]),
+        "privacy_screening": dict(session["privacy_screening"]),
+        "review_ready": _review_ready(session),
+        "benchmark_status": "validated_exported" if (
+            session["dataset_approval"].get("status") == "approved"
+            and session["privacy_screening"].get("status") == "approved"
+            and _review_ready(session)
+        ) else "review_pending",
+    }
+
+
+def update_annotation_review(
+    dataset_path: str | Path,
+    *,
+    reviewer: str,
+    action: str,
+    session_path: str | Path | None = None,
+    query_id: str | None = None,
+    decision: str | None = None,
+    relevant_ids: list[str] | None = None,
+    note: str | None = None,
+    approval: str | None = None,
+    privacy_confirmation: str | None = None,
+    export_dir: str | Path = ".kaldrax/benchmark-exports",
+    version: str = "1.0.0",
+) -> dict[str, Any]:
+    """Apply one explicit human decision, then export only after both review gates pass."""
+    reviewer = reviewer.strip()
+    if not reviewer:
+        raise ValueError("reviewer identity must be non-empty")
+    if action not in {"query", "dataset-approval", "privacy-approval"}:
+        raise ValueError("action must be query, dataset-approval, or privacy-approval")
+    if approval is not None and approval not in {"approve", "reject"}:
+        raise ValueError("approval must be approve or reject")
+    if not _VERSION_RE.fullmatch(version):
+        raise ValueError("dataset version must use numeric MAJOR.MINOR.PATCH form")
+
+    source_path = Path(dataset_path)
+    dataset, raw = _read_dataset(source_path)
+    review_path = Path(session_path) if session_path else (
+        Path(".kaldrax") / "benchmark-reviews" / f"{source_path.stem}.review.json"
+    )
+    session = _load_session(dataset, source_path, raw, review_path)
+
+    if action == "query":
+        if not query_id or query_id not in session["queries"]:
+            raise ValueError("query action requires a known query ID")
+        if decision not in {"approve", "reject", "modify"}:
+            raise ValueError("query decision must be approve, reject, or modify")
+        state = session["queries"][query_id]
+        if decision == "approve":
+            state["relevant"] = list(state.get("relevant") or state["proposed_relevant"])
+            state["status"] = "approved"
+            state["review_note"] = None
+        elif decision == "reject":
+            state["relevant"] = []
+            state["status"] = "rejected"
+            state["review_note"] = (note or "").strip() or None
+        else:
+            memories = {item["id"] for item in dataset["memories"]}
+            selected = list(relevant_ids or [])
+            if not selected or len(selected) != len(set(selected)):
+                raise ValueError("modified relevance labels require unique, non-empty memory IDs")
+            unknown = sorted(set(selected) - memories)
+            if unknown:
+                raise ValueError(f"modified relevance labels contain unknown memory IDs: {unknown}")
+            state["relevant"] = selected
+            state["status"] = "modified"
+            state["review_note"] = (note or "").strip() or None
+        state["reviewer"] = reviewer
+        state["reviewed_at"] = _now()
+        session["dataset_approval"] = {
+            "status": "pending", "reviewer": None, "reviewed_at": None,
+        }
+
+    elif action == "dataset-approval":
+        if approval is None:
+            raise ValueError("dataset-approval action requires approve or reject")
+        if approval == "approve" and not _review_ready(session):
+            raise ValueError("every query must be approved or modified before dataset approval")
+        session["dataset_approval"] = {
+            "status": "approved" if approval == "approve" else "rejected",
+            "reviewer": reviewer,
+            "reviewed_at": _now(),
+        }
+
+    else:
+        if approval is None:
+            raise ValueError("privacy-approval action requires approve or reject")
+        if approval == "approve" and privacy_confirmation != "APPROVE":
+            raise ValueError("privacy approval requires the exact confirmation text APPROVE")
+        session["privacy_screening"].update({
+            "status": "approved" if approval == "approve" else "rejected",
+            "reviewer": reviewer,
+            "reviewed_at": _now(),
+        })
+
+    _save_session(review_path, session)
+    export_path: Path | None = None
+    ready = (
+        _review_ready(session)
+        and session["dataset_approval"].get("status") == "approved"
+        and session["privacy_screening"].get("status") == "approved"
+    )
+    if ready:
+        export_path = export_approved_dataset(
+            dataset, session, export_dir=export_dir, version=version,
+        )
+
+    state = get_annotation_review_state(source_path, reviewer=reviewer, session_path=review_path)
+    state["export_path"] = str(export_path) if export_path else None
+    if export_path:
+        state["benchmark_status"] = "validated_exported"
+    return state
+
+
 def run_annotation_review(
     dataset_path: str | Path, *, reviewer: str,
     session_path: str | Path | None = None,

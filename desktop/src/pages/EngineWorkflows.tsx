@@ -2,8 +2,11 @@ import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from
 import { open } from "@tauri-apps/plugin-dialog";
 import { Icon } from "../components/Icons";
 import {
+  benchmarkReviewState,
+  benchmarkReviewUpdate,
   listTeamRuns,
   memoryConflicts,
+  type BenchmarkReviewState,
   memoryResolveConflict,
   memoryReview,
   memorySearch,
@@ -76,12 +79,270 @@ export function OperationPanel({ operation, onCancel }: { operation: OperationSn
   </section>;
 }
 
+function BenchmarkReviewPanel({
+  settings,
+  reviewer,
+}: {
+  settings: WorkflowSettings;
+  reviewer: string;
+}) {
+  const [review, setReview] = useState<BenchmarkReviewState | null>(null);
+  const [activeQueryId, setActiveQueryId] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const refresh = useCallback(async () => {
+    if (!reviewer.trim()) {
+      setError("Enter a reviewer identity before opening the benchmark review.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const result = await benchmarkReviewState({
+        enginePath: settings.enginePath,
+        pythonExecutable: settings.pythonExecutable,
+        reviewer,
+      });
+      setReview(result);
+      setActiveQueryId(current => result.queries.some(query => query.id === current)
+        ? current : result.queries[0]?.id ?? "");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  }, [settings.enginePath, settings.pythonExecutable, reviewer]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  const activeQuery = review?.queries.find(query => query.id === activeQueryId) ?? null;
+  useEffect(() => {
+    if (!activeQuery) return;
+    setSelectedIds(activeQuery.relevant.length ? activeQuery.relevant : activeQuery.proposed_relevant);
+    setNote(activeQuery.review_note ?? "");
+  }, [activeQuery?.id]);
+
+  const update = async (input: {
+    action: "query" | "dataset-approval" | "privacy-approval";
+    queryId?: string;
+    decision?: "approve" | "reject" | "modify";
+    memoryIds?: string[];
+    note?: string;
+    approval?: "approve" | "reject";
+    privacyConfirmation?: string;
+    successMessage: string;
+  }) => {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await benchmarkReviewUpdate({
+        enginePath: settings.enginePath,
+        pythonExecutable: settings.pythonExecutable,
+        reviewer,
+        action: input.action,
+        queryId: input.queryId,
+        decision: input.decision,
+        memoryIds: input.memoryIds,
+        note: input.note,
+        approval: input.approval,
+        privacyConfirmation: input.privacyConfirmation,
+      });
+      setReview(result);
+      setNotice(result.export_path
+        ? "Validated, immutable benchmark export created: " + result.export_path
+        : input.successMessage);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reviewedCount = review?.queries.filter(query =>
+    query.status === "approved" || query.status === "modified"
+  ).length ?? 0;
+  const allQueries = Boolean(review?.review_ready);
+  const privacyApproved = review?.privacy_screening.status === "approved";
+  const datasetApproved = review?.dataset_approval.status === "approved";
+
+  const approvePrivacy = () => {
+    const confirmation = window.prompt(
+      "Review the declared scope and every source-backed memory below. Type APPROVE to attest that you inspected the displayed source paths and copied content."
+    );
+    if (confirmation !== "APPROVE") return;
+    void update({
+      action: "privacy-approval",
+      approval: "approve",
+      privacyConfirmation: confirmation,
+      successMessage: "Privacy review approved and recorded.",
+    });
+  };
+
+  if (!review && busy) {
+    return <section className="kx-panel"><div className="kx-loading">Loading source-backed benchmark review…</div></section>;
+  }
+
+  return <>
+    {error && <Alert error>{error}</Alert>}
+    {notice && <Alert>{notice}</Alert>}
+    {review && <>
+      <section className="kx-panel">
+        <div className="kx-panel__head">
+          <div>
+            <h2>{review.dataset_name}</h2>
+            <p>{review.queries.length} proposed retrieval queries · {review.memories.length} source-backed memories · source revision {review.source_revision ?? "unspecified"}</p>
+          </div>
+          <Badge tone={review.benchmark_status === "validated_exported" ? "passed" : "warning"}>
+            {review.benchmark_status === "validated_exported" ? "Validated export" : "Human review pending"}
+          </Badge>
+        </div>
+        <div className="kx-run-summary">
+          <div><small>QUERY LABELS</small><strong>{reviewedCount} / {review.queries.length}</strong></div>
+          <div><small>DATASET APPROVAL</small><strong>{review.dataset_approval.status}</strong></div>
+          <div><small>PRIVACY APPROVAL</small><strong>{review.privacy_screening.status}</strong></div>
+          <div><small>REVIEW SESSION</small><strong>Resumable</strong></div>
+        </div>
+        <p className="kx-muted">Session: <code>{review.session_path}</code></p>
+        <p className="kx-muted">Source SHA-256: <code>{review.source_sha256}</code></p>
+        <button className="kx-button kx-button--quiet" onClick={() => void refresh()} disabled={busy}>
+          <Icon name="refresh" size={14}/> Refresh review state
+        </button>
+      </section>
+
+      <section className="kx-panel">
+        <div className="kx-panel__head">
+          <div><h2>Review relevance labels</h2><p>Inspect each query, accept the proposed memory IDs, correct the set, or reject it. Changes reset dataset-level approval.</p></div>
+          <Badge tone={allQueries ? "passed" : "neutral"}>{reviewedCount} reviewed</Badge>
+        </div>
+        <div className="kw-tabs" role="tablist" aria-label="Benchmark query review">
+          {review.queries.map(query => <button
+            key={query.id}
+            type="button"
+            role="tab"
+            aria-selected={query.id === activeQueryId}
+            className={query.id === activeQueryId ? "active" : ""}
+            onClick={() => setActiveQueryId(query.id)}
+          >
+            {query.id} · {query.status}
+          </button>)}
+        </div>
+        {activeQuery && <>
+          <div className="kw-memory-card">
+            <div className="kw-memory-card__head">
+              <div><span className="kw-memory-type">{activeQuery.category} · {activeQuery.id}</span><h3>{activeQuery.query}</h3></div>
+              <Badge tone={activeQuery.status === "approved" || activeQuery.status === "modified" ? "passed" : "warning"}>{activeQuery.status}</Badge>
+            </div>
+            {activeQuery.rationale && <p>{activeQuery.rationale}</p>}
+            <p className="kx-muted">Proposed IDs: {activeQuery.proposed_relevant.join(", ")}</p>
+            {activeQuery.review_note && <p>Previous review note: {activeQuery.review_note}</p>}
+          </div>
+          <div className="kw-memory-list">
+            {review.memories.map(memory => <label className="kw-memory-card" key={memory.id}>
+              <div className="kw-memory-card__head">
+                <div>
+                  <span className="kw-memory-type">{memory.category} · {memory.id}</span>
+                  <h3>{memory.summary || memory.content.slice(0, 120)}</h3>
+                </div>
+                <input
+                  type="checkbox"
+                  aria-label={"Mark " + memory.id + " relevant to " + activeQuery.id}
+                  checked={selectedIds.includes(memory.id)}
+                  onChange={event => setSelectedIds(current =>
+                    event.target.checked
+                      ? [...current, memory.id]
+                      : current.filter(id => id !== memory.id)
+                  )}
+                />
+              </div>
+              <p>{memory.content}</p>
+              <div className="kw-memory-meta">
+                <span>Source: {memory.source.path ?? "unspecified"}{memory.source.anchor ? " · " + memory.source.anchor : ""}</span>
+                <span>{memory.tags.join(", ")}</span>
+              </div>
+            </label>)}
+          </div>
+          <label className="kx-field">Review note (optional)
+            <textarea rows={2} value={note} onChange={event => setNote(event.target.value)} placeholder="Explain why you changed or rejected the proposed relevance labels."/>
+          </label>
+          {selectedIds.length === 0 && <Alert>A validated relevance judgment must contain at least one memory ID. Use Reject to mark an invalid query proposal; it will block dataset approval until corrected.</Alert>}
+          <div className="kx-settings-actions">
+            <button className="kx-button kx-button--quiet" disabled={busy} onClick={() => void update({
+              action: "query", queryId: activeQuery.id, decision: "reject", note,
+              successMessage: "Query " + activeQuery.id + " rejected. Dataset approval remains blocked until it is corrected.",
+            })}>Reject proposal</button>
+            <button className="kx-button kx-button--quiet" disabled={busy || selectedIds.length === 0} onClick={() => void update({
+              action: "query", queryId: activeQuery.id, decision: "modify",
+              memoryIds: selectedIds, note,
+              successMessage: "Corrected relevance IDs recorded for " + activeQuery.id + ".",
+            })}>Save corrected IDs</button>
+            <button className="kx-button kx-button--primary" disabled={busy} onClick={() => void update({
+              action: "query", queryId: activeQuery.id, decision: "approve",
+              successMessage: "Proposed relevance IDs approved for " + activeQuery.id + ".",
+            })}>Approve proposed IDs</button>
+          </div>
+        </>}
+      </section>
+
+      <section className="kx-panel">
+        <div className="kx-panel__head"><div><h2>Dataset annotation approval</h2><p>This is separate from the individual query decisions and from privacy approval.</p></div><Badge tone={datasetApproved ? "passed" : "warning"}>{review.dataset_approval.status}</Badge></div>
+        {!allQueries && <Alert>Every query must be approved or corrected before dataset annotation approval. Rejected or pending queries keep this gate closed.</Alert>}
+        {review.dataset_approval.reviewer && <p className="kx-muted">Recorded by {review.dataset_approval.reviewer} at {review.dataset_approval.reviewed_at}</p>}
+        <div className="kx-settings-actions">
+          <button className="kx-button kx-button--primary" disabled={busy || !allQueries || datasetApproved} onClick={() => void update({
+            action: "dataset-approval", approval: "approve",
+            successMessage: "Dataset annotation approval recorded.",
+          })}>Approve reviewed annotations</button>
+          <button className="kx-button kx-button--quiet" disabled={busy || datasetApproved} onClick={() => void update({
+            action: "dataset-approval", approval: "reject",
+            successMessage: "Dataset annotation approval rejected.",
+          })}>Reject dataset</button>
+        </div>
+      </section>
+
+      <section className="kx-panel">
+        <div className="kx-panel__head"><div><h2>Independent privacy screening</h2><p>Review all source paths and the copied content below before signing off. Label approval does not imply privacy approval.</p></div><Badge tone={privacyApproved ? "passed" : "warning"}>{review.privacy_screening.status}</Badge></div>
+        <p><strong>Declared scope:</strong> {review.privacy_screening.scope || "No scope description provided."}</p>
+        {review.privacy_screening.note && <p>{review.privacy_screening.note}</p>}
+        <details className="kw-conflict-card">
+          <summary>Inspect all {review.memories.length} copied memory records and their source paths</summary>
+          <div className="kw-memory-list">
+            {review.memories.map(memory => <article className="kw-memory-card" key={memory.id}>
+              <span className="kw-memory-type">{memory.category} · {memory.id}</span>
+              <p>{memory.content}</p>
+              <div className="kw-memory-meta"><span>{memory.source.path ?? "unspecified"}</span><span>{memory.source.anchor ?? ""}</span></div>
+            </article>)}
+          </div>
+        </details>
+        {review.privacy_screening.reviewer && <p className="kx-muted">Recorded by {review.privacy_screening.reviewer} at {review.privacy_screening.reviewed_at}</p>}
+        <div className="kx-settings-actions">
+          <button className="kx-button kx-button--primary" disabled={busy || privacyApproved} onClick={approvePrivacy}>Review scope and approve privacy</button>
+          <button className="kx-button kx-button--quiet" disabled={busy || privacyApproved} onClick={() => void update({
+            action: "privacy-approval", approval: "reject",
+            successMessage: "Privacy screening rejected. No validated benchmark export can be produced.",
+          })}>Reject privacy scope</button>
+        </div>
+      </section>
+
+      {review.export_path && <section className="kx-panel">
+        <div className="kx-panel__head"><div><h2>Immutable benchmark export</h2><p>Both approval gates passed. This file is content-addressed and write-once.</p></div><Badge tone="passed">Validated</Badge></div>
+        <code>{review.export_path}</code>
+      </section>}
+    </>}
+    {!review && !busy && <section className="kx-panel"><div className="kx-empty"><Icon name="database" size={24}/><strong>Benchmark review unavailable</strong><p>Check that the KALDRAX source checkout contains the benchmark dataset and that the local Python engine is connected.</p></div></section>}
+  </>;
+}
+
 export function MemoryPage({ settings }: Pick<WorkflowProps, "settings">) {
   const [query, setQuery] = useState(settings.projectId);
   const [includePending, setIncludePending] = useState(true);
   const [items, setItems] = useState<MemoryItem[]>([]);
   const [conflicts, setConflicts] = useState<MemoryConflict[]>([]);
-  const [activeTab, setActiveTab] = useState<"search" | "conflicts">("search");
+  const [activeTab, setActiveTab] = useState<"search" | "conflicts" | "benchmark">("search");
   const [reviewer, setReviewer] = useState("local-user");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -168,7 +429,7 @@ export function MemoryPage({ settings }: Pick<WorkflowProps, "settings">) {
   return <>
     <Header title="Project memory" subtitle="Search provenance-backed memory, review pending extraction and resolve contradictions explicitly."/>
     <div className="kx-engine-status is-connected"><span className="kx-status-dot"/><strong>Project scope</strong><span>{settings.projectId}</span><span className="kx-strip-spacer"/><label className="kw-reviewer">Reviewer <input value={reviewer} onChange={event => setReviewer(event.target.value)} /></label></div>
-    <div className="kw-tabs" role="tablist" aria-label="Memory views"><button role="tab" aria-selected={activeTab === "search"} className={activeTab === "search" ? "active" : ""} onClick={() => setActiveTab("search")}>Search & review</button><button role="tab" aria-selected={activeTab === "conflicts"} className={activeTab === "conflicts" ? "active" : ""} onClick={() => setActiveTab("conflicts")}>Contradictions <span>{conflicts.length}</span></button></div>
+    <div className="kw-tabs" role="tablist" aria-label="Memory views"><button role="tab" aria-selected={activeTab === "search"} className={activeTab === "search" ? "active" : ""} onClick={() => setActiveTab("search")}>Search & review</button><button role="tab" aria-selected={activeTab === "conflicts"} className={activeTab === "conflicts" ? "active" : ""} onClick={() => setActiveTab("conflicts")}>Contradictions <span>{conflicts.length}</span></button><button role="tab" aria-selected={activeTab === "benchmark"} className={activeTab === "benchmark" ? "active" : ""} onClick={() => setActiveTab("benchmark")}>Benchmark review</button></div>
     {error && <Alert error>{error}</Alert>}{notice && <Alert>{notice}</Alert>}
     {activeTab === "search" ? <section className="kx-panel">
       <form className="kw-memory-search" onSubmit={search}><input aria-label="Search project memory" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search approved project knowledge…"/><label><input type="checkbox" checked={includePending} onChange={event => setIncludePending(event.target.checked)}/> Include pending</label><button className="kx-button kx-button--primary" type="submit" disabled={busy}>{busy ? "Searching…" : "Search memory"}</button></form>
@@ -178,9 +439,9 @@ export function MemoryPage({ settings }: Pick<WorkflowProps, "settings">) {
         <div className="kw-memory-meta"><span>Confidence {Math.round(item.confidence * 100)}%</span><span>Retrieval score {item.score.toFixed(3)}</span><span>Source run {item.source_run_id?.slice(0, 8) ?? "—"}</span><span>Expires {formatTime(item.expires_at)}</span></div>
         {item.status === "pending" && <div className="kw-memory-actions"><button className="kx-button kx-button--quiet" onClick={() => review(item, "reject")} disabled={busy}>Reject</button><button className="kx-button kx-button--primary" onClick={() => review(item, "approve")} disabled={busy}>Approve memory</button></div>}
       </article>)}</div>}
-    </section> : <section className="kx-panel"><div className="kx-panel__head"><div><h2>Open contradiction candidates</h2><p>Heuristic matches only. Human review is required before either side is superseded.</p></div><button className="kx-button kx-button--quiet" onClick={loadConflicts} disabled={busy}><Icon name="refresh" size={14}/> Refresh</button></div>
+    </section> : activeTab === "conflicts" ? <section className="kx-panel"><div className="kx-panel__head"><div><h2>Open contradiction candidates</h2><p>Heuristic matches only. Human review is required before either side is superseded.</p></div><button className="kx-button kx-button--quiet" onClick={loadConflicts} disabled={busy}><Icon name="refresh" size={14}/> Refresh</button></div>
       {conflicts.length === 0 ? <div className="kx-empty"><Icon name="shield" size={24}/><strong>No open conflicts</strong><p>The engine found no unresolved contradiction candidates for this project.</p></div> : conflicts.map(conflict => <article className="kw-conflict-card" key={conflict.id}><div className="kw-conflict-card__head"><Badge tone="warning">Open conflict</Badge><span>{formatTime(conflict.created_at)}</span></div><p>{conflict.reason}</p><div className="kw-conflict-sides"><div><small>LEFT MEMORY</small><code>{conflict.left_memory_id}</code><button className="kx-button kx-button--quiet" disabled={busy} onClick={() => resolve(conflict, conflict.left_memory_id)}>Keep left</button></div><div><small>RIGHT MEMORY</small><code>{conflict.right_memory_id}</code><button className="kx-button kx-button--quiet" disabled={busy} onClick={() => resolve(conflict, conflict.right_memory_id)}>Keep right</button></div></div></article>)}
-    </section>}
+    </section> : <BenchmarkReviewPanel settings={settings} reviewer={reviewer}/>}
   </>;
 }
 

@@ -128,6 +128,93 @@ def test_unreviewed_dataset_is_exploratory_not_validated(tmp_path):
     assert result["benchmark_validation"]["blocking_reasons"]
 
 
+def test_structured_review_api_requires_separate_privacy_approval(tmp_path):
+    from kaldrax.memory_annotation import (
+        get_annotation_review_state,
+        update_annotation_review,
+    )
+
+    source = tmp_path / "dataset.json"
+    _dataset(source)
+    session = tmp_path / "session.json"
+    export_dir = tmp_path / "exports"
+
+    state = get_annotation_review_state(source, reviewer="reviewer-a", session_path=session)
+    assert state["queries"][0]["status"] == "pending"
+    assert state["privacy_screening"]["status"] == "pending"
+    assert state["memories"][0]["source"]["path"] == "README.md"
+
+    state = update_annotation_review(
+        source, reviewer="reviewer-a", action="query", query_id="q-memory",
+        decision="modify", relevant_ids=["two"],
+        note="The query refers to the isolated workspace runtime.",
+        session_path=session, export_dir=export_dir,
+    )
+    assert state["queries"][0]["status"] == "modified"
+    assert state["dataset_approval"]["status"] == "pending"
+    assert state["export_path"] is None
+
+    state = update_annotation_review(
+        source, reviewer="reviewer-a", action="dataset-approval", approval="approve",
+        session_path=session, export_dir=export_dir,
+    )
+    assert state["dataset_approval"]["status"] == "approved"
+    assert state["privacy_screening"]["status"] == "pending"
+    assert state["export_path"] is None
+
+    with pytest.raises(ValueError, match="APPROVE"):
+        update_annotation_review(
+            source, reviewer="privacy-reviewer", action="privacy-approval",
+            approval="approve", privacy_confirmation="yes",
+            session_path=session, export_dir=export_dir,
+        )
+
+    state = update_annotation_review(
+        source, reviewer="privacy-reviewer", action="privacy-approval",
+        approval="approve", privacy_confirmation="APPROVE",
+        session_path=session, export_dir=export_dir,
+    )
+    assert state["privacy_screening"]["reviewer"] == "privacy-reviewer"
+    assert state["benchmark_status"] == "validated_exported"
+    assert state["export_path"]
+    exported = json.loads(open(state["export_path"], encoding="utf-8").read())
+    assert assess_dataset_review(exported)["validated"] is True
+
+
+def test_structured_review_api_rejects_unknown_memory_ids_and_resets_approval(tmp_path):
+    from kaldrax.memory_annotation import (
+        get_annotation_review_state,
+        update_annotation_review,
+    )
+
+    source = tmp_path / "dataset.json"
+    _dataset(source)
+    session = tmp_path / "session.json"
+
+    with pytest.raises(ValueError, match="unknown memory"):
+        update_annotation_review(
+            source, reviewer="reviewer-a", action="query", query_id="q-memory",
+            decision="modify", relevant_ids=["not-in-dataset"], session_path=session,
+        )
+
+    update_annotation_review(
+        source, reviewer="reviewer-a", action="query",
+        query_id="q-memory", decision="approve", session_path=session,
+    )
+    approved = update_annotation_review(
+        source, reviewer="reviewer-a", action="dataset-approval",
+        approval="approve", session_path=session,
+    )
+    assert approved["dataset_approval"]["status"] == "approved"
+
+    changed = update_annotation_review(
+        source, reviewer="reviewer-b", action="query", query_id="q-memory",
+        decision="modify", relevant_ids=["two"], session_path=session,
+    )
+    assert changed["dataset_approval"]["status"] == "pending"
+    assert changed["privacy_screening"]["status"] == "pending"
+
+
 def test_tampered_export_fails_integrity_assessment(tmp_path):
     source = tmp_path / "dataset.json"
     _dataset(source)

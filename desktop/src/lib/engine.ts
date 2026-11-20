@@ -83,6 +83,40 @@ export interface MemoryItem {
   source_event_sequences: number[]; agent_id?: string | null;
   tags: string[]; metadata: Record<string, unknown>;
 }
+export interface BenchmarkReviewMemory {
+  id: string;
+  category: string;
+  content: string;
+  summary: string;
+  source: { path?: string; anchor?: string };
+  tags: string[];
+}
+export interface BenchmarkReviewQuery {
+  id: string;
+  category: string;
+  query: string;
+  rationale: string;
+  proposed_relevant: string[];
+  relevant: string[];
+  status: "pending" | "approved" | "modified" | "rejected";
+  reviewer?: string | null;
+  reviewed_at?: string | null;
+  review_note?: string | null;
+}
+export interface BenchmarkReviewState {
+  dataset_name: string;
+  dataset_version: string;
+  source_revision?: string | null;
+  source_sha256: string;
+  session_path: string;
+  memories: BenchmarkReviewMemory[];
+  queries: BenchmarkReviewQuery[];
+  dataset_approval: { status: string; reviewer?: string | null; reviewed_at?: string | null };
+  privacy_screening: { status: string; scope: string; note: string; reviewer?: string | null; reviewed_at?: string | null };
+  review_ready: boolean;
+  benchmark_status: string;
+  export_path?: string | null;
+}
 export interface MemoryConflict {
   id: string; left_memory_id: string; right_memory_id: string;
   reason: string; status: string; created_at: string; resolution?: string | null;
@@ -149,6 +183,38 @@ export async function memoryReview(input: {
 }): Promise<Record<string, unknown>> {
   return invoke<Record<string, unknown>>("memory_review", input);
 }
+
+export async function benchmarkReviewState(input: {
+  enginePath: string; pythonExecutable: string; reviewer: string;
+}): Promise<BenchmarkReviewState> {
+  return invoke<BenchmarkReviewState>("benchmark_review_state", input);
+}
+export async function benchmarkReviewUpdate(input: {
+  enginePath: string;
+  pythonExecutable: string;
+  reviewer: string;
+  action: "query" | "dataset-approval" | "privacy-approval";
+  queryId?: string;
+  decision?: "approve" | "reject" | "modify";
+  memoryIds?: string[];
+  note?: string;
+  approval?: "approve" | "reject";
+  privacyConfirmation?: string;
+}): Promise<BenchmarkReviewState> {
+  return invoke<BenchmarkReviewState>("benchmark_review_update", {
+    enginePath: input.enginePath,
+    pythonExecutable: input.pythonExecutable,
+    reviewer: input.reviewer,
+    action: input.action,
+    queryId: input.queryId,
+    decision: input.decision,
+    memoryIds: input.memoryIds,
+    note: input.note,
+    approval: input.approval,
+    privacyConfirmation: input.privacyConfirmation,
+  });
+}
+
 export async function memoryResolveConflict(input: {
   enginePath: string; pythonExecutable: string; conflictId: string; keepMemoryId: string; reviewer: string;
 }): Promise<Record<string, unknown>> {

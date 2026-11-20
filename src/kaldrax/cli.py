@@ -22,7 +22,11 @@ from .llm import OpenAICompatibleClient
 from .memory import MemoryReviewConflict, SQLiteMemoryStore
 from .memory_benchmarks import run_retrieval_benchmark
 from .memory_benchmark_comparison import run_retrieval_comparison
-from .memory_annotation import run_annotation_review
+from .memory_annotation import (
+    get_annotation_review_state,
+    run_annotation_review,
+    update_annotation_review,
+)
 from .memory_quality import run_extraction_benchmark
 from .memory_quality_review import run_quality_label_review
 from .memory_contradiction_quality import run_contradiction_benchmark
@@ -1058,6 +1062,29 @@ def main() -> int:
     benchmark_annotate.add_argument("--export-dir", type=Path, default=Path(".kaldrax/benchmark-exports"))
     benchmark_annotate.add_argument("--version", default="1.0.0", help="immutable export version (MAJOR.MINOR.PATCH)")
 
+    benchmark_review_state = memory_actions.add_parser(
+        "benchmark-review-state", help="load the resumable retrieval benchmark review for a desktop or API client",
+    )
+    benchmark_review_state.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_retrieval_kaldrax_v1.json"))
+    benchmark_review_state.add_argument("--reviewer", required=True)
+    benchmark_review_state.add_argument("--session", type=Path, default=None)
+
+    benchmark_review_update = memory_actions.add_parser(
+        "benchmark-review-update", help="record one explicit human retrieval-label or approval decision",
+    )
+    benchmark_review_update.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_retrieval_kaldrax_v1.json"))
+    benchmark_review_update.add_argument("--reviewer", required=True)
+    benchmark_review_update.add_argument("--session", type=Path, default=None)
+    benchmark_review_update.add_argument("--action", choices=("query", "dataset-approval", "privacy-approval"), required=True)
+    benchmark_review_update.add_argument("--query-id", default=None)
+    benchmark_review_update.add_argument("--decision", choices=("approve", "reject", "modify"), default=None)
+    benchmark_review_update.add_argument("--memory-id", action="append", default=None)
+    benchmark_review_update.add_argument("--note", default=None)
+    benchmark_review_update.add_argument("--approval", choices=("approve", "reject"), default=None)
+    benchmark_review_update.add_argument("--privacy-confirmation", default=None)
+    benchmark_review_update.add_argument("--export-dir", type=Path, default=Path(".kaldrax/benchmark-exports"))
+    benchmark_review_update.add_argument("--version", default="1.0.0")
+
     contradiction_benchmark = memory_actions.add_parser("contradiction-benchmark", help="evaluate contradiction candidates against labeled pairs")
     contradiction_benchmark.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_contradictions_v1.json"))
     contradiction_benchmark.add_argument("--report", type=Path, default=None)
@@ -1317,6 +1344,37 @@ def main() -> int:
                 result = run_annotation_review(
                     args.dataset, reviewer=args.reviewer, session_path=args.session,
                     export_dir=args.export_dir, version=args.version,
+                )
+            except (ValueError, TypeError, RuntimeError, OSError) as exc:
+                parser.error(str(exc))
+            print(json.dumps(result, indent=2))
+            return 0
+
+        if args.memory_action == "benchmark-review-state":
+            try:
+                result = get_annotation_review_state(
+                    args.dataset, reviewer=args.reviewer, session_path=args.session,
+                )
+            except (ValueError, TypeError, RuntimeError, OSError) as exc:
+                parser.error(str(exc))
+            print(json.dumps(result, indent=2))
+            return 0
+
+        if args.memory_action == "benchmark-review-update":
+            try:
+                result = update_annotation_review(
+                    args.dataset,
+                    reviewer=args.reviewer,
+                    action=args.action,
+                    session_path=args.session,
+                    query_id=args.query_id,
+                    decision=args.decision,
+                    relevant_ids=args.memory_id,
+                    note=args.note,
+                    approval=args.approval,
+                    privacy_confirmation=args.privacy_confirmation,
+                    export_dir=args.export_dir,
+                    version=args.version,
                 )
             except (ValueError, TypeError, RuntimeError, OSError) as exc:
                 parser.error(str(exc))

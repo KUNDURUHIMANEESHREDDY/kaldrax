@@ -107,6 +107,60 @@ def test_memory_conflict_cli_exposes_unresolved_pairs(tmp_path, monkeypatch, cap
     assert result[0]["status"] == "open"
 
 
+def test_memory_benchmark_review_state_cli_returns_pending_human_labels(tmp_path, monkeypatch, capsys):
+    dataset = tmp_path / "dataset.json"
+    dataset.write_text(json.dumps({
+        "name": "cli-review",
+        "privacy_screening": {"scope": "Public repository files only.", "status": "pending"},
+        "memories": [{"id": "m1", "content": "Project memory uses SQLite."}],
+        "queries": [{
+            "id": "q1", "query": "Where is project memory stored?", "relevant": ["m1"],
+        }],
+    }), encoding="utf-8")
+    session = tmp_path / "review-session.json"
+    monkeypatch.setattr("sys.argv", [
+        "kaldrax", "memory", "benchmark-review-state",
+        "--dataset", str(dataset), "--reviewer", "operator",
+        "--session", str(session),
+    ])
+
+    assert main() == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["queries"][0]["status"] == "pending"
+    assert result["dataset_approval"]["status"] == "pending"
+    assert result["privacy_screening"]["status"] == "pending"
+    assert session.exists()
+
+
+def test_memory_benchmark_review_update_cli_records_only_explicit_decision(tmp_path, monkeypatch, capsys):
+    dataset = tmp_path / "dataset.json"
+    dataset.write_text(json.dumps({
+        "name": "cli-review",
+        "privacy_screening": {"scope": "Public repository files only.", "status": "pending"},
+        "memories": [
+            {"id": "m1", "content": "Project memory uses SQLite."},
+            {"id": "m2", "content": "A separate cache stores run events."},
+        ],
+        "queries": [{
+            "id": "q1", "query": "Where is project memory stored?", "relevant": ["m1"],
+        }],
+    }), encoding="utf-8")
+    session = tmp_path / "review-session.json"
+    monkeypatch.setattr("sys.argv", [
+        "kaldrax", "memory", "benchmark-review-update",
+        "--dataset", str(dataset), "--reviewer", "operator",
+        "--session", str(session), "--action", "query",
+        "--query-id", "q1", "--decision", "modify",
+        "--memory-id", "m2", "--note", "The reviewed evidence points to the cache.",
+    ])
+
+    assert main() == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["queries"][0]["status"] == "modified"
+    assert result["queries"][0]["relevant"] == ["m2"]
+    assert result["queries"][0]["reviewer"] == "operator"
+
+
 def test_memory_benchmark_cli_runs_without_external_services(monkeypatch, capsys):
     monkeypatch.setattr("sys.argv", ["kaldrax", "memory", "benchmark"])
     monkeypatch.delenv("KALDRAX_EMBEDDING_MODEL", raising=False)

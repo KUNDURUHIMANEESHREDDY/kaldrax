@@ -925,6 +925,91 @@ fn get_run_report(engine_path: String, run_id: String) -> Result<Value, String> 
 }
 
 #[tauri::command]
+#[tauri::command]
+fn benchmark_review_state(
+    engine_path: String,
+    python_executable: String,
+    reviewer: String,
+) -> Result<Value, String> {
+    let root = validate_engine_path(&engine_path)?;
+    if reviewer.trim().is_empty() {
+        return Err("Reviewer identity is required.".to_string());
+    }
+    let args = vec![
+        "memory".to_string(),
+        "benchmark-review-state".to_string(),
+        "--dataset".to_string(),
+        "benchmarks/memory_retrieval_kaldrax_v1.json".to_string(),
+        "--reviewer".to_string(),
+        reviewer,
+        "--session".to_string(),
+        ".kaldrax/benchmark-reviews/memory_retrieval_kaldrax_v1.review.json".to_string(),
+    ];
+    cli_json(&root, &python_executable, &args, &[])
+}
+
+#[tauri::command]
+fn benchmark_review_update(
+    engine_path: String,
+    python_executable: String,
+    reviewer: String,
+    action: String,
+    query_id: Option<String>,
+    decision: Option<String>,
+    memory_ids: Option<Vec<String>>,
+    note: Option<String>,
+    approval: Option<String>,
+    privacy_confirmation: Option<String>,
+) -> Result<Value, String> {
+    let root = validate_engine_path(&engine_path)?;
+    if reviewer.trim().is_empty() {
+        return Err("Reviewer identity is required.".to_string());
+    }
+    if !["query", "dataset-approval", "privacy-approval"].contains(&action.as_str()) {
+        return Err("Unsupported benchmark review action.".to_string());
+    }
+    let mut args = vec![
+        "memory".to_string(),
+        "benchmark-review-update".to_string(),
+        "--dataset".to_string(),
+        "benchmarks/memory_retrieval_kaldrax_v1.json".to_string(),
+        "--reviewer".to_string(),
+        reviewer,
+        "--session".to_string(),
+        ".kaldrax/benchmark-reviews/memory_retrieval_kaldrax_v1.review.json".to_string(),
+        "--export-dir".to_string(),
+        ".kaldrax/benchmark-exports".to_string(),
+        "--version".to_string(),
+        "1.0.0".to_string(),
+        "--action".to_string(),
+        action,
+    ];
+    if let Some(value) = query_id.filter(|value| !value.trim().is_empty()) {
+        args.extend(["--query-id".to_string(), value]);
+    }
+    if let Some(value) = decision {
+        args.extend(["--decision".to_string(), value]);
+    }
+    if let Some(values) = memory_ids {
+        for value in values {
+            if value.trim().is_empty() {
+                return Err("Memory IDs must not be empty.".to_string());
+            }
+            args.extend(["--memory-id".to_string(), value]);
+        }
+    }
+    if let Some(value) = note {
+        args.extend(["--note".to_string(), value]);
+    }
+    if let Some(value) = approval {
+        args.extend(["--approval".to_string(), value]);
+    }
+    if let Some(value) = privacy_confirmation {
+        args.extend(["--privacy-confirmation".to_string(), value]);
+    }
+    cli_json(&root, &python_executable, &args, &[])
+}
+
 fn memory_search(
     engine_path: String,
     python_executable: String,
@@ -1169,6 +1254,8 @@ pub fn run() {
             memory_conflicts,
             memory_review,
             memory_resolve_conflict,
+            benchmark_review_state,
+            benchmark_review_update,
             repository_status,
             repository_files,
             repository_read_file,
