@@ -42,7 +42,7 @@ export interface TeamRunRequest {
   acceptanceCriteria: string[]; projectId: string; agentNamespace: string;
   maxCycles: number; apiKey: string; plannerModel: string; builderModel: string;
   reviewerModel: string; evaluatorModel: string; baseUrl?: string;
-  workspacePath?: string; applyChanges?: boolean; verifyModule?: "unittest" | "pytest" | "compileall";
+  workspacePath?: string; applyChanges?: boolean; verifyModule?: "unittest" | "pytest" | "compileall" | "full";
   sandboxTimeoutSeconds?: number;
 }
 export interface TeamTrace {
