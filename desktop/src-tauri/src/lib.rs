@@ -486,9 +486,6 @@ fn start_task_run(
     if request.project_id.trim().is_empty() {
         return Err("Project ID is required.".to_string());
     }
-    if request.api_key.trim().is_empty() {
-        return Err("Provider API key is required for an LLM-backed run.".to_string());
-    }
     if request.executor_model.trim().is_empty() || request.evaluator_model.trim().is_empty() {
         return Err("Configure both executor and evaluator models.".to_string());
     }
@@ -588,9 +585,6 @@ fn start_team_run(
         return Err(
             "Planner, builder, reviewer and evaluator models must all be different.".to_string(),
         );
-    }
-    if request.api_key.trim().is_empty() {
-        return Err("Provider API key is required for a team run.".to_string());
     }
     let mut args = vec![
         "team".to_string(),

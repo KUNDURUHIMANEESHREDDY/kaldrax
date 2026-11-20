@@ -46,6 +46,56 @@ def test_openai_compatible_client_sends_auth_model_and_messages():
     assert seen["payload"]["messages"][1]["content"] == "user"
 
 
+def test_openai_compatible_client_supports_keyless_loopback_ollama():
+    seen = {}
+
+    def opener(request, timeout):
+        seen["url"] = request.full_url
+        seen["authorization"] = request.get_header("Authorization")
+        seen["payload"] = json.loads(request.data)
+        return FakeResponse(json.dumps({
+            "choices": [{"message": {"content": "local candidate"}}]
+        }).encode())
+
+    client = OpenAICompatibleClient(
+        api_key="", model="qwen3:8b",
+        base_url="http://127.0.0.1:11434/v1", token_parameter="max_tokens",
+        opener=opener,
+    )
+    assert client.complete(system_prompt="system", user_prompt="user") == "local candidate"
+    assert seen["url"] == "http://127.0.0.1:11434/v1/chat/completions"
+    assert seen["authorization"] is None
+    assert seen["payload"]["max_tokens"] == 2048
+
+
+def test_openai_compatible_client_allows_only_loopback_http():
+    for url in (
+        "http://example.test/v1",
+        "http://192.168.1.20:11434/v1",
+        "http://127.0.0.1:bad/v1",
+    ):
+        with pytest.raises(ValueError):
+            OpenAICompatibleClient(api_key="secret", model="model", base_url=url)
+
+    for url in (
+        "http://localhost:11434/v1",
+        "http://127.0.0.1:11434/v1",
+        "http://[::1]:11434/v1",
+    ):
+        client = OpenAICompatibleClient(
+            api_key="", model="local-model", base_url=url,
+            opener=lambda *_args, **_kwargs: FakeResponse(
+                b'{"choices":[{"message":{"content":"ok"}}]}'
+            ),
+        )
+        assert client.complete(system_prompt="s", user_prompt="u") == "ok"
+
+
+def test_openai_compatible_client_requires_key_for_https():
+    with pytest.raises(ValueError, match="api_key"):
+        OpenAICompatibleClient(api_key="", model="model")
+
+
 def test_openai_compatible_client_rejects_invalid_response():
     client = OpenAICompatibleClient(
         api_key="secret", model="model", opener=lambda *_args, **_kwargs: FakeResponse(b"{}")

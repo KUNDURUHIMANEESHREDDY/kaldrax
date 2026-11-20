@@ -3,7 +3,8 @@ import subprocess
 
 import pytest
 
-from kaldrax.cli import main
+from kaldrax.cli import _client, _embedding_provider, _require_provider, main
+from kaldrax.budgets import RunBudget
 from kaldrax.memory import MemoryRecord, MemoryStatus, MemoryType, SQLiteMemoryStore
 
 
@@ -29,6 +30,36 @@ def test_run_requires_separate_evaluator_model(monkeypatch):
     with pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 2
+
+
+def test_provider_configuration_allows_keyless_loopback_ollama(monkeypatch):
+    monkeypatch.setenv("KALDRAX_BASE_URL", "http://127.0.0.1:11434/v1")
+    monkeypatch.delenv("KALDRAX_API_KEY", raising=False)
+    monkeypatch.setenv("KALDRAX_MODEL", "qwen3:8b")
+    monkeypatch.setenv("KALDRAX_EVALUATOR_MODEL", "qwen3:4b")
+
+    assert _require_provider() == ("", "qwen3:8b", "qwen3:4b")
+    assert _client("qwen3:8b", RunBudget()).token_parameter == "max_tokens"
+
+
+def test_provider_configuration_still_requires_key_for_remote_https(monkeypatch):
+    monkeypatch.setenv("KALDRAX_BASE_URL", "https://api.example.test/v1")
+    monkeypatch.delenv("KALDRAX_API_KEY", raising=False)
+    monkeypatch.setenv("KALDRAX_MODEL", "builder")
+    monkeypatch.setenv("KALDRAX_EVALUATOR_MODEL", "evaluator")
+    with pytest.raises(ValueError, match="KALDRAX_API_KEY"):
+        _require_provider()
+
+
+def test_hosted_embeddings_do_not_inherit_loopback_chat_url(monkeypatch):
+    monkeypatch.setenv("KALDRAX_BASE_URL", "http://127.0.0.1:11434/v1")
+    monkeypatch.setenv("KALDRAX_EMBEDDING_MODEL", "embedding-model")
+    monkeypatch.setenv("KALDRAX_EMBEDDING_API_KEY", "embedding-secret")
+    monkeypatch.delenv("KALDRAX_EMBEDDING_BASE_URL", raising=False)
+
+    provider = _embedding_provider()
+
+    assert provider.base_url == "https://api.openai.com/v1"
 
 
 def test_demo_uses_persistent_project_memory(tmp_path, monkeypatch, capsys):

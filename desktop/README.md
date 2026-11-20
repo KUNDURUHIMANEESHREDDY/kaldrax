@@ -64,7 +64,7 @@ The Task Builder maps to the v0.5 task contract and CLI:
 - optional agent namespace
 - memory retrieval limit
 
-A provider API key, executor model and a different evaluator model are required. The API key is held in React state for the current app session and passed to the local Rust bridge as a child-process environment value. It is not stored in LocalStorage or reports. LLM prompts and candidate content are sent to the configured provider; use a local OpenAI-compatible endpoint if data must stay local.
+Hosted-provider runs require an API key, executor model and a different evaluator model. A loopback Ollama endpoint (for example, http://127.0.0.1:11434/v1) does not require a key; plain HTTP is restricted to localhost/loopback, while remote endpoints must use HTTPS. The API key is held in React state for the current app session and passed to the local Rust bridge as a child-process environment value. It is not stored in LocalStorage or reports. Local Ollama inference keeps task prompts on the device; KALDRAX does not install Ollama or download models.
 
 ### Run history and details
 Runs are read from actual JSON files in `.kaldrax/runs/`. Run detail displays the engine event sequence, iteration evaluations, criterion evidence quotes, final candidate and provider budget/usage when the report includes it. The candidate is a text artifact and does not imply repository files were changed.

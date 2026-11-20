@@ -16,7 +16,7 @@ from .budgets import RunBudget
 from .engineering import RepositoryTeamCoordinator
 from .evaluation import LLMEvaluator
 from .embeddings import HostedEmbeddingProvider
-from .llm import OpenAICompatibleClient
+from .llm import OpenAICompatibleClient, is_loopback_http_url
 from .memory import MemoryRecord, MemoryType, SQLiteMemoryStore
 from .models import Task
 from .workspace_sandbox import WorkspaceSandboxRunner
@@ -139,10 +139,11 @@ def _check_memory(report: dict[str, Any], artifacts: Path) -> bool:
         os.getenv("KALDRAX_EMBEDDING_API_KEY", "").strip()
         or os.getenv("KALDRAX_API_KEY", "").strip()
     )
-    embedding_base_url = (
-        os.getenv("KALDRAX_EMBEDDING_BASE_URL")
-        or os.getenv("KALDRAX_BASE_URL")
-        or "https://api.openai.com/v1"
+    chat_base_url = os.getenv("KALDRAX_BASE_URL") or "https://api.openai.com/v1"
+    embedding_base_url = os.getenv("KALDRAX_EMBEDDING_BASE_URL") or (
+        chat_base_url
+        if not is_loopback_http_url(chat_base_url)
+        else "https://api.openai.com/v1"
     )
     embedder = (
         HostedEmbeddingProvider(
@@ -235,8 +236,13 @@ def run_live_validation(*, artifacts: Path, timeout_seconds: int = 90) -> tuple[
         "evaluator": "KALDRAX_EVALUATOR_MODEL",
     }
     api_key = os.getenv("KALDRAX_API_KEY", "").strip()
+    base_url = os.getenv("KALDRAX_BASE_URL") or "https://api.openai.com/v1"
     models = {role: os.getenv(variable, "").strip() for role, variable in role_env.items()}
-    missing = (["KALDRAX_API_KEY"] if not api_key else []) + [
+    missing = (
+        ["KALDRAX_API_KEY"]
+        if not api_key and not is_loopback_http_url(base_url)
+        else []
+    ) + [
         variable for role, variable in role_env.items() if not models[role]
     ]
     if missing:
@@ -258,9 +264,9 @@ def run_live_validation(*, artifacts: Path, timeout_seconds: int = 90) -> tuple[
         return 1, report
 
     report["checks"]["provider_configuration"] = {
-        "status": "passed", "provider_base_url": os.getenv(
-            "KALDRAX_BASE_URL", "https://api.openai.com/v1"
-        ),
+        "status": "passed",
+        "provider_base_url": base_url,
+        "authentication": "not_required_loopback" if not api_key else "configured",
         "models": models,
     }
 
@@ -286,7 +292,6 @@ def run_live_validation(*, artifacts: Path, timeout_seconds: int = 90) -> tuple[
         input_cost_per_million_usd=float(os.environ["KALDRAX_INPUT_COST_PER_MILLION_USD"]) if os.getenv("KALDRAX_INPUT_COST_PER_MILLION_USD") else None,
         output_cost_per_million_usd=float(os.environ["KALDRAX_OUTPUT_COST_PER_MILLION_USD"]) if os.getenv("KALDRAX_OUTPUT_COST_PER_MILLION_USD") else None,
     )
-    base_url = os.getenv("KALDRAX_BASE_URL") or "https://api.openai.com/v1"
     clients: dict[str, MeasuredChatClient] = {}
     try:
         for role, model in models.items():
@@ -294,7 +299,9 @@ def run_live_validation(*, artifacts: Path, timeout_seconds: int = 90) -> tuple[
                 api_key=api_key, model=model, base_url=base_url,
                 timeout=float(os.getenv("KALDRAX_TIMEOUT_SECONDS", "60")),
                 max_tokens=int(os.getenv("KALDRAX_MAX_TOKENS", "2048")),
-                token_parameter=os.getenv("KALDRAX_TOKEN_PARAMETER", "max_completion_tokens"),
+                token_parameter=os.getenv("KALDRAX_TOKEN_PARAMETER") or (
+                    "max_tokens" if is_loopback_http_url(base_url) else "max_completion_tokens"
+                ),
                 budget=budget,
             )
             clients[role] = MeasuredChatClient(role, model, raw)

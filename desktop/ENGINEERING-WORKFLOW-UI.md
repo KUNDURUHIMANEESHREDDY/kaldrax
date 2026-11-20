@@ -25,7 +25,7 @@ The Python engine remains the authority for execution, budgets, evaluation, memo
 
 ## Task contract
 
-Fields map to the Python task and CLI: objective; one or more unique acceptance criteria; maximum iterations; project ID (memory isolation key, not a filesystem path); optional agent ID; and memory retrieval limit. LLM-backed runs require an API key, executor model and a different evaluator model. The key remains in application memory and is passed to the local Python child process; it is not written to LocalStorage or run reports.
+Fields map to the Python task and CLI: objective; one or more unique acceptance criteria; maximum iterations; project ID (memory isolation key, not a filesystem path); optional agent ID; and memory retrieval limit. Hosted-provider runs require an API key, executor model and a different evaluator model. Loopback Ollama runs can omit the key; only localhost/loopback may use HTTP, and all remote endpoints must use HTTPS. Any supplied key remains in application memory and is passed to the local Python child process; it is not written to LocalStorage or run reports.
 
 ## Team workflow
 

@@ -765,3 +765,24 @@ This file records implementation decisions, changes, commands, verification, and
 - Preflight reports both Python versions and rejects an image that does not match Python 3.11, Python 3.13, Node 24, pytest, or the preinstalled lockfile-derived desktop cache.
 - Added test fixtures for both runtime command sequences, per-runtime test counts, zero-test rejection on either version, desktop failure after the Python matrix, and missing-runtime preflight.
 - Docker-nested integration and live-provider validation remain separate gated CI jobs; the isolated full profile does not claim to run them.
+
+## 2026-11-20 — Local Ollama chat inference integration
+
+### Decisions
+- Reuse the standard-library OpenAI-compatible chat adapter; do not add a provider SDK or bundle an inference runtime.
+- Permit unauthenticated HTTP only for explicit loopback hosts: localhost, IPv4 loopback, or IPv6 loopback. All non-loopback endpoints remain HTTPS-only and require an API key.
+- Omit the Authorization header when a local provider key is absent.
+- Default the token-limit field to `max_tokens` for loopback endpoints and preserve `max_completion_tokens` for hosted endpoints. An explicit `KALDRAX_TOKEN_PARAMETER` still overrides the default.
+- Keep local chat inference separate from embeddings. Hosted embedding configuration remains a distinct data-egress path; lexical retrieval works without it.
+
+### Changes
+- Added strict loopback URL classification and keyless Ollama-compatible chat-completions requests.
+- Updated CLI provider validation, LLM evaluator benchmarking, and live-validation configuration checks to accept keyless loopback endpoints while retaining hosted-provider authentication requirements.
+- Updated desktop task/team forms, provider settings guidance, and the Rust bridge so local inference can omit a key.
+- Added Python regression tests for loopback URL allowlisting, missing-key rejection for remote endpoints, token-parameter defaults, and live-validation configuration.
+
+### Verification and limitations
+- Local pytest, desktop build, and Rust checks were not run in this session because the authorized desktop device was offline and the local clone could not be fetched.
+- GitHub Actions is the verification path; do not call this milestone verified until its Python matrix and desktop checks finish.
+- This is an Ollama-compatible endpoint integration, not a bundled local model runtime. The operator must install/start Ollama and pull models.
+- Local embedding inference, GPU/model lifecycle management, model downloads, and an end-to-end live Ollama quality run remain outside this milestone.

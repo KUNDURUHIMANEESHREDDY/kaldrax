@@ -45,7 +45,7 @@ $env:KALDRAX_EMBEDDING_BASE_URL = "https://api.openai.com/v1"
 kaldrax memory reindex --project kaldrax-core
 ```
 
-The adapter calls the hosted `POST /embeddings` endpoint and stores returned vectors in the local SQLite database. It requires HTTPS and never targets a local model server. Embedding configuration is optional: when `KALDRAX_EMBEDDING_MODEL` is unset, KALDRAX uses lexical retrieval and makes no embedding requests. When the model changes, run `memory reindex`; vectors from different model or endpoint identities are not compared.
+The adapter calls the hosted `POST /embeddings` endpoint and stores returned vectors in the local SQLite database. It requires HTTPS and never targets a local model server. Embedding configuration is optional: when `KALDRAX_EMBEDDING_MODEL` is unset, KALDRAX uses lexical retrieval and makes no embedding requests. When the model changes, run `memory reindex`; vectors from different model or endpoint identities are not compared. When chat uses loopback Ollama, the embedding adapter does not inherit that HTTP URL: it defaults to the hosted OpenAI HTTPS endpoint unless `KALDRAX_EMBEDDING_BASE_URL` is explicitly set. A hosted embedding key is still required.
 
 Embedding requests send project memory text to the configured provider. Do not enable hosted embeddings for projects whose memory must remain entirely on-device. No vector database or additional Python package is required.
 
@@ -55,11 +55,12 @@ Copy \`.env.example\` to \`.env\` and export your provider settings in the shell
 
 Required environment variables:
 
-- \`KALDRAX_API_KEY\`
 - \`KALDRAX_MODEL\` — executor model identifier
 - \`KALDRAX_EVALUATOR_MODEL\` — a different model identifier for evaluation
 
-Optional provider variables include `KALDRAX_BASE_URL`, `KALDRAX_TIMEOUT_SECONDS`, `KALDRAX_MAX_TOKENS`, and `KALDRAX_TOKEN_PARAMETER`. Hosted embedding variables are `KALDRAX_EMBEDDING_MODEL`, optional `KALDRAX_EMBEDDING_API_KEY`, optional `KALDRAX_EMBEDDING_BASE_URL`, and `KALDRAX_EMBEDDING_TIMEOUT_SECONDS`.
+\`KALDRAX_API_KEY\` is required for hosted providers but may be omitted for a loopback Ollama endpoint. KALDRAX permits plain HTTP only for \`localhost\`, \`127.0.0.0/8\`, or \`::1\`; every remote endpoint must use HTTPS.
+
+Optional provider variables include `KALDRAX_BASE_URL`, `KALDRAX_TIMEOUT_SECONDS`, `KALDRAX_MAX_TOKENS`, and `KALDRAX_TOKEN_PARAMETER`. Ollama generally uses the `max_tokens` request field; KALDRAX selects it automatically for loopback endpoints unless explicitly overridden. Hosted embedding variables are `KALDRAX_EMBEDDING_MODEL`, optional `KALDRAX_EMBEDDING_API_KEY`, optional `KALDRAX_EMBEDDING_BASE_URL`, and `KALDRAX_EMBEDDING_TIMEOUT_SECONDS`.
 
 \`\`\`powershell
 $env:KALDRAX_API_KEY = "..."
@@ -68,6 +69,18 @@ $env:KALDRAX_EVALUATOR_MODEL = "different-evaluator-model"
 $env:KALDRAX_EMBEDDING_MODEL = "text-embedding-3-small"
 kaldrax run --project kaldrax-core --agent primary --objective "Implement a CSV parser" --criterion "unit tests pass" --criterion "README documents usage" --max-iterations 3
 \`\`\`
+
+For local Ollama inference, install and start Ollama separately, pull the models you intend to use, then configure the loopback endpoint. KALDRAX does not install Ollama, manage model downloads, or provide a local embedding runtime:
+
+```powershell
+$env:KALDRAX_BASE_URL = "http://127.0.0.1:11434/v1"
+$env:KALDRAX_MODEL = "qwen3:8b"
+$env:KALDRAX_EVALUATOR_MODEL = "qwen3:4b"
+$env:KALDRAX_TOKEN_PARAMETER = "max_tokens"
+kaldrax run --project kaldrax-core --agent primary --objective "Implement a CSV parser" --criterion "unit tests pass" --criterion "README documents usage" --max-iterations 3
+```
+
+Local chat inference does not make embedding calls local. Leave `KALDRAX_EMBEDDING_MODEL` unset to use lexical memory retrieval; configuring a hosted embedding model sends memory text to that separately configured provider.
 
 The LLM-backed run performs one additional knowledge-extraction request after a passing candidate. Extracted claims must include exact quotes from that candidate and remain pending until reviewed. The API key is not written to reports or memory. Per-request timeouts, output-token caps, and task iteration limits apply; aggregate monetary accounting is not yet implemented.
 
@@ -276,6 +289,7 @@ The GitHub Actions matrix runs on Python 3.11 and 3.13, executes the full test s
 - [ADR 0006: Memory quality and contradiction evaluation](docs/adr/0006-memory-quality-evaluation.md)
 - [ADR 0007: Repository-aware engineering loop](docs/adr/0007-repository-engineering-loop.md)
 - [ADR 0008: Repository intelligence and dependency mapping](docs/adr/0008-repository-intelligence.md)
+- [ADR 0009: Local Ollama-compatible chat provider](docs/adr/0009-local-ollama-chat-provider.md)
 - [ADR 0010: Task file-scope enforcement](docs/adr/0010-task-file-scope-enforcement.md)
 - [ADR 0011: Autonomous task recovery and replanning](docs/adr/0011-autonomous-task-recovery.md)
 - [Repository structure](docs/REPOSITORY_STRUCTURE.md)

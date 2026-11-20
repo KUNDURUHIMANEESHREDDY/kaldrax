@@ -35,7 +35,7 @@
 - Maximum iterations must be 1–20 in the desktop form.
 - Project ID is a memory isolation key, not a repository path.
 - Optional agent ID and memory limit map to the v0.5 CLI options.
-- Provider-backed runs require an API key, an executor model and a different evaluator model.
+- Hosted-provider runs require an API key, an executor model and a different evaluator model. Loopback Ollama runs do not require a key; remote endpoints must use HTTPS.
 - Never store the provider key in LocalStorage, settings JSON, reports, or logs.
 
 ## Team workflow rules
