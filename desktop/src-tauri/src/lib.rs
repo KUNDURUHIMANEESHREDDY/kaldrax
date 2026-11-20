@@ -1014,6 +1014,103 @@ fn benchmark_review_update(
 }
 
 #[tauri::command]
+fn quality_review_state(
+    engine_path: String,
+    python_executable: String,
+    reviewer: String,
+) -> Result<Value, String> {
+    let root = validate_engine_path(&engine_path)?;
+    if reviewer.trim().is_empty() {
+        return Err("Reviewer identity is required.".to_string());
+    }
+    let args = vec![
+        "memory".to_string(),
+        "quality-review-state".to_string(),
+        "--contradiction-dataset".to_string(),
+        "benchmarks/memory_contradictions_v1.json".to_string(),
+        "--extraction-dataset".to_string(),
+        "benchmarks/memory_extraction_v1.json".to_string(),
+        "--reviewer".to_string(),
+        reviewer,
+        "--session".to_string(),
+        ".kaldrax/memory-quality-review.desktop.session.json".to_string(),
+    ];
+    cli_json(&root, &python_executable, &args, &[])
+}
+
+#[tauri::command]
+fn quality_review_update(
+    engine_path: String,
+    python_executable: String,
+    reviewer: String,
+    action: String,
+    kind: String,
+    case_id: Option<String>,
+    decision: Option<String>,
+    expected_conflict: Option<bool>,
+    expected_claims: Option<Value>,
+    note: Option<String>,
+    confirmation: Option<String>,
+    approval: Option<String>,
+) -> Result<Value, String> {
+    let root = validate_engine_path(&engine_path)?;
+    if reviewer.trim().is_empty() {
+        return Err("Reviewer identity is required.".to_string());
+    }
+    if !["case", "dataset-approval"].contains(&action.as_str()) {
+        return Err("Unsupported quality review action.".to_string());
+    }
+    if !["contradiction", "extraction"].contains(&kind.as_str()) {
+        return Err("Unsupported quality review dataset.".to_string());
+    }
+    let mut args = vec![
+        "memory".to_string(),
+        "quality-review-update".to_string(),
+        "--contradiction-dataset".to_string(),
+        "benchmarks/memory_contradictions_v1.json".to_string(),
+        "--extraction-dataset".to_string(),
+        "benchmarks/memory_extraction_v1.json".to_string(),
+        "--reviewer".to_string(),
+        reviewer,
+        "--session".to_string(),
+        ".kaldrax/memory-quality-review.desktop.session.json".to_string(),
+        "--export-dir".to_string(),
+        ".kaldrax/memory-quality-exports".to_string(),
+        "--action".to_string(),
+        action,
+        "--kind".to_string(),
+        kind,
+    ];
+    if let Some(value) = case_id.filter(|value| !value.trim().is_empty()) {
+        args.extend(["--case-id".to_string(), value]);
+    }
+    if let Some(value) = decision {
+        args.extend(["--decision".to_string(), value]);
+    }
+    if let Some(value) = expected_conflict {
+        args.extend([
+            "--expected-conflict".to_string(),
+            value.to_string(),
+        ]);
+    }
+    if let Some(value) = expected_claims {
+        let serialized = serde_json::to_string(&value)
+            .map_err(|error| format!("Cannot serialize reviewed extraction labels: {error}"))?;
+        args.extend(["--expected-claims-json".to_string(), serialized]);
+    }
+    if let Some(value) = note {
+        args.extend(["--note".to_string(), value]);
+    }
+    if let Some(value) = confirmation {
+        args.extend(["--confirmation".to_string(), value]);
+    }
+    if let Some(value) = approval {
+        args.extend(["--approval".to_string(), value]);
+    }
+    cli_json(&root, &python_executable, &args, &[])
+}
+
+#[tauri::command]
 fn memory_search(
     engine_path: String,
     python_executable: String,
@@ -1260,6 +1357,8 @@ pub fn run() {
             memory_resolve_conflict,
             benchmark_review_state,
             benchmark_review_update,
+            quality_review_state,
+            quality_review_update,
             repository_status,
             repository_files,
             repository_read_file,
