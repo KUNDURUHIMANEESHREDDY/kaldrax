@@ -117,6 +117,42 @@ export interface BenchmarkReviewState {
   benchmark_status: string;
   export_path?: string | null;
 }
+export interface QualityReviewCase {
+  id: string;
+  category: string;
+  reviewed: boolean;
+  review_status: string;
+  reviewer?: string | null;
+  reviewed_at?: string | null;
+  note?: string | null;
+  left?: string;
+  right?: string;
+  proposed_expected_conflict?: boolean;
+  expected_conflict?: boolean;
+  objective?: string;
+  candidate?: string;
+  proposed_expected?: Array<{ match_terms: string[] }>;
+  expected?: Array<{ match_terms: string[] }>;
+}
+export interface QualityReviewDataset {
+  name: string;
+  version?: string | number;
+  total: number;
+  reviewed: number;
+  review_ready: boolean;
+  approval: { status: string; reviewer?: string | null; reviewed_at?: string | null };
+  export_path?: string | null;
+  cases: QualityReviewCase[];
+}
+export interface QualityReviewState {
+  reviewer: string;
+  session_path: string;
+  source_hashes: Record<string, string>;
+  contradiction: QualityReviewDataset;
+  extraction: QualityReviewDataset;
+  status: string;
+}
+
 export interface MemoryConflict {
   id: string; left_memory_id: string; right_memory_id: string;
   reason: string; status: string; created_at: string; resolution?: string | null;
@@ -213,6 +249,29 @@ export async function benchmarkReviewUpdate(input: {
     approval: input.approval,
     privacyConfirmation: input.privacyConfirmation,
   });
+}
+
+export async function qualityReviewState(input: {
+  enginePath: string; pythonExecutable: string; reviewer: string;
+}): Promise<QualityReviewState> {
+  return invoke<QualityReviewState>("quality_review_state", input);
+}
+
+export async function qualityReviewUpdate(input: {
+  enginePath: string;
+  pythonExecutable: string;
+  reviewer: string;
+  action: "case" | "dataset-approval";
+  kind: "contradiction" | "extraction";
+  caseId?: string;
+  decision?: "approve" | "modify";
+  expectedConflict?: boolean;
+  expectedClaims?: Array<{ match_terms: string[] }>;
+  note?: string;
+  confirmation?: string;
+  approval?: "approve" | "reject";
+}): Promise<QualityReviewState> {
+  return invoke<QualityReviewState>("quality_review_update", input);
 }
 
 export async function memoryResolveConflict(input: {
