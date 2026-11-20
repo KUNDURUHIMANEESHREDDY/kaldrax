@@ -249,7 +249,10 @@ new file mode 100644
     assert any("task file_scope" in event for event in report.events)
     assert coordinator.builder.prompts[0][1]["allowed_paths"] == ["csv_reader.py"]
     assert not (root / "docs" / "extra.md").exists()
-    assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")class FullSuiteSandbox(SuccessfulSandbox):
+    assert "line.split" in (root / "csv_reader.py").read_text(encoding="utf-8")
+
+
+class FullSuiteSandbox(SuccessfulSandbox):
     def __init__(
         self, *, exit_code=0, test_count=9, suite_exit_code=None,
         desktop_exit_code=0, ci_quality_exit_code=0,
