@@ -775,3 +775,11 @@ This file records implementation decisions, changes, commands, verification, and
 - The source corpus is not mutated. A hash-addressed write-once export is created only when every query is accepted/corrected and both independent approvals are recorded.
 - Reopening an approved session reconstructs/locates its immutable export; rejecting a query does not implicitly reselect its rejected memory proposal.
 - Human approvals have intentionally not been applied to the actual project corpus in this implementation. The benchmark remains exploratory until an operator completes the review.
+
+## 2026-11-20 — Desktop contradiction and extraction quality-label review
+
+- Added source-hash-bound state and update APIs for contradiction and extraction benchmark labels, backed by resumable local sessions.
+- Added fixed CLI commands and named Tauri commands; no arbitrary command surface is exposed to the webview.
+- Added Memory → Quality labels with separate contradiction/extraction views, explicit per-case accept/correct actions, reviewer provenance, and separate typed dataset approvals.
+- Exports are immutable and hash-addressed. Changing a case label resets that dataset's approval without deleting the prior immutable export.
+- Human decisions are not prefilled as approved and remain outstanding until an operator completes each case and the typed dataset approval.
