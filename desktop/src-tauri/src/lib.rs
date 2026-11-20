@@ -925,7 +925,6 @@ fn get_run_report(engine_path: String, run_id: String) -> Result<Value, String> 
 }
 
 #[tauri::command]
-#[tauri::command]
 fn benchmark_review_state(
     engine_path: String,
     python_executable: String,
@@ -1014,6 +1013,7 @@ fn benchmark_review_update(
     cli_json(&root, &python_executable, &args, &[])
 }
 
+#[tauri::command]
 fn memory_search(
     engine_path: String,
     python_executable: String,
