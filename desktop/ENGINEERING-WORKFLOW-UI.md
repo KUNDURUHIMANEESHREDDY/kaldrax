@@ -17,7 +17,7 @@ The Python engine remains the authority for execution, budgets, evaluation, memo
 | Overview | persisted run artifacts | actual run counts, latest runs and offline demo |
 | Tasks | Python recursive engine + separate evaluator | objective, acceptance criteria, iterations, memory scope, provider setup |
 | Runs / detail | JSON run report | events, evaluation evidence, candidate, token/cost budget |
-| Memory | SQLite memory CLI + benchmark annotation API | search, pending/active status, approve/reject, conflicts, explicit conflict resolution, query-by-query retrieval-label review, separate dataset and privacy approvals, immutable benchmark export |
+| Memory | SQLite memory CLI + benchmark annotation and quality-review APIs | search, pending/active status, approve/reject, conflicts, explicit conflict resolution, query-by-query retrieval-label review, contradiction/extraction label review, separate dataset and privacy approvals, immutable benchmark exports |
 | Team runs | bounded planner-builder-reviewer-evaluator coordinator | distinct model roles, cycle limit, role trace, independent final evaluation, optional gated repository patch workflow |
 | Sandbox | Docker single-file Python runner | selected .py file, timeout/memory/CPU/PID controls, stdout/stderr, cancellation |
 | Repository | guarded local Git workspace adapter | status, supported text/code listing, SHA-256 read, backup-backed single-file edit; repository-team patch verification is a separate opt-in path |
