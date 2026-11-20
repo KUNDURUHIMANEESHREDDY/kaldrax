@@ -294,7 +294,7 @@ kaldrax memory benchmark-annotate \
   --version 1.0.0
 ```
 
-For each query, the workflow displays the query, proposed relevant memories, and the full candidate-memory index. Reviewers can approve the proposed IDs, reject the proposal, replace the relevant-ID set, skip, or stop and resume later. Each decision records the reviewer and UTC timestamp in a resumable session under `.kaldrax/benchmark-reviews/`.
+The desktop application also exposes this workflow under **Memory → Benchmark review**, using the same local review-session file and approval rules. For each query, the workflow displays the query, proposed relevant memories, and the full candidate-memory index. Reviewers can approve the proposed IDs, reject the proposal, replace the relevant-ID set, skip, or stop and resume later. Each decision records the reviewer and UTC timestamp in a resumable session under `.kaldrax/benchmark-reviews/`.
 
 Dataset annotation approval and privacy approval are separate gates. Privacy approval requires an explicit confirmation after the source paths and copied memory content have been displayed. The source dataset is never edited. An export is written under `.kaldrax/benchmark-exports/` only when every query is approved or corrected, dataset annotation approval is granted, and privacy screening is independently approved.
 

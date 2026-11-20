@@ -177,6 +177,10 @@ def test_structured_review_api_requires_separate_privacy_approval(tmp_path):
     assert state["privacy_screening"]["reviewer"] == "privacy-reviewer"
     assert state["benchmark_status"] == "validated_exported"
     assert state["export_path"]
+    reloaded = get_annotation_review_state(
+        source, reviewer="privacy-reviewer", session_path=session, export_dir=export_dir,
+    )
+    assert reloaded["export_path"] == state["export_path"]
     exported = json.loads(open(state["export_path"], encoding="utf-8").read())
     assert assess_dataset_review(exported)["validated"] is True
 

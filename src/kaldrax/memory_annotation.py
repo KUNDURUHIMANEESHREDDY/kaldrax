@@ -307,6 +307,8 @@ def get_annotation_review_state(
     *,
     reviewer: str,
     session_path: str | Path | None = None,
+    export_dir: str | Path = ".kaldrax/benchmark-exports",
+    version: str = "1.0.0",
 ) -> dict[str, Any]:
     """Load or initialize the durable, human-reviewed retrieval benchmark session."""
     reviewer = reviewer.strip()
@@ -321,6 +323,17 @@ def get_annotation_review_state(
     session = _load_session(dataset, source_path, raw, review_path)
     if is_new:
         _save_session(review_path, session)
+
+    review_ready = _review_ready(session)
+    export_path: Path | None = None
+    if (
+        review_ready
+        and session["dataset_approval"].get("status") == "approved"
+        and session["privacy_screening"].get("status") == "approved"
+    ):
+        export_path = export_approved_dataset(
+            dataset, session, export_dir=export_dir, version=version,
+        )
 
     queries = []
     for query in dataset["queries"]:
@@ -358,12 +371,9 @@ def get_annotation_review_state(
         "queries": queries,
         "dataset_approval": dict(session["dataset_approval"]),
         "privacy_screening": dict(session["privacy_screening"]),
-        "review_ready": _review_ready(session),
-        "benchmark_status": "validated_exported" if (
-            session["dataset_approval"].get("status") == "approved"
-            and session["privacy_screening"].get("status") == "approved"
-            and _review_ready(session)
-        ) else "review_pending",
+        "review_ready": review_ready,
+        "benchmark_status": "validated_exported" if export_path else "review_pending",
+        "export_path": str(export_path) if export_path else None,
     }
 
 
@@ -465,11 +475,10 @@ def update_annotation_review(
             dataset, session, export_dir=export_dir, version=version,
         )
 
-    state = get_annotation_review_state(source_path, reviewer=reviewer, session_path=review_path)
-    state["export_path"] = str(export_path) if export_path else None
-    if export_path:
-        state["benchmark_status"] = "validated_exported"
-    return state
+    return get_annotation_review_state(
+        source_path, reviewer=reviewer, session_path=review_path,
+        export_dir=export_dir, version=version,
+    )
 
 
 def run_annotation_review(

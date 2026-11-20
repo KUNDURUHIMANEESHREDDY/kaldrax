@@ -765,3 +765,13 @@ This file records implementation decisions, changes, commands, verification, and
 - Preflight reports both Python versions and rejects an image that does not match Python 3.11, Python 3.13, Node 24, pytest, or the preinstalled lockfile-derived desktop cache.
 - Added test fixtures for both runtime command sequences, per-runtime test counts, zero-test rejection on either version, desktop failure after the Python matrix, and missing-runtime preflight.
 - Docker-nested integration and live-provider validation remain separate gated CI jobs; the isolated full profile does not claim to run them.
+
+## 2026-11-20 — Desktop retrieval benchmark review
+
+- Added structured state and decision APIs over the existing resumable retrieval annotation session; the terminal workflow remains supported.
+- Connected named Tauri commands to the fixed checked-in retrieval corpus and local review-session/export directories.
+- Added a Memory → Benchmark review tab that shows each of the 36 proposed queries, all 37 candidate memories, relevance checkboxes, per-query reviewer provenance, and the independent dataset/privacy approval gates.
+- Privacy approval requires typing the exact confirmation phrase after the screen displays the declared scope and all copied memory records/source paths.
+- The source corpus is not mutated. A hash-addressed write-once export is created only when every query is accepted/corrected and both independent approvals are recorded.
+- Reopening an approved session reconstructs/locates its immutable export; rejecting a query does not implicitly reselect its rejected memory proposal.
+- Human approvals have intentionally not been applied to the actual project corpus in this implementation. The benchmark remains exploratory until an operator completes the review.

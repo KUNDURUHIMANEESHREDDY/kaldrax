@@ -122,9 +122,9 @@ function BenchmarkReviewPanel({
   const activeQuery = review?.queries.find(query => query.id === activeQueryId) ?? null;
   useEffect(() => {
     if (!activeQuery) return;
-    setSelectedIds(activeQuery.relevant.length ? activeQuery.relevant : activeQuery.proposed_relevant);
+    setSelectedIds(activeQuery.relevant);
     setNote(activeQuery.review_note ?? "");
-  }, [activeQuery?.id]);
+  }, [activeQuery?.id, activeQuery?.status]);
 
   const update = async (input: {
     action: "query" | "dataset-approval" | "privacy-approval";

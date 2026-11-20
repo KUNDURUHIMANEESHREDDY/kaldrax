@@ -944,6 +944,10 @@ fn benchmark_review_state(
         reviewer,
         "--session".to_string(),
         ".kaldrax/benchmark-reviews/memory_retrieval_kaldrax_v1.review.json".to_string(),
+        "--export-dir".to_string(),
+        ".kaldrax/benchmark-exports".to_string(),
+        "--version".to_string(),
+        "1.0.0".to_string(),
     ];
     cli_json(&root, &python_executable, &args, &[])
 }
