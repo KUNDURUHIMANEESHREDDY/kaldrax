@@ -893,3 +893,13 @@ This file records implementation decisions, changes, commands, verification, and
 - Captured the model-review predicate before moving the action, then reused the boolean for both confirmation validation and argument construction. This preserves the explicit provider egress gate without cloning user input.
 - Removed five unused validated-path bindings reported by the same compiler run; validation still occurs before each operation.
 - CI had stopped at the native Rust test build, so no MSI/NSIS installer had been built. The next Windows run must pass native tests, installer creation, and installed-resource smoke before packaging can be considered verified.
+
+
+## 2026-11-20 — Pin packaged execution and verify bundled state migration
+
+- Packaged Tauri builds now reject alternate engine checkout paths at the native command boundary when the bundled resource is present. The packaged executable is resolved from Tauri resources and used irrespective of the webview-supplied Python executable string.
+- Developer mode continues to allow an operator-selected source checkout and Python interpreter only when the packaged resource is absent.
+- Separated source-checkout validation from packaged runtime validation so an upgrade can still discover and migrate the previous checkout's `.kaldrax/` data.
+- Packaged-mode legacy migration now runs through the bundled executable instead of requiring the prior desktop's saved Python interpreter.
+- Extended the installed NSIS smoke to create a legacy state file, migrate it through the installed executable, verify the destination copy and confirm the original remains intact.
+- This follows the native Rust fix and is awaiting fresh installer CI verification.

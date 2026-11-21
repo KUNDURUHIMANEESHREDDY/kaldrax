@@ -132,20 +132,36 @@ fn packaged_engine_root(app: &AppHandle) -> Option<PathBuf> {
     executable.parent()?.parent()?.canonicalize().ok()
 }
 
-fn validate_engine_path(app: &AppHandle, engine_path: &str) -> Result<PathBuf, String> {
+fn validate_source_engine_path(engine_path: &str) -> Result<PathBuf, String> {
     let path = Path::new(engine_path)
         .canonicalize()
         .map_err(|_| "KALDRAX engine directory does not exist or cannot be opened.".to_string())?;
-    let source_checkout = path.join("pyproject.toml").is_file()
-        && path.join("src").join("kaldrax").join("cli.py").is_file();
-    let packaged_runtime = packaged_engine_root(app).as_ref() == Some(&path);
-    if !path.is_dir() || (!source_checkout && !packaged_runtime) {
+    if !path.is_dir()
+        || !path.join("pyproject.toml").is_file()
+        || !path.join("src").join("kaldrax").join("cli.py").is_file()
+    {
         return Err(
-            "Choose a valid KALDRAX source checkout or use the application's bundled runtime."
+            "Choose the KALDRAX Python source directory (it must contain pyproject.toml and src/kaldrax/cli.py)."
                 .to_string(),
         );
     }
     Ok(path)
+}
+
+fn validate_engine_path(app: &AppHandle, engine_path: &str) -> Result<PathBuf, String> {
+    let path = Path::new(engine_path)
+        .canonicalize()
+        .map_err(|_| "KALDRAX engine directory does not exist or cannot be opened.".to_string())?;
+    if let Some(packaged_root) = packaged_engine_root(app) {
+        if path != packaged_root {
+            return Err(
+                "This installation must use its bundled KALDRAX runtime; alternate engine paths are disabled."
+                    .to_string(),
+            );
+        }
+        return Ok(path);
+    }
+    validate_source_engine_path(engine_path)
 }
 
 fn python_command(python_executable: &str, engine_path: &Path) -> Command {
@@ -158,6 +174,34 @@ fn python_command(python_executable: &str, engine_path: &Path) -> Command {
     };
     command.current_dir(engine_path);
     command
+}
+
+fn engine_command(
+    app: &AppHandle,
+    engine_path: &Path,
+    python_executable: &str,
+) -> Result<Command, String> {
+    if let Some(packaged_root) = packaged_engine_root(app) {
+        let requested_root = engine_path
+            .canonicalize()
+            .map_err(|_| "KALDRAX engine directory does not exist or cannot be opened.".to_string())?;
+        if requested_root != packaged_root {
+            return Err(
+                "This installation must use its bundled KALDRAX runtime; alternate engine paths are disabled."
+                    .to_string(),
+            );
+        }
+        return Ok(python_command(PACKAGED_ENGINE_SENTINEL, &packaged_root));
+    }
+
+    let source_path = engine_path
+        .to_str()
+        .ok_or_else(|| "KALDRAX engine path is not valid UTF-8.".to_string())?;
+    let source_root = validate_source_engine_path(source_path)?;
+    if python_executable.trim().is_empty() {
+        return Err("Enter a Python executable (for example, python).".to_string());
+    }
+    Ok(python_command(python_executable, &source_root))
 }
 
 fn engine_version(engine_path: &Path) -> String {
@@ -215,17 +259,17 @@ fn report_directory(app: &AppHandle) -> Result<PathBuf, String> {
 
 fn migrate_legacy_state(
     app: &AppHandle,
-    engine_path: &Path,
-    python_executable: &str,
+    runtime_root: &Path,
+    runtime_executable: &str,
+    source_state_directory: &Path,
 ) -> Result<(), String> {
     let data_root = app_data_directory(app)?;
     let destination = state_directory(app)?;
-    let source = engine_path.join(".kaldrax");
-    let output = python_command(python_executable, engine_path)
+    let output = engine_command(app, runtime_root, runtime_executable)?
         .arg("storage")
         .arg("migrate")
         .arg("--source")
-        .arg(&source)
+        .arg(source_state_directory)
         .arg("--destination")
         .arg(&destination)
         .env("KALDRAX_DATA_DIR", &data_root)
@@ -250,7 +294,7 @@ fn cli_json(
     envs: &[(&str, &str)],
 ) -> Result<Value, String> {
     let data_root = app_data_directory(app)?;
-    let mut command = python_command(python_executable, engine_path);
+    let mut command = engine_command(app, engine_path, python_executable)?;
     command
         .args(args)
         .env("KALDRAX_DATA_DIR", data_root);
@@ -342,7 +386,7 @@ fn start_cli_operation(
         args.push("--progress-jsonl".to_string());
         args.push(progress_path.to_string_lossy().into_owned());
     }
-    let mut command = python_command(python_executable, &root);
+    let mut command = engine_command(app, &root, python_executable)?;
     command
         .args(args)
         .env("PYTHONUNBUFFERED", "1")
@@ -489,15 +533,17 @@ async fn verify_engine(
             // Migrate state from a previously configured source checkout before switching to
             // the packaged runtime. Never treat the read-only resource directory as legacy data.
             if !engine_path.trim().is_empty() {
-                if let Ok(legacy_root) = validate_engine_path(&app, &engine_path) {
+                if let Ok(legacy_root) = validate_source_engine_path(&engine_path) {
                     if legacy_root != root
                         && legacy_root.join("pyproject.toml").is_file()
                         && legacy_root.join(".kaldrax").is_dir()
                     {
-                        if python_executable.trim().is_empty() {
-                            return Err("The previous source checkout has state to migrate but no Python interpreter is configured.".to_string());
-                        }
-                        migrate_legacy_state(&app, &legacy_root, &python_executable)?;
+                        migrate_legacy_state(
+                            &app,
+                            &root,
+                            PACKAGED_ENGINE_SENTINEL,
+                            &legacy_root.join(".kaldrax"),
+                        )?;
                     }
                 }
             }
@@ -507,11 +553,16 @@ async fn verify_engine(
                 return Err("No bundled runtime was found. Choose a KALDRAX source checkout and Python executable.".to_string());
             }
             let root = validate_engine_path(&app, &engine_path)?;
-            migrate_legacy_state(&app, &root, &python_executable)?;
+            migrate_legacy_state(
+                &app,
+                &root,
+                &python_executable,
+                &root.join(".kaldrax"),
+            )?;
             (root, python_executable, false)
         };
 
-        let output = python_command(&runtime_executable, &path)
+        let output = engine_command(&app, &path, &runtime_executable)?
             .arg("--help")
             .output()
             .map_err(|error| format!("Could not start KALDRAX: {error}"))?;

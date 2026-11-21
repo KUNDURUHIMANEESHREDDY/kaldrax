@@ -42,3 +42,8 @@
 - A model privacy screen does not guarantee a dataset contains no sensitive information.
 - Provider-side retention and training policies are controlled by the configured provider, not by KALDRAX.
 - The current packaged build target is Windows x64; this review does not establish macOS or Linux installer support.
+
+
+## Packaged process selection hardening
+
+Packaged builds enforce the resource-root boundary for all Tauri commands. When a bundled resource is present, the Rust command builder ignores the webview-supplied Python executable and launches only the executable resolved from Tauri's resource directory. Alternate engine paths are rejected. The prior source checkout is inspected only by a separate read-only validator for migration; migration execution itself uses the bundled CLI. Developer mode remains available only in builds without packaged resources.

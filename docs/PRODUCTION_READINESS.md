@@ -25,7 +25,7 @@ The baseline credential-free CI run (44872710002, commit eea0b6d) passed Python 
 
 ### P0 — Self-contained desktop installation
 
-**Implementation status:** The frozen Windows x64 CLI is now configured as a Tauri resource alongside benchmark data. Rust resolves the executable from the application resource directory, validates that the selected packaged engine root is the actual Tauri resource path, and launches it directly with a fixed argument vector. Source-checkout/Python execution remains the developer fallback. Windows CI is being extended to build MSI/NSIS installers and install/smoke-test the NSIS package. These installer checks are not yet verified.
+**Implementation status:** The frozen Windows x64 CLI is configured as a Tauri resource alongside benchmark data. Rust resolves the executable from the application resource directory, locks packaged builds to that runtime, rejects alternate source/executable paths at the Tauri command boundary, and launches the bundled executable with fixed arguments. Source-checkout/Python execution remains available only when no packaged resource is present. Windows CI is being extended to build MSI/NSIS installers and install/smoke-test the NSIS package. These installer checks are not yet verified.
 
 **Acceptance:**
 - A clean supported Windows machine can install and launch KALDRAX without Git, a pre-existing Python installation, or a separately cloned source repository.

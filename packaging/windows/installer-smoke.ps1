@@ -39,13 +39,35 @@ $smokeRoot = Join-Path $env:RUNNER_TEMP 'kaldrax-installed-runtime-smoke'
 if (Test-Path -LiteralPath $smokeRoot) {
   Remove-Item -LiteralPath $smokeRoot -Recurse -Force
 }
-$runs = Join-Path $smokeRoot 'runs'
-$data = Join-Path $smokeRoot 'data'
-$database = Join-Path $smokeRoot 'memory.sqlite3'
-New-Item -ItemType Directory -Force -Path $runs, $data | Out-Null
-$env:KALDRAX_DATA_DIR = $data
+$legacyState = Join-Path $smokeRoot 'legacy-checkout/.kaldrax'
+$applicationData = Join-Path $smokeRoot 'app-data'
+$destinationState = Join-Path $applicationData '.kaldrax'
+$legacyRuns = Join-Path $legacyState 'runs'
+New-Item -ItemType Directory -Force -Path $legacyRuns, $applicationData | Out-Null
+$legacyReport = Join-Path $legacyRuns 'legacy-run.json'
+Set-Content -LiteralPath $legacyReport -Value '{"run_id":"legacy-run"}' -NoNewline
+$env:KALDRAX_DATA_DIR = $applicationData
 Push-Location $resourceRoot
 try {
+  $migrationOutput = & $engine.FullName storage migrate --source $legacyState --destination $destinationState 2>&1 | Out-String
+  if ($LASTEXITCODE -ne 0) {
+    throw "Packaged engine legacy-state migration failed (exit $LASTEXITCODE): $migrationOutput"
+  }
+  $migration = $migrationOutput | ConvertFrom-Json
+  if ($migration.status -ne 'migrated' -or $migration.files_copied -ne 1) {
+    throw "Packaged engine returned unexpected migration result: $migrationOutput"
+  }
+  if (-not (Test-Path -LiteralPath (Join-Path $destinationState 'runs/legacy-run.json'))) {
+    throw 'Packaged engine did not copy the legacy report into application data.'
+  }
+  if (-not (Test-Path -LiteralPath $legacyReport)) {
+    throw 'Packaged engine migration removed the legacy source report.'
+  }
+
+  $runs = Join-Path $smokeRoot 'runs'
+  $data = Join-Path $smokeRoot 'data'
+  $database = Join-Path $smokeRoot 'memory.sqlite3'
+  New-Item -ItemType Directory -Force -Path $runs, $data | Out-Null
   $demo = & $engine.FullName demo --project installer-smoke --artifacts $runs --memory-db $database 2>&1 | Out-String
   if ($LASTEXITCODE -ne 0) {
     throw "Installed frozen offline demo failed (exit $LASTEXITCODE): $demo"
@@ -66,4 +88,4 @@ foreach ($report in $reports) {
 Write-Output 'INSTALLED_TAURI_RESOURCE_SMOKE_OK'
 Write-Output "Verified installer: $($installer.Name)"
 Write-Output "Verified bundled CLI: $($engine.FullName)"
-Write-Output 'Verified: install, executable discovery, version metadata, CLI help, offline demo, SQLite persistence, isolated app-data and JSON report.'
+Write-Output 'Verified: install, executable discovery, version metadata, CLI help, bundled legacy migration without system Python, source preservation, offline demo, SQLite persistence and JSON report.'
