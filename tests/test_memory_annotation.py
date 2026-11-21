@@ -250,12 +250,13 @@ def test_tampered_review_session_approval_and_query_provenance_are_rejected(tmp_
     with pytest.raises(ValueError, match="dataset approval lacks valid reviewer provenance"):
         get_annotation_review_state(source, reviewer="reviewer-a", session_path=session_path)
 
-    get_annotation_review_state(source, reviewer="reviewer-a", session_path=session_path)
-    session = json.loads(session_path.read_text(encoding="utf-8"))
+    query_session_path = tmp_path / "query-session.json"
+    get_annotation_review_state(source, reviewer="reviewer-a", session_path=query_session_path)
+    session = json.loads(query_session_path.read_text(encoding="utf-8"))
     session["queries"]["q-memory"]["status"] = "approved"
-    session_path.write_text(json.dumps(session), encoding="utf-8")
+    query_session_path.write_text(json.dumps(session), encoding="utf-8")
     with pytest.raises(ValueError, match="reviewed query q-memory lacks valid labels or reviewer provenance"):
-        get_annotation_review_state(source, reviewer="reviewer-a", session_path=session_path)
+        get_annotation_review_state(source, reviewer="reviewer-a", session_path=query_session_path)
 
 
 def test_tampered_review_session_rejects_unknown_relevance_ids(tmp_path):
