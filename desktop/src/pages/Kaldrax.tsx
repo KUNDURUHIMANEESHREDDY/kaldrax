@@ -80,8 +80,8 @@ function MetricCard({ label, value, note, icon }: { label: string; value: string
 function RunTable({ reports, onOpen }: { reports: RunReport[]; onOpen: (id: string) => void }) {
   return <div className="kx-table-wrap"><table className="kx-table"><thead><tr><th>Objective</th><th>Status</th><th>Iterations</th><th>Duration</th><th>Created</th></tr></thead><tbody>{reports.map(report => <tr key={report.run_id} onClick={() => onOpen(report.run_id)} className="kx-table-row" tabIndex={0} onKeyDown={event => { if (event.key === "Enter") onOpen(report.run_id); }}><td><div className="kx-task-cell"><span className="kx-task-id">{report.run_id.slice(0, 8)}</span><strong>{report.objective}</strong></div></td><td><StatusBadge status={report.status}/></td><td>{report.iterations}</td><td>{duration(report)}</td><td className="kx-muted">{formatDate(report.created_at)}</td></tr>)}</tbody></table></div>;
 }
-function OverviewPage({ reports, connected, busy, onDemo, onNewTask, onOpenRun, error }: {
-  reports: RunReport[]; connected: boolean; busy: boolean; onDemo: () => void; onNewTask: () => void; onOpenRun: (id: string) => void; error: string;
+function OverviewPage({ reports, connected, bundled, busy, onDemo, onNewTask, onOpenRun, error }: {
+  reports: RunReport[]; connected: boolean; bundled: boolean; busy: boolean; onDemo: () => void; onNewTask: () => void; onOpenRun: (id: string) => void; error: string;
 }) {
   const passed = reports.filter(report => report.status === "passed").length;
   const failed = reports.filter(report => report.status === "failed").length;
@@ -89,7 +89,7 @@ function OverviewPage({ reports, connected, busy, onDemo, onNewTask, onOpenRun, 
   return <>
     <PageHeader title="Overview" subtitle="Inspect real KALDRAX runs, independent evaluations and local engine health."
       action={<button className="kx-button kx-button--primary" onClick={onNewTask}><Icon name="plus" size={16}/> New task</button>}/>
-    <div className={`kx-engine-status ${connected ? "is-connected" : "is-offline"}`}><span className="kx-status-dot"/><strong>{connected ? "KALDRAX engine connected" : "KALDRAX engine not connected"}</strong><span>{connected ? (engineStatus?.bundled ? "Bundled runtime verified" : "Local Python CLI verified") : "A bundled runtime or source checkout is required"}</span><span className="kx-strip-spacer"/><button className="kx-text-button" onClick={() => window.location.hash = "#/settings"}>Engine settings <Icon name="arrow-right" size={14}/></button></div>
+    <div className={`kx-engine-status ${connected ? "is-connected" : "is-offline"}`}><span className="kx-status-dot"/><strong>{connected ? "KALDRAX engine connected" : "KALDRAX engine not connected"}</strong><span>{connected ? (bundled ? "Bundled runtime verified" : "Local Python CLI verified") : "A bundled runtime or source checkout is required"}</span><span className="kx-strip-spacer"/><button className="kx-text-button" onClick={() => window.location.hash = "#/settings"}>Engine settings <Icon name="arrow-right" size={14}/></button></div>
     {error && <div className="kx-alert kx-alert--error" role="alert">{error}</div>}
     <div className="kx-metrics"><MetricCard label="Total runs" value={String(reports.length).padStart(2, "0")} note="Persisted reports" icon="activity"/><MetricCard label="Passed" value={String(passed).padStart(2, "0")} note="Independent evaluation passed" icon="check-circle"/><MetricCard label="Failed" value={String(failed).padStart(2, "0")} note="Execution or evaluation failure" icon="x"/><MetricCard label="Iteration limit" value={String(limited).padStart(2, "0")} note="Stopped at configured limit" icon="clock"/></div>
     <section className="kx-panel">
@@ -325,7 +325,7 @@ function KaldraxShell() {
       <div className="kx-content">
         {operation && <OperationPanel operation={operation} onCancel={cancelCurrentOperation}/>}
         <Routes>
-          <Route path="/" element={<OverviewPage reports={reports} connected={connected} busy={busy || operationRunning} onDemo={launchDemo} onNewTask={() => navigate("/tasks")} onOpenRun={navigateToRun} error={error}/>} />
+          <Route path="/" element={<OverviewPage reports={reports} connected={connected} bundled={Boolean(engineStatus?.bundled)} busy={busy || operationRunning} onDemo={launchDemo} onNewTask={() => navigate("/tasks")} onOpenRun={navigateToRun} error={error}/>} />
           <Route path="/tasks" element={<TaskBuilder settings={settings} connected={connected} apiKey={apiKey} onRun={launchTask} busy={busy && busyLabel === "task" || operationRunning && operation?.kind === "task_run"} error={busyLabel === "task" ? error : ""}/>} />
           <Route path="/runs" element={<RunsPage reports={reports} onOpen={navigateToRun}/>} />
           <Route path="/runs/:runId" element={<RunDetailPage enginePath={engineStatus?.enginePath ?? settings.enginePath}/>} />

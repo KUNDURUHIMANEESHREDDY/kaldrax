@@ -870,3 +870,10 @@ This file records implementation decisions, changes, commands, verification, and
 - The desktop auto-detects the packaged runtime on first launch and uses its runtime path for run history, memory, team workflows, sandbox, and repository workflows. Source-checkout fields remain visible only in developer mode.
 - Extended Windows CI to compile and unit-test the native bridge, build MSI and NSIS installers, install the NSIS package silently, find the installed bundled engine, and run credential-free CLI/offline-demo/SQLite/report smoke checks against the installed files.
 - The installer-integrated work is awaiting its CI result. Clean-machine GUI launch, upgrade/repair/uninstall data-retention behavior, code signing, and trusted update delivery remain release checks.
+
+
+## 2026-11-20 — Fix overview runtime-mode prop
+
+- The first packaged-runtime integration CI exposed a TypeScript error: the Overview component referenced EngineStatus without receiving it as a prop.
+- Added a typed `bundled` prop and passed the connected engine's runtime mode at the route boundary.
+- Python 3.11 and 3.13 passed on the integration run; desktop compilation failed only on this missing component prop. The Windows installer job was still running at the time of this correction.
