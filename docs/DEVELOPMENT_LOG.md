@@ -835,3 +835,12 @@ This file records implementation decisions, changes, commands, verification, and
 - The job uploads the frozen engine directory and build-toolchain evidence only after the credential-free smoke checks pass.
 - The Rust bridge and Tauri installer are not yet connected to this resource. The prototype is not yet a self-contained desktop release.
 - No provider credentials or hosted model requests are involved.
+
+## 2026-11-20 — Frozen-engine smoke verification
+
+- The first packaging workflow attempt built the frozen executable but failed its smoke step because the default distribution path was calculated one directory too high. The build itself succeeded; the failure was isolated to the smoke-script path resolution.
+- Corrected the smoke script to resolve the repository root from its own location and to choose a temporary test directory both on GitHub Actions and local PowerShell runs.
+- GitHub Actions run 44873532171 passed Python 3.11, Python 3.13, desktop Oxlint/build, Windows x64 PyInstaller build, frozen CLI help, offline demo, SQLite creation, JSON run-report parsing, and the deterministic evaluator benchmark with packaged fixture data.
+- The successful run uploaded the frozen engine prototype as artifact `kaldrax-frozen-engine-windows-x64-4a90000213a9a386e2e11c3c00b9e174443293b1` (11,404,466 bytes compressed). This artifact is a build prototype, not a Tauri installer.
+- The live-provider smoke and tag-only memory release gate remained skipped. No provider credentials or hosted requests were used.
+- Remaining release blockers: Tauri resource integration, application-data isolation/migration, native installer build and clean-machine install/upgrade/uninstall tests.

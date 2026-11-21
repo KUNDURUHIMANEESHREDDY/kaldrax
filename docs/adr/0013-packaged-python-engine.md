@@ -46,6 +46,12 @@ References:
 - Run `--help`, the offline demo with isolated SQLite/report paths, and the deterministic evaluator benchmark from the frozen directory; the benchmark invocation also proves the evaluator fixture was packaged.
 - Record the build toolchain used by the CI prototype.
 
+## Prototype verification evidence
+
+- GitHub Actions run `44873532171` passed on commit `4a90000213a9a386e2e11c3c00b9e174443293b1`: Windows x64 frozen build, CLI help, offline demo, isolated SQLite and JSON report outputs, and deterministic evaluator benchmark using collected package data. Python 3.11 and 3.13 plus desktop lint/build also passed in the same workflow.
+- The workflow uploaded the frozen engine directory and toolchain evidence. The archive size was 11,404,466 bytes; this is compressed CI artifact size, not MSI/NSIS installation size.
+- The first workflow attempt failed only because the smoke script derived its default executable path incorrectly. The path was corrected, and the subsequent complete workflow passed. The build itself had succeeded in the failed attempt.
+
 ## Release verification still required
 
 - Confirm writable state is redirected to the OS app-data location before launching the packaged runtime from the installed application.

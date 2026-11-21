@@ -35,7 +35,7 @@ The baseline credential-free CI run (44872710002, commit eea0b6d) passed Python 
 - MSI and NSIS packages are built in CI and tested on a clean Windows runner.
 - A packaging failure prevents release artifact publication.
 
-**Architecture decision:** ADR 0013 selects a PyInstaller one-folder console build for Windows x64, embedded as a Tauri resource and launched by the existing Rust process manager. The first prototype build and smoke check is now a dedicated Windows CI job. This does not yet make the Tauri installer self-contained; Rust runtime selection, app-data migration, native installer build, and clean-machine installation remain open.
+**Prototype status:** The PyInstaller one-folder console build and credential-free CLI smoke test passed on a clean Windows x64 GitHub Actions runner (run 44873532171, commit 4a90000). The uploaded frozen-engine workflow artifact is 11,404,466 bytes compressed; this is not the final installed application size. ADR 0013 selects this as the Windows x64 packaging direction. The binary is not yet wired into Tauri resources; Rust runtime selection, app-data migration, native installer build, and clean-machine installation remain release blockers.
 
 ### P1 — Portable first-run and configuration
 
