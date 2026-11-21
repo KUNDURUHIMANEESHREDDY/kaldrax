@@ -103,6 +103,28 @@ def test_human_review_and_privacy_are_separate_gates_and_export_is_immutable(tmp
     assert repeated_path.read_bytes() == original_bytes
 
 
+def test_privacy_review_displays_full_content_for_every_memory(tmp_path):
+    source = tmp_path / "dataset.json"
+    _dataset(source)
+    output = []
+
+    result = run_annotation_review(
+        source,
+        reviewer="privacy-reviewer",
+        session_path=tmp_path / "session.json",
+        export_dir=tmp_path / "exports",
+        input_fn=_inputs(["a", "a", "a", "APPROVE"]),
+        output_fn=output.append,
+    )
+
+    rendered = "\\n".join(output)
+    assert "SQLite stores durable project memory." in rendered
+    assert "Docker runs untrusted Python with network disabled." in rendered
+    assert "README.md#memory" in rendered
+    assert "docs/ARCHITECTURE.md#sandbox" in rendered
+    assert result["privacy_approval_status"] == "approved"
+
+
 def test_rejected_query_blocks_dataset_approval_and_export(tmp_path):
     source = tmp_path / "dataset.json"
     _dataset(source)

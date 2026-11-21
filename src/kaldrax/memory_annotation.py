@@ -670,6 +670,15 @@ def run_annotation_review(
         write_output("")
         write_output("Privacy scope is a separate approval and does not follow from label approval.")
         write_output(f"Declared scope: {privacy.get('scope') or 'No scope description provided.'}")
+        write_output("Copied memory content (inspect every item before approving privacy scope):")
+        for memory in dataset["memories"]:
+            source = memory.get("source") or {}
+            location = f"{source.get('path', 'unspecified')}#{source.get('anchor', '')}".rstrip("#")
+            write_output(
+                f"- {memory['id']} [{memory.get('category', 'uncategorized')}] "
+                f"(source: {location})"
+            )
+            write_output(f"  Content: {memory['content']}")
         source_paths = sorted({
             str((item.get("source") or {}).get("path", ""))
             for item in dataset["memories"]
