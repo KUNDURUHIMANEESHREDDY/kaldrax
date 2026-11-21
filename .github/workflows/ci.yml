@@ -207,7 +207,7 @@ jobs:
   memory-release-gate:
     name: v0.6 memory evidence and release thresholds
     if: startsWith(github.ref, 'refs/tags/v0.6.')
-    needs: test
+    needs: [test, desktop-check]
     runs-on: ubuntu-latest
     permissions:
       contents: read
