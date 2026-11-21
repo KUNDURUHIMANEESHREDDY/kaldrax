@@ -2,7 +2,7 @@
   "name": "kaldrax_public_repository_engineering_v1",
   "provenance": "public_repository_snapshot",
   "source_repository": "https://github.com/KUNDURUHIMANEESHREDDY/kaldrax",
-  "source_revision": "1b50f309c7cd2f9a0dc7ec444f12fc57c25cc7d9",
+  "source_revision": "4cf97d2bb3fef588801717a4391d2b1c111ec832",
   "privacy_screening": {
     "scope": "Public main-branch files only; no local SQLite databases, .kaldrax runtime reports, secrets, environment values, private conversation content, or private repositories were read.",
     "status": "pending_operator_signoff",
@@ -73,33 +73,34 @@
       }
     },
     {
-      "id": "ollama-loopback-only",
+      "id": "hosted-embedding-egress",
       "category": "Privacy",
-      "content": "The Ollama embedding adapter accepts only localhost or loopback IP endpoints so project-memory text is not silently sent to a remote embedding service.",
-      "summary": "Embedding endpoint is restricted to loopback.",
+      "content": "When KALDRAX_EMBEDDING_MODEL is configured, the hosted OpenAI-compatible embeddings adapter sends project-memory text to the configured HTTPS provider; when it is unset, KALDRAX uses lexical retrieval and makes no embedding requests.",
+      "summary": "Hosted embeddings transmit memory text; lexical mode needs no embedding API.",
       "tags": [
-        "ollama",
+        "hosted-embeddings",
         "privacy",
-        "loopback"
+        "https",
+        "data-egress"
       ],
       "source": {
-        "path": "src/kaldrax/embeddings.py",
-        "anchor": "OllamaEmbeddingProvider.__init__"
+        "path": "README.md",
+        "anchor": "Hosted semantic embeddings"
       }
     },
     {
       "id": "embedding-model-identity",
       "category": "Retrieval",
-      "content": "KALDRAX compares a stored memory vector with a query vector only when their embedding model identifiers match; changing models requires explicit reindexing.",
-      "summary": "Vectors must use the same embedding model identity.",
+      "content": "KALDRAX compares a stored memory vector with a query vector only when their hosted embedding endpoint/model identifiers match; changing the model or endpoint requires explicit reindexing.",
+      "summary": "Vectors require the same hosted endpoint/model identity and explicit reindexing after changes.",
       "tags": [
         "embeddings",
         "model-version",
         "reindex"
       ],
       "source": {
-        "path": "docs/ARCHITECTURE.md",
-        "anchor": "Hybrid retrieval"
+        "path": "README.md",
+        "anchor": "Hosted semantic embeddings"
       }
     },
     {
@@ -211,16 +212,16 @@
     {
       "id": "contradiction-similarity-thresholds",
       "category": "Conflict Detection",
-      "content": "A contradiction candidate requires an opposing cue plus subject Jaccard similarity of at least 0.42, or optional local-embedding cosine similarity of at least 0.84 for paraphrases.",
-      "summary": "Conflict detector uses explicit opposition and similarity thresholds.",
+      "content": "A contradiction candidate requires an opposing cue plus subject Jaccard similarity of at least 0.42, or optional same-batch hosted embedding cosine similarity of at least 0.84 for paraphrases; when hosted embeddings fail, detection falls back to lexical subject overlap.",
+      "summary": "Conflict detection uses opposition cues plus lexical or hosted-embedding thresholds.",
       "tags": [
         "contradictions",
         "similarity",
         "threshold"
       ],
       "source": {
-        "path": "docs/ARCHITECTURE.md",
-        "anchor": "Contradiction detection and resolution"
+        "path": "src/kaldrax/memory_contradictions.py",
+        "anchor": "find_contradiction_candidates"
       }
     },
     {
@@ -317,8 +318,8 @@
     {
       "id": "extraction-benchmark-scope",
       "category": "Evaluation",
-      "content": "The bundled extraction evaluation corpus contains 10 annotated scenarios and 30 expected claims; the live benchmark makes one model extraction request per case.",
-      "summary": "Extraction benchmark size and request count.",
+      "content": "The expanded synthetic memory-extraction evaluation corpus contains 30 cases and 70 assistant-proposed expected claims; its labels require human review before validation or release use.",
+      "summary": "Extraction benchmark has 30 cases and 70 proposed claims awaiting human review.",
       "tags": [
         "extraction",
         "benchmark",
@@ -326,7 +327,7 @@
       ],
       "source": {
         "path": "README.md",
-        "anchor": "Evaluate LLM memory extraction"
+        "anchor": "expanded 30-case, 70-proposed-claim synthetic corpus"
       }
     },
     {
@@ -348,8 +349,8 @@
     {
       "id": "calibration-small-sample-warning",
       "category": "Evaluation",
-      "content": "Brier score and expected calibration error over the 30-claim synthetic extraction dataset are descriptive sample diagnostics and do not establish production or population-wide calibration.",
-      "summary": "Calibration metrics are limited by the small synthetic sample.",
+      "content": "Brier score and expected calibration error on the synthetic extraction benchmark are descriptive regression diagnostics only; they do not establish production or population-wide confidence calibration, and proposed expected claims remain subject to human review.",
+      "summary": "Synthetic extraction calibration metrics are descriptive, not production evidence.",
       "tags": [
         "calibration",
         "sample-size",
@@ -498,18 +499,19 @@
       }
     },
     {
-      "id": "team-does-not-patch-repository",
+      "id": "team-does-not-commit-or-push",
       "category": "Limitations",
-      "content": "The team coordinator currently creates candidate artifacts and role traces but does not apply patches to a repository or automatically invoke Docker sandbox execution.",
-      "summary": "Team workflow does not yet edit the repository or start the sandbox.",
+      "content": "Workspace-backed team and DAG workflows can stage and verify a repository patch and apply it to the selected clean working tree only with explicit authorization; KALDRAX never creates a Git commit or pushes the result.",
+      "summary": "Repository workflows can explicitly apply verified patches but never commit or push.",
       "tags": [
         "limitations",
         "repository",
-        "sandbox"
+        "apply-authorization",
+        "git"
       ],
       "source": {
         "path": "README.md",
-        "anchor": "Bounded planner-builder-reviewer workflow"
+        "anchor": "The apply flag modifies the working tree but does not create a Git commit"
       }
     },
     {
@@ -622,22 +624,22 @@
     {
       "id": "q-embedding-privacy",
       "category": "Privacy",
-      "query": "Can the vector adapter send repository memory to a remote embedding host?",
+      "query": "What happens to project-memory content when hosted semantic embeddings are enabled?",
       "relevant": [
-        "ollama-loopback-only"
+        "hosted-embedding-egress"
       ],
-      "rationale": "Targets the loopback endpoint restriction.",
+      "rationale": "The hosted embedding adapter sends input memory text to the configured HTTPS provider; without it, retrieval remains lexical.",
       "annotation_status": "assistant_proposed_pending_human_review",
       "reviewer": null
     },
     {
       "id": "q-model-switch",
       "category": "Retrieval",
-      "query": "What must be done after changing the local vector model before searching old records?",
+      "query": "What must be done after changing the hosted embedding model or endpoint before searching existing vectors?",
       "relevant": [
         "embedding-model-identity"
       ],
-      "rationale": "Targets embedding model identity and explicit reindexing.",
+      "rationale": "Targets the endpoint/model identity rule and explicit reindexing requirement.",
       "annotation_status": "assistant_proposed_pending_human_review",
       "reviewer": null
     },
@@ -798,11 +800,11 @@
     {
       "id": "q-extraction-dataset",
       "category": "Evaluation",
-      "query": "How many examples and expected facts are in the default knowledge extraction test?",
+      "query": "How many cases and proposed expected claims are in the current memory-extraction benchmark?",
       "relevant": [
         "extraction-benchmark-scope"
       ],
-      "rationale": "Targets the size and request count of the extraction benchmark.",
+      "rationale": "Targets the current expanded corpus size and keeps the proposed-label status explicit.",
       "annotation_status": "assistant_proposed_pending_human_review",
       "reviewer": null
     },
@@ -922,9 +924,9 @@
       "category": "Limitations",
       "query": "Does the multi-role coordinator commit source code changes directly to Git?",
       "relevant": [
-        "team-does-not-patch-repository"
+        "team-does-not-commit-or-push"
       ],
-      "rationale": "Targets the documented deferred repository patch integration.",
+      "rationale": "The query asks about commits; the current repository workflow can apply a patch but explicitly never commits or pushes.",
       "annotation_status": "assistant_proposed_pending_human_review",
       "reviewer": null
     },
