@@ -783,3 +783,13 @@ This file records implementation decisions, changes, commands, verification, and
 - Added Memory → Quality labels with separate contradiction/extraction views, explicit per-case accept/correct actions, reviewer provenance, and separate typed dataset approvals.
 - Exports are immutable and hash-addressed. Changing a case label resets that dataset's approval without deleting the prior immutable export.
 - Human decisions are not prefilled as approved and remain outstanding until an operator completes each case and the typed dataset approval.
+
+
+## 2026-11-20 — Retrieval benchmark source refresh and review preparation
+
+- Rebased the source-backed retrieval proposal on the hosted-only repository snapshot `5cd04935bff8aba58833ac570b1745bb9183643b`.
+- Corrected stale assistant-proposed facts for hosted embedding data egress, model/endpoint identity, hosted contradiction similarity, workspace patch application versus Git commit/push, and the expanded 30-case/70-claim extraction corpus.
+- Updated README, architecture documentation, and ADR 0006 to remove obsolete local Ollama/local-model guidance and describe hosted HTTPS embeddings with lexical fallback.
+- Preserved all 36 retrieval judgments as `assistant_proposed_pending_human_review`, the top-level corpus as exploratory, reviewer as unset, and privacy screening as `pending_operator_signoff`.
+- Added a focused CI invocation for the structured memory quality-review case and approval tests.
+- No query labels, dataset approval, or privacy approval were recorded as human decisions. The next operator action is to inspect and approve/correct each query and separately sign off the displayed public-source privacy scope.
