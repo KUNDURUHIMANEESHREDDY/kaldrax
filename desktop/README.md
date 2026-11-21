@@ -8,8 +8,8 @@ KALDRAX Desktop is a local-first engineering control center built with React, Ty
 - UI: React 19 + TypeScript + Vite 8
 - Styling: CSS, Runey-inspired single expandable navigation rail
 - Engine: local Python KALDRAX CLI/package
-- Memory: local SQLite under the Python engine's `.kaldrax/` directory
-- Run artifacts: JSON reports under the Python engine's `.kaldrax/runs/` directory
+- Memory: local SQLite under the desktop OS application-data directory (`.kaldrax/memory.sqlite3`)
+- Run artifacts: JSON reports under desktop OS application-data (`.kaldrax/runs/`)
 
 ## Requirements
 
@@ -17,8 +17,7 @@ KALDRAX Desktop is a local-first engineering control center built with React, Ty
 - Rust stable toolchain
 - Windows WebView2 Runtime
 - Microsoft C++ Build Tools
-- Python 3.11+
-- A local KALDRAX Python checkout with its development extra installed
+- Python 3.11+ and a local KALDRAX source checkout are required only for desktop development mode. Packaged Windows MSI/NSIS installs carry the frozen engine and do not require a separate Python installation, Git checkout, Node.js or Rust toolchain.
 
 ## Prepare the Python engine
 
@@ -30,7 +29,7 @@ python -m kaldrax.cli --help
 python -m pytest -q
 ```
 
-A fresh installation has no developer-specific engine or repository path preconfigured. Open Settings and browse to the local KALDRAX Python project folder; it must contain `pyproject.toml` and `src/kaldrax/cli.py`. This integration build still expects Python 3.11+ and a separate source checkout. Bundling the engine and runtime is tracked in [the production-readiness plan](../docs/PRODUCTION_READINESS.md).
+Packaged Windows builds auto-detect the bundled engine and benchmark resources at first launch. Development builds without those resources use the source integration: open Settings and select the KALDRAX project folder containing `pyproject.toml` and `src/kaldrax/cli.py`, then set the Python executable. The Windows build workflow creates MSI/NSIS installers and installs the NSIS package on a Windows runner to smoke-test the bundled CLI without calling system Python.
 
 ## Run the desktop app
 
@@ -50,7 +49,7 @@ npm run dev
 ## Desktop workflows currently connected
 
 ### Engine connection
-Settings verifies the selected Python executable and engine checkout by running the fixed `python -m kaldrax.cli --help` command.
+Settings verifies the packaged frozen CLI when installed, or the selected Python executable/source checkout in development mode. Packaged mode resolves the executable from Tauri's resource directory and launches it directly; no webview shell access is introduced.
 
 ### Offline demo
 Overview can run the real Python CLI's credential-free demo. It uses the Python engine's deterministic demo executor/evaluator, persists a run report and SQLite episodic memory, then opens the resulting report.
@@ -123,3 +122,12 @@ Repository writes are operator-approved and single-file only. The desktop does n
 ### Local application data
 
 Desktop-owned state is stored under the operating system application-data directory in a `.kaldrax/` subdirectory, separate from the engine checkout and installer resources. On first engine verification, the desktop copies legacy `.kaldrax/` files from the selected checkout into the app-data directory. The original checkout data is not removed or overwritten. SQLite memory is copied with SQLite's backup API so committed WAL transactions are included. Existing destination files take precedence. A per-source migration marker makes the operation idempotent; symlinks and special files are skipped.
+
+
+### Packaged Windows runtime
+
+The MSI/NSIS bundle contains the PyInstaller one-folder CLI under the Tauri resource directory at `kaldrax-engine/`, plus benchmark datasets at `benchmarks/`. The native Rust bridge resolves the packaged executable through Tauri's resource path resolver and verifies that a packaged runtime request matches that resolved resource root. It launches the executable directly with a fixed argument vector; the webview is not granted arbitrary shell execution. When the packaged resource is absent, developer mode can use a selected source checkout and Python interpreter.
+
+### Data migration
+
+Desktop state lives in the platform application-data directory, not inside the install or engine resources. The first source-mode connection copies legacy checkout-local `.kaldrax/` state without deleting the source. SQLite is copied through the online backup API, existing destination files are not overwritten, symlinks/special files are skipped, and an idempotency marker is recorded. The installer smoke exercises an isolated data directory and does not use provider credentials.

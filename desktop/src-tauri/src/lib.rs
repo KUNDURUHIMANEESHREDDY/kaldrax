@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager, State};
 
 static OPERATION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
@@ -29,6 +30,7 @@ struct EngineStatus {
     python_executable: String,
     engine_version: String,
     data_path: String,
+    bundled: bool,
 }
 
 #[derive(Deserialize)]
@@ -111,16 +113,35 @@ fn get_app_info() -> AppInfo {
     }
 }
 
-fn validate_engine_path(engine_path: &str) -> Result<PathBuf, String> {
+const PACKAGED_ENGINE_SENTINEL: &str = "__KALDRAX_PACKAGED_ENGINE__";
+
+fn packaged_engine_executable(engine_root: &Path) -> PathBuf {
+    engine_root.join("kaldrax-engine").join("kaldrax-engine.exe")
+}
+
+fn is_packaged_engine_root(engine_root: &Path) -> bool {
+    packaged_engine_executable(engine_root).is_file()
+}
+
+fn packaged_engine_root(app: &AppHandle) -> Option<PathBuf> {
+    let executable = app
+        .path()
+        .resolve("kaldrax-engine/kaldrax-engine.exe", BaseDirectory::Resource)
+        .ok()
+        .filter(|path| path.is_file())?;
+    executable.parent()?.parent()?.canonicalize().ok()
+}
+
+fn validate_engine_path(app: &AppHandle, engine_path: &str) -> Result<PathBuf, String> {
     let path = Path::new(engine_path)
         .canonicalize()
         .map_err(|_| "KALDRAX engine directory does not exist or cannot be opened.".to_string())?;
-    if !path.is_dir()
-        || !path.join("pyproject.toml").is_file()
-        || !path.join("src").join("kaldrax").join("cli.py").is_file()
-    {
+    let source_checkout = path.join("pyproject.toml").is_file()
+        && path.join("src").join("kaldrax").join("cli.py").is_file();
+    let packaged_runtime = packaged_engine_root(app).as_ref() == Some(&path);
+    if !path.is_dir() || (!source_checkout && !packaged_runtime) {
         return Err(
-            "Choose the KALDRAX Python source directory (it must contain pyproject.toml and src/kaldrax/cli.py)."
+            "Choose a valid KALDRAX source checkout or use the application's bundled runtime."
                 .to_string(),
         );
     }
@@ -128,12 +149,23 @@ fn validate_engine_path(engine_path: &str) -> Result<PathBuf, String> {
 }
 
 fn python_command(python_executable: &str, engine_path: &Path) -> Command {
-    let mut command = Command::new(python_executable);
+    let mut command = if python_executable == PACKAGED_ENGINE_SENTINEL {
+        Command::new(packaged_engine_executable(engine_path))
+    } else {
+        let mut command = Command::new(python_executable);
+        command.args(["-m", "kaldrax.cli"]);
+        command
+    };
     command.current_dir(engine_path);
     command
 }
 
 fn engine_version(engine_path: &Path) -> String {
+    if is_packaged_engine_root(engine_path) {
+        return fs::read_to_string(engine_path.join("kaldrax-engine").join("version.txt"))
+            .map(|value| value.trim().to_string())
+            .unwrap_or_else(|_| "unknown".to_string());
+    }
     let manifest = fs::read_to_string(engine_path.join("pyproject.toml")).unwrap_or_default();
     let version = manifest
         .lines()
@@ -190,8 +222,6 @@ fn migrate_legacy_state(
     let destination = state_directory(app)?;
     let source = engine_path.join(".kaldrax");
     let output = python_command(python_executable, engine_path)
-        .arg("-m")
-        .arg("kaldrax.cli")
         .arg("storage")
         .arg("migrate")
         .arg("--source")
@@ -222,8 +252,6 @@ fn cli_json(
     let data_root = app_data_directory(app)?;
     let mut command = python_command(python_executable, engine_path);
     command
-        .arg("-m")
-        .arg("kaldrax.cli")
         .args(args)
         .env("KALDRAX_DATA_DIR", data_root);
     for (key, value) in envs {
@@ -291,7 +319,7 @@ fn start_cli_operation(
     if python_executable.trim().is_empty() {
         return Err("Enter a Python executable (for example, python).".to_string());
     }
-    let root = validate_engine_path(engine_path)?;
+    let root = validate_engine_path(app, engine_path)?;
     let operation_id = format!(
         "op-{}-{}",
         now_timestamp(),
@@ -316,8 +344,6 @@ fn start_cli_operation(
     }
     let mut command = python_command(python_executable, &root);
     command
-        .arg("-m")
-        .arg("kaldrax.cli")
         .args(args)
         .env("PYTHONUNBUFFERED", "1")
         .env("KALDRAX_DESKTOP_OPERATION_ID", &operation_id)
@@ -448,30 +474,66 @@ async fn verify_engine(
     python_executable: String,
 ) -> Result<EngineStatus, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        if python_executable.trim().is_empty() {
-            return Err("Enter a Python executable (for example, python).".to_string());
-        }
-        let path = validate_engine_path(&engine_path)?;
-        let output = python_command(&python_executable, &path)
-            .args(["-m", "kaldrax.cli", "--help"])
+        let packaged_executable = packaged_engine_root(&app)
+            .map(|root| packaged_engine_executable(&root))
+            .filter(|path| path.is_file());
+
+        let (path, runtime_executable, bundled) = if let Some(executable) = packaged_executable {
+            let root = executable
+                .parent()
+                .and_then(Path::parent)
+                .ok_or_else(|| "Bundled KALDRAX resource path is invalid.".to_string())?
+                .canonicalize()
+                .map_err(|error| format!("Cannot resolve bundled KALDRAX resources: {error}"))?;
+
+            // Migrate state from a previously configured source checkout before switching to
+            // the packaged runtime. Never treat the read-only resource directory as legacy data.
+            if !engine_path.trim().is_empty() {
+                if let Ok(legacy_root) = validate_engine_path(&app, &engine_path) {
+                    if legacy_root != root
+                        && legacy_root.join("pyproject.toml").is_file()
+                        && legacy_root.join(".kaldrax").is_dir()
+                    {
+                        if python_executable.trim().is_empty() {
+                            return Err("The previous source checkout has state to migrate but no Python interpreter is configured.".to_string());
+                        }
+                        migrate_legacy_state(&app, &legacy_root, &python_executable)?;
+                    }
+                }
+            }
+            (root, PACKAGED_ENGINE_SENTINEL.to_string(), true)
+        } else {
+            if python_executable.trim().is_empty() {
+                return Err("No bundled runtime was found. Choose a KALDRAX source checkout and Python executable.".to_string());
+            }
+            let root = validate_engine_path(&app, &engine_path)?;
+            migrate_legacy_state(&app, &root, &python_executable)?;
+            (root, python_executable, false)
+        };
+
+        let output = python_command(&runtime_executable, &path)
+            .arg("--help")
             .output()
-            .map_err(|error| format!("Could not start Python: {error}"))?;
+            .map_err(|error| format!("Could not start KALDRAX: {error}"))?;
         if !output.status.success() {
             let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
             return Err(if detail.is_empty() {
-                "Python could not import KALDRAX. Install the engine with python -m pip install -e .[dev]."
-                    .to_string()
+                "KALDRAX engine health check failed.".to_string()
             } else {
-                format!("KALDRAX CLI check failed: {detail}")
+                format!("KALDRAX engine health check failed: {detail}")
             });
         }
-        migrate_legacy_state(&app, &path, &python_executable)?;
         Ok(EngineStatus {
             connected: true,
             engine_path: path.display().to_string(),
-            python_executable,
-            engine_version: engine_version(&path),
+            python_executable: runtime_executable,
+            engine_version: if bundled {
+                engine_version(&path).replace("unknown", env!("CARGO_PKG_VERSION"))
+            } else {
+                engine_version(&path)
+            },
             data_path: state_directory(&app)?.display().to_string(),
+            bundled,
         })
     })
     .await
@@ -489,7 +551,7 @@ fn start_offline_demo(
     if project_id.trim().is_empty() {
         return Err("Project ID must not be empty.".to_string());
     }
-    let root = validate_engine_path(&engine_path)?;
+    let root = validate_engine_path(&app, &engine_path)?;
     let artifacts = report_directory(&app)?;
     let args = vec![
         "demo".to_string(),
@@ -529,7 +591,7 @@ fn start_task_run(
     request: TaskRunRequest,
     manager: State<'_, OperationManager>,
 ) -> Result<OperationSnapshot, String> {
-    let root = validate_engine_path(&request.engine_path)?;
+    let root = validate_engine_path(&app, &request.engine_path)?;
     if request.objective.trim().is_empty() {
         return Err("Objective is required.".to_string());
     }
@@ -620,7 +682,7 @@ fn start_team_run(
     request: TeamRunRequest,
     manager: State<'_, OperationManager>,
 ) -> Result<OperationSnapshot, String> {
-    let root = validate_engine_path(&request.engine_path)?;
+    let root = validate_engine_path(&app, &request.engine_path)?;
     if request.objective.trim().is_empty()
         || request.project_id.trim().is_empty()
         || request.agent_namespace.trim().is_empty()
@@ -775,7 +837,7 @@ fn start_sandbox_run(
     pids_limit: u16,
     manager: State<'_, OperationManager>,
 ) -> Result<OperationSnapshot, String> {
-    let root = validate_engine_path(&engine_path)?;
+    let root = validate_engine_path(&app, &engine_path)?;
     if !(1..=120).contains(&timeout_seconds)
         || !(64..=1024).contains(&memory_mb)
         || !(0.25..=2.0).contains(&cpu_count)
@@ -902,7 +964,7 @@ fn cancel_operation(
 
 #[tauri::command]
 fn list_runs(app: AppHandle, engine_path: String) -> Result<Vec<Value>, String> {
-    let _root = validate_engine_path(&engine_path)?;
+    let _root = validate_engine_path(&app, &engine_path)?;
     let directory = report_directory(&app)?;
     if !directory.exists() {
         return Ok(Vec::new());
@@ -940,7 +1002,7 @@ fn list_runs(app: AppHandle, engine_path: String) -> Result<Vec<Value>, String> 
 
 #[tauri::command]
 fn list_team_runs(app: AppHandle, engine_path: String) -> Result<Vec<Value>, String> {
-    let root = validate_engine_path(&engine_path)?;
+    let root = validate_engine_path(&app, &engine_path)?;
     let directory = report_directory(&app)?;
     if !directory.exists() {
         return Ok(Vec::new());
@@ -983,7 +1045,7 @@ fn get_run_report(app: AppHandle, engine_path: String, run_id: String) -> Result
     {
         return Err("Invalid run identifier.".to_string());
     }
-    let _root = validate_engine_path(&engine_path)?;
+    let _root = validate_engine_path(&app, &engine_path)?;
     let report_path = report_directory(&app)?.join(format!("{run_id}.json"));
     let canonical = report_path
         .canonicalize()
@@ -1003,7 +1065,7 @@ fn benchmark_review_state(
     python_executable: String,
     reviewer: String,
 ) -> Result<Value, String> {
-    let root = validate_engine_path(&engine_path)?;
+    let root = validate_engine_path(&app, &engine_path)?;
     if reviewer.trim().is_empty() {
         return Err("Reviewer identity is required.".to_string());
     }
@@ -1039,7 +1101,7 @@ fn benchmark_review_update(
     privacy_confirmation: Option<String>,
     confirm_provider_data_egress: bool,
 ) -> Result<Value, String> {
-    let root = validate_engine_path(&engine_path)?;
+    let root = validate_engine_path(&app, &engine_path)?;
     if reviewer.trim().is_empty() {
         return Err("Reviewer identity is required.".to_string());
     }
@@ -1101,7 +1163,7 @@ fn quality_review_state(
     python_executable: String,
     reviewer: String,
 ) -> Result<Value, String> {
-    let root = validate_engine_path(&engine_path)?;
+    let root = validate_engine_path(&app, &engine_path)?;
     if reviewer.trim().is_empty() {
         return Err("Reviewer identity is required.".to_string());
     }
@@ -1136,7 +1198,7 @@ fn quality_review_update(
     confirmation: Option<String>,
     approval: Option<String>,
 ) -> Result<Value, String> {
-    let root = validate_engine_path(&engine_path)?;
+    let root = validate_engine_path(&app, &engine_path)?;
     if reviewer.trim().is_empty() {
         return Err("Reviewer identity is required.".to_string());
     }
@@ -1204,7 +1266,7 @@ fn memory_search(
     agent_id: Option<String>,
     include_pending: bool,
 ) -> Result<Value, String> {
-    let root = validate_engine_path(&engine_path)?;
+    let root = validate_engine_path(&app, &engine_path)?;
     if project_id.trim().is_empty() || query.trim().is_empty() || !(1..=50).contains(&limit) {
         return Err("Project ID and query are required; limit must be 1–50.".to_string());
     }
@@ -1236,7 +1298,7 @@ fn memory_conflicts(
     python_executable: String,
     project_id: String,
 ) -> Result<Value, String> {
-    let root = validate_engine_path(&engine_path)?;
+    let root = validate_engine_path(&app, &engine_path)?;
     if project_id.trim().is_empty() {
         return Err("Project ID is required.".to_string());
     }
@@ -1260,7 +1322,7 @@ fn memory_review(
     decision: String,
     reviewer: String,
 ) -> Result<Value, String> {
-    let root = validate_engine_path(&engine_path)?;
+    let root = validate_engine_path(&app, &engine_path)?;
     if memory_id.trim().is_empty() || !["approve", "reject"].contains(&decision.as_str()) {
         return Err("A memory ID and approve/reject decision are required.".to_string());
     }
@@ -1292,7 +1354,7 @@ fn memory_resolve_conflict(
     keep_memory_id: String,
     reviewer: String,
 ) -> Result<Value, String> {
-    let root = validate_engine_path(&engine_path)?;
+    let root = validate_engine_path(&app, &engine_path)?;
     if conflict_id.trim().is_empty() || keep_memory_id.trim().is_empty() {
         return Err("Conflict ID and the memory ID to keep are required.".to_string());
     }
@@ -1322,7 +1384,7 @@ fn repository_status(
     python_executable: String,
     repository_path: String,
 ) -> Result<Value, String> {
-    let root = validate_engine_path(&engine_path)?;
+    let root = validate_engine_path(&app, &engine_path)?;
     let args = vec![
         "repo".to_string(),
         "status".to_string(),
@@ -1341,7 +1403,7 @@ fn repository_files(
     directory: String,
     limit: u16,
 ) -> Result<Value, String> {
-    let root = validate_engine_path(&engine_path)?;
+    let root = validate_engine_path(&app, &engine_path)?;
     if !(1..=500).contains(&limit) {
         return Err("File limit must be between 1 and 500.".to_string());
     }
@@ -1366,7 +1428,7 @@ fn repository_read_file(
     repository_path: String,
     relative_path: String,
 ) -> Result<Value, String> {
-    let root = validate_engine_path(&engine_path)?;
+    let root = validate_engine_path(&app, &engine_path)?;
     let args = vec![
         "repo".to_string(),
         "read".to_string(),
@@ -1388,7 +1450,7 @@ fn repository_apply_file(
     content: String,
     expected_sha256: Option<String>,
 ) -> Result<Value, String> {
-    let root = validate_engine_path(&engine_path)?;
+    let root = validate_engine_path(&app, &engine_path)?;
     if content.len() > 1_000_000 {
         return Err("Edited file exceeds the 1 MB limit.".to_string());
     }
@@ -1457,4 +1519,37 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while building KALDRAX desktop application");
+}
+
+
+#[cfg(test)]
+mod packaged_engine_tests {
+    use super::*;
+
+    #[test]
+    fn packaged_runtime_uses_bundled_executable_without_python_module_prefix() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock is available")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("kaldrax-packaged-engine-{unique}"));
+        let engine_dir = root.join("kaldrax-engine");
+        fs::create_dir_all(&engine_dir).expect("test engine directory is created");
+        let executable = engine_dir.join("kaldrax-engine.exe");
+        fs::write(&executable, b"test executable marker").expect("test executable is written");
+
+        assert!(is_packaged_engine_root(&root));
+        let command = python_command(PACKAGED_ENGINE_SENTINEL, &root);
+        assert_eq!(
+            command.get_program().to_string_lossy(),
+            executable.to_string_lossy()
+        );
+        assert_eq!(
+            command.get_args().count(),
+            0,
+            "packaged CLI must not receive the Python -m kaldrax.cli prefix"
+        );
+
+        fs::remove_dir_all(&root).expect("test engine directory is removed");
+    }
 }

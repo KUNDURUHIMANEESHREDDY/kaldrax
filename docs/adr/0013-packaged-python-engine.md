@@ -58,3 +58,11 @@ References:
 - Build MSI and NSIS installers, install on a clean Windows runner without Python/Git, and verify first launch, offline demo, memory, reports, upgrade, and uninstall data-retention semantics.
 - Verify no API key is needed for installation, first launch, offline demo, or deterministic operations.
 - Record actual build size, startup measurements, hashes, and test evidence. Source-level configuration alone is not acceptance.
+
+## Implementation update — Tauri integration
+
+- Tauri bundle resources map the PyInstaller distribution to `kaldrax-engine/` and the benchmark datasets to `benchmarks/`.
+- The Rust bridge resolves the executable from Tauri's resource directory. It compares requested packaged roots against that exact resolved resource path before allowing a bundled executable to run, rather than trusting arbitrary paths supplied by the webview.
+- The same fixed command builder runs either the packaged console executable or, in developer mode, the configured Python interpreter with the KALDRAX module entrypoint. No webview shell capability was added.
+- The desktop now auto-detects the packaged runtime and uses its engine path/interpreter identity for every workflow.
+- The Windows CI workflow is being expanded to build both installer formats and execute the installed engine. This work remains unverified until the new workflow completes.

@@ -25,7 +25,7 @@ The baseline credential-free CI run (44872710002, commit eea0b6d) passed Python 
 
 ### P0 — Self-contained desktop installation
 
-**Current gap:** The desktop invokes python -m kaldrax.cli from an operator-selected source checkout. It requires Python 3.11+ and a separately installed KALDRAX checkout. The Tauri bundle does not currently include the engine or a Python runtime. This is a developer integration workflow, not a turnkey end-user installation.
+**Implementation status:** The frozen Windows x64 CLI is now configured as a Tauri resource alongside benchmark data. Rust resolves the executable from the application resource directory, validates that the selected packaged engine root is the actual Tauri resource path, and launches it directly with a fixed argument vector. Source-checkout/Python execution remains the developer fallback. Windows CI is being extended to build MSI/NSIS installers and install/smoke-test the NSIS package. These installer checks are not yet verified.
 
 **Acceptance:**
 - A clean supported Windows machine can install and launch KALDRAX without Git, a pre-existing Python installation, or a separately cloned source repository.
@@ -35,14 +35,14 @@ The baseline credential-free CI run (44872710002, commit eea0b6d) passed Python 
 - MSI and NSIS packages are built in CI and tested on a clean Windows runner.
 - A packaging failure prevents release artifact publication.
 
-**Prototype status:** The PyInstaller one-folder console build and credential-free CLI smoke test passed on a clean Windows x64 GitHub Actions runner (run 44873532171, commit 4a90000). The uploaded frozen-engine workflow artifact is 11,404,466 bytes compressed; this is not the final installed application size. ADR 0013 selects this as the Windows x64 packaging direction. The binary is not yet wired into Tauri resources; Rust runtime selection, app-data migration, native installer build, and clean-machine installation remain release blockers.
+**Prototype evidence:** The PyInstaller one-folder console build and credential-free CLI smoke test passed on a clean Windows x64 GitHub Actions runner (run 44873532171, commit 4a90000). The compressed frozen-engine workflow artifact was 11,404,466 bytes; this is not installed application size. The app-data migration foundation is implemented. The packaged executable/resource integration and native installer workflow have now been added, but their current CI run must pass before these changes count as verified.
 
 ### P1 — Portable first-run and configuration
 
 **Status:** First-run defaults no longer point to a developer-specific Windows checkout. Engine and repository paths start empty on fresh installations; existing saved user settings are preserved.
 
 **Remaining acceptance:**
-- First-run onboarding clearly distinguishes engine setup, repository selection, and optional provider configuration. Add a packaged-engine status path so end users no longer need to select source/Python.
+- First-run onboarding clearly distinguishes bundled engine detection, developer source checkout, repository selection, and optional provider configuration. The UI auto-detects the packaged resource when present; this must be verified in an installed GUI session. Add a packaged-engine status path so end users no longer need to select source/Python.
 - Add direct loopback Ollama support without a credential; remote HTTPS endpoints still require a provider-issued key. Live provider setup remains optional.
 - No user-specific absolute paths appear in shipped defaults, examples, or release configuration.
 - A missing engine, interpreter, Docker daemon, or provider credential produces a clear capability-specific state rather than a generic application failure.

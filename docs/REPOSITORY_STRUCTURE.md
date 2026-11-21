@@ -106,4 +106,4 @@ desktop/
 └── ENGINEERING-WORKFLOW-UI.md
 ```
 
-The Python engine remains at the repository root. The Tauri bridge invokes `python -m kaldrax.cli` with the selected engine root. Node dependencies, Vite output and Cargo target artifacts are generated locally and ignored by Git.
+The Python engine remains at the repository root. The Tauri bridge launches the frozen CLI from application resources in packaged Windows builds, or invokes `python -m kaldrax.cli` from the operator-selected source checkout in developer mode. Desktop writable state is stored under OS application-data. Node dependencies, Vite output and Cargo target artifacts are generated locally and ignored by Git.

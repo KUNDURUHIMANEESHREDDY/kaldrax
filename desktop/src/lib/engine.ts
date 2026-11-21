@@ -29,7 +29,7 @@ export interface RunReport {
   created_at: string; budget?: RunBudget;
 }
 export interface EngineStatus {
-  connected: boolean; enginePath: string; pythonExecutable: string; engineVersion: string; dataPath: string;
+  connected: boolean; enginePath: string; pythonExecutable: string; engineVersion: string; dataPath: string; bundled: boolean;
 }
 export interface TaskRunRequest {
   enginePath: string; pythonExecutable: string; objective: string;

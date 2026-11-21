@@ -860,3 +860,13 @@ This file records implementation decisions, changes, commands, verification, and
 - Corrected migration validation to resolve and reject equal or nested source/destination paths before creating the destination directory. A malicious or mistaken nested destination can no longer mutate the legacy source tree before rejection.
 - Reject symlinked source, app-data destination, and migration marker paths; added regression coverage for nested-path non-mutation and symlinked destination rejection.
 - This is a defense-in-depth fix on top of CI-green app-data isolation work. The new regression tests are awaiting CI verification.
+
+
+## 2026-11-20 — Integrate frozen engine with Tauri Windows bundle
+
+- Added Tauri resource mappings for the frozen Windows engine and benchmark files so CLI commands that load repository-relative benchmark datasets continue to work after installation.
+- Rust now resolves the bundled executable via Tauri's resource path resolver, validates that packaged runtime requests refer to the exact resolved resource directory, and launches the frozen CLI directly with its fixed executable and argument vector. Developer source/Python execution remains available when no bundled runtime exists.
+- The frozen build now emits an engine version metadata file which the desktop displays.
+- The desktop auto-detects the packaged runtime on first launch and uses its runtime path for run history, memory, team workflows, sandbox, and repository workflows. Source-checkout fields remain visible only in developer mode.
+- Extended Windows CI to compile and unit-test the native bridge, build MSI and NSIS installers, install the NSIS package silently, find the installed bundled engine, and run credential-free CLI/offline-demo/SQLite/report smoke checks against the installed files.
+- The installer-integrated work is awaiting its CI result. Clean-machine GUI launch, upgrade/repair/uninstall data-retention behavior, code signing, and trusted update delivery remain release checks.

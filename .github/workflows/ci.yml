@@ -109,6 +109,36 @@ jobs:
         shell: pwsh
         run: ./packaging/windows/smoke.ps1
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Test native packaged-engine selection
+        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml
+
+      - name: Build Windows MSI and NSIS installers
+        working-directory: desktop
+        run: npm run desktop:build -- --bundles msi,nsis
+
+      - name: Install and smoke-test packaged application resources
+        shell: pwsh
+        run: ./packaging/windows/installer-smoke.ps1
+
       - name: Record packaging toolchain
         if: always()
         shell: pwsh
@@ -126,6 +156,16 @@ jobs:
             build/windows/kaldrax-engine/
             build/windows/toolchain.txt
             build/windows/pip-freeze.txt
+          if-no-files-found: error
+
+      - name: Upload Windows desktop installers
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kaldrax-windows-installers-${{ github.sha }}
+          path: |
+            desktop/src-tauri/target/release/bundle/msi/*.msi
+            desktop/src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
   desktop-check:
     name: Desktop lint and production build

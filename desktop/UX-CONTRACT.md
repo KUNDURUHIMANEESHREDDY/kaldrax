@@ -7,7 +7,7 @@
 - Accessibility target: WCAG 2.2 AA baseline.
 
 ## Source of truth
-- Python engine: the local source checkout selected by the operator in Settings. Fresh installations do not assume a developer-specific path; the current integration build still requires a separate Python 3.11+ checkout.
+- Engine: packaged Windows builds resolve the frozen CLI from Tauri resources automatically. Developer builds without the packaged resource use the local source checkout and Python executable selected in Settings. Fresh settings contain no developer-specific absolute path.
 - Product and architecture: engine repository `docs/PRD.md`, `docs/ARCHITECTURE.md`, `README.md`, CLI and typed run models.
 - UI design: `DESIGN.md`.
 - Runtime token/component source: `src/styles/kaldrax.css`.
@@ -76,6 +76,12 @@
 - Disabled/unavailable capabilities must explain why; no dead controls.
 - Preserve empty, error, loading, offline, credential-missing, Docker-unavailable and partial states where relevant.
 - Keyboard operation, visible focus, semantic labels, reduced-motion support and non-colour status cues are required.
+
+## Packaged runtime boundary
+- Packaged mode resolves the CLI from the native Tauri resource directory and verifies the resolved resource root before invoking it.
+- Rust launches the packaged executable directly; no arbitrary webview shell permission is used.
+- Developer mode intentionally runs the operator-selected Python executable against a selected source checkout.
+- Desktop-owned writable state is redirected to the OS application-data directory, separate from install resources.
 
 ## Local desktop security boundary
 - The webview invokes only named Tauri commands; no arbitrary shell command API is exposed.

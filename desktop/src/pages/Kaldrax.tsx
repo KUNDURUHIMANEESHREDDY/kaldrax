@@ -89,7 +89,7 @@ function OverviewPage({ reports, connected, busy, onDemo, onNewTask, onOpenRun, 
   return <>
     <PageHeader title="Overview" subtitle="Inspect real KALDRAX runs, independent evaluations and local engine health."
       action={<button className="kx-button kx-button--primary" onClick={onNewTask}><Icon name="plus" size={16}/> New task</button>}/>
-    <div className={`kx-engine-status ${connected ? "is-connected" : "is-offline"}`}><span className="kx-status-dot"/><strong>{connected ? "Python engine connected" : "Python engine not connected"}</strong><span>{connected ? "Local CLI verified" : "Choose the KALDRAX source folder in Settings"}</span><span className="kx-strip-spacer"/><button className="kx-text-button" onClick={() => window.location.hash = "#/settings"}>Engine settings <Icon name="arrow-right" size={14}/></button></div>
+    <div className={`kx-engine-status ${connected ? "is-connected" : "is-offline"}`}><span className="kx-status-dot"/><strong>{connected ? "KALDRAX engine connected" : "KALDRAX engine not connected"}</strong><span>{connected ? (engineStatus?.bundled ? "Bundled runtime verified" : "Local Python CLI verified") : "A bundled runtime or source checkout is required"}</span><span className="kx-strip-spacer"/><button className="kx-text-button" onClick={() => window.location.hash = "#/settings"}>Engine settings <Icon name="arrow-right" size={14}/></button></div>
     {error && <div className="kx-alert kx-alert--error" role="alert">{error}</div>}
     <div className="kx-metrics"><MetricCard label="Total runs" value={String(reports.length).padStart(2, "0")} note="Persisted reports" icon="activity"/><MetricCard label="Passed" value={String(passed).padStart(2, "0")} note="Independent evaluation passed" icon="check-circle"/><MetricCard label="Failed" value={String(failed).padStart(2, "0")} note="Execution or evaluation failure" icon="x"/><MetricCard label="Iteration limit" value={String(limited).padStart(2, "0")} note="Stopped at configured limit" icon="clock"/></div>
     <section className="kx-panel">
@@ -184,8 +184,8 @@ function SettingsPage({ settings, onChange, apiKey, setApiKey, engineStatus, onV
   };
   const update = (key: keyof Settings, value: string) => onChange({ ...settings, [key]: value });
   return <>
-    <PageHeader title="Settings" subtitle="Connect the local Python control plane and optionally configure model providers."/>
-    <section className="kx-panel"><div className="kx-panel__head"><div><h2>Local engine</h2><p>Choose the Python source checkout and interpreter used by the desktop bridge.</p></div><Badge tone={engineStatus ? "passed" : "failed"}>{engineStatus ? `v${engineStatus.engineVersion} connected` : "Not connected"}</Badge></div><label className="kx-field">Engine source folder<div className="kx-path-picker"><input value={settings.enginePath} onChange={event => update("enginePath", event.target.value)} placeholder="Choose the KALDRAX Python project folder"/><button type="button" className="kx-button kx-button--quiet" onClick={() => selectFolder("enginePath")} disabled={selecting}>{selecting ? "Opening…" : "Browse"}</button></div><small>Folder must contain pyproject.toml and src/kaldrax/cli.py.</small></label><label className="kx-field">Python executable<input value={settings.pythonExecutable} onChange={event => update("pythonExecutable", event.target.value)} placeholder="python"/></label><div className="kx-settings-actions"><button className="kx-button kx-button--primary" type="button" onClick={onVerify} disabled={busy || !settings.enginePath.trim()}>{busy ? "Checking…" : "Verify engine connection"}</button>{engineStatus && <span className="kx-muted">Engine: {engineStatus.enginePath} · Data: {engineStatus.dataPath}</span>}</div></section>
+    <PageHeader title="Settings" subtitle="Configure the local engine, repository workspace, and optional model providers."/>
+    <section className="kx-panel"><div className="kx-panel__head"><div><h2>Local engine</h2><p>A packaged installation connects to its bundled engine automatically. Source checkout and Python are for development mode.</p></div><Badge tone={engineStatus ? "passed" : "failed"}>{engineStatus ? `${engineStatus.bundled ? "Bundled" : "Source"} v${engineStatus.engineVersion} connected` : "Not connected"}</Badge></div>{!engineStatus?.bundled && <><label className="kx-field">Engine source folder<div className="kx-path-picker"><input value={settings.enginePath} onChange={event => update("enginePath", event.target.value)} placeholder="Choose the KALDRAX Python project folder"/><button type="button" className="kx-button kx-button--quiet" onClick={() => selectFolder("enginePath")} disabled={selecting}>{selecting ? "Opening…" : "Browse"}</button></div><small>Folder must contain pyproject.toml and src/kaldrax/cli.py.</small></label><label className="kx-field">Python executable<input value={settings.pythonExecutable} onChange={event => update("pythonExecutable", event.target.value)} placeholder="python"/></label></> }<div className="kx-settings-actions"><button className="kx-button kx-button--primary" type="button" onClick={onVerify} disabled={busy}>{busy ? "Checking…" : "Detect or verify engine"}</button>{engineStatus && <span className="kx-muted">{engineStatus.bundled ? "Bundled runtime" : "Source runtime"} · Data: {engineStatus.dataPath}</span>}</div></section>
     <section className="kx-panel"><div className="kx-panel__head"><div><h2>Project memory scope</h2><p>Project ID isolates persistent memory. It is not a repository path.</p></div></div><label className="kx-field">Project ID<input value={settings.projectId} onChange={event => update("projectId", event.target.value)} placeholder="kaldrax-core"/></label></section>
     <section className="kx-panel"><div className="kx-panel__head"><div><h2>LLM provider</h2><p>Only needed for live model-backed runs; offline and local workflows do not need provider credentials.</p></div></div><label className="kx-field">Model provider API key<input type="password" autoComplete="off" value={apiKey} onChange={event => setApiKey(event.target.value)} placeholder="Enter API key for this session"/><small>Use a key issued by your configured model provider, not a KALDRAX account key. It is kept in application memory only and is required only when making live model calls.</small></label><div className="kx-form-grid"><label className="kx-field">Executor / builder model<input value={settings.executorModel} onChange={event => update("executorModel", event.target.value)} placeholder="builder-model"/></label><label className="kx-field">Evaluator model<input value={settings.evaluatorModel} onChange={event => update("evaluatorModel", event.target.value)} placeholder="different-evaluator-model"/></label><label className="kx-field">Team planner model<input value={settings.plannerModel} onChange={event => update("plannerModel", event.target.value)} placeholder="planner-model"/></label><label className="kx-field">Team reviewer model<input value={settings.reviewerModel} onChange={event => update("reviewerModel", event.target.value)} placeholder="reviewer-model"/></label></div><label className="kx-field">OpenAI-compatible base URL (optional)<input value={settings.baseUrl} onChange={event => update("baseUrl", event.target.value)} placeholder="https://api.openai.com/v1"/><small>Leave blank to use the engine default.</small></label></section>
     <section className="kx-panel"><div className="kx-panel__head"><div><h2>Repository workspace</h2><p>Select a separate Git worktree for inspection and explicit file edits.</p></div></div><label className="kx-field">Repository folder<div className="kx-path-picker"><input value={settings.repositoryPath} onChange={event => update("repositoryPath", event.target.value)} placeholder="Choose a Git repository"/><button type="button" className="kx-button kx-button--quiet" onClick={() => selectFolder("repositoryPath")} disabled={selecting}>Browse</button></div><small>Repository operations are restricted to Git worktrees.</small></label></section>
@@ -214,8 +214,8 @@ function KaldraxShell() {
   }, [engineStatus]);
   useEffect(() => {
     let active = true;
-    if (!settings.enginePath.trim() || !settings.pythonExecutable.trim()) return;
-    verifyEngine(settings.enginePath, settings.pythonExecutable).then(async status => {
+    if (settings.enginePath.trim() && !settings.pythonExecutable.trim()) return;
+    verifyEngine(settings.enginePath, settings.enginePath.trim() ? settings.pythonExecutable : "").then(async status => {
       if (!active) return;
       setEngineStatus(status);
       setError("");
@@ -229,7 +229,7 @@ function KaldraxShell() {
       if (!active) return;
       setEngineStatus(null);
       setReports([]);
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(settings.enginePath.trim() ? (reason instanceof Error ? reason.message : String(reason)) : "");
     });
     return () => { active = false; };
   }, [settings.enginePath, settings.pythonExecutable]);
@@ -239,7 +239,7 @@ function KaldraxShell() {
   const verify = async () => {
     setBusy(true); setBusyLabel("verify"); setError("");
     try {
-      const status = await verifyEngine(settings.enginePath, settings.pythonExecutable);
+      const status = await verifyEngine(settings.enginePath, settings.enginePath.trim() ? settings.pythonExecutable : "");
       setEngineStatus(status);
       setError("");
     } catch (reason) {
@@ -248,19 +248,19 @@ function KaldraxShell() {
     } finally { setBusy(false); setBusyLabel(""); }
   };
   const launchDemo = async () => {
-    if (!engineStatus) { setError("Connect the Python engine first."); return; }
+    if (!engineStatus) { setError("Connect the KALDRAX engine first."); return; }
     setBusy(true); setBusyLabel("demo"); setError("");
     try {
-      const snapshot = await startOfflineDemo(engineStatus.enginePath, settings.pythonExecutable, settings.projectId);
+      const snapshot = await startOfflineDemo(engineStatus.enginePath, engineStatus.pythonExecutable, settings.projectId);
       setOperation(snapshot);
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setBusy(false); setBusyLabel(""); }
   };
   const launchTask = async (request: Omit<TaskRunRequest, "enginePath" | "pythonExecutable">) => {
-    if (!engineStatus) { setError("Connect the Python engine in Settings."); return; }
+    if (!engineStatus) { setError("Connect the KALDRAX engine in Settings."); return; }
     setBusy(true); setBusyLabel("task"); setError("");
     try {
-      const snapshot = await startTaskRun({ ...request, enginePath: engineStatus.enginePath, pythonExecutable: settings.pythonExecutable });
+      const snapshot = await startTaskRun({ ...request, enginePath: engineStatus.enginePath, pythonExecutable: engineStatus.pythonExecutable });
       setOperation(snapshot);
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setBusy(false); setBusyLabel(""); }
@@ -304,6 +304,7 @@ function KaldraxShell() {
   const operationRunning = operation?.status === "running" || operation?.status === "cancelling";
   const navigateToRun = (id: string) => navigate("/runs/" + id);
   const connected = Boolean(engineStatus);
+  const runtimeSettings = engineStatus ? { ...settings, enginePath: engineStatus.enginePath, pythonExecutable: engineStatus.pythonExecutable } : settings;
 
   return <div className={`kx-app ${navExpanded ? "kx-app--nav-expanded" : ""}`}>
     <aside className="kx-rail" aria-label="Primary navigation">
@@ -327,15 +328,15 @@ function KaldraxShell() {
           <Route path="/" element={<OverviewPage reports={reports} connected={connected} busy={busy || operationRunning} onDemo={launchDemo} onNewTask={() => navigate("/tasks")} onOpenRun={navigateToRun} error={error}/>} />
           <Route path="/tasks" element={<TaskBuilder settings={settings} connected={connected} apiKey={apiKey} onRun={launchTask} busy={busy && busyLabel === "task" || operationRunning && operation?.kind === "task_run"} error={busyLabel === "task" ? error : ""}/>} />
           <Route path="/runs" element={<RunsPage reports={reports} onOpen={navigateToRun}/>} />
-          <Route path="/runs/:runId" element={<RunDetailPage enginePath={settings.enginePath}/>} />
+          <Route path="/runs/:runId" element={<RunDetailPage enginePath={engineStatus?.enginePath ?? settings.enginePath}/>} />
           <Route path="/settings" element={<SettingsPage settings={settings} onChange={setSettings} apiKey={apiKey} setApiKey={setApiKey} engineStatus={engineStatus} onVerify={verify} busy={busy && busyLabel === "verify"} error={error}/>} />
-          <Route path="/team" element={<TeamRunsPage settings={settings} apiKey={apiKey} operation={operation} onOperationStarted={setOperation}/>} />
-          <Route path="/sandbox" element={<SandboxPage settings={settings} operation={operation} onOperationStarted={setOperation}/>} />
-          <Route path="/memory" element={<MemoryPage settings={settings}/>} />
-          <Route path="/repository" element={<RepositoryPage settings={settings} onSettingsChange={setSettings}/>} />
+          <Route path="/team" element={<TeamRunsPage settings={runtimeSettings} apiKey={apiKey} operation={operation} onOperationStarted={setOperation}/>} />
+          <Route path="/sandbox" element={<SandboxPage settings={runtimeSettings} operation={operation} onOperationStarted={setOperation}/>} />
+          <Route path="/memory" element={<MemoryPage settings={runtimeSettings}/>} />
+          <Route path="/repository" element={<RepositoryPage settings={runtimeSettings} onSettingsChange={next => setSettings({ ...settings, repositoryPath: next.repositoryPath })}/>} />
           <Route path="*" element={<PageHeader title="Not found" subtitle="This route does not exist. Use the navigation rail to continue."/>}/>
         </Routes>
-        <footer className="kx-footer"><span>KALDRAX Desktop</span><span>{connected ? `Python ${engineStatus?.engineVersion} · Tauri desktop` : "Local desktop · engine not connected"}</span><span>Reports and SQLite memory stay in the local application-data folder</span></footer>
+        <footer className="kx-footer"><span>KALDRAX Desktop</span><span>{connected ? `${engineStatus?.bundled ? "Bundled" : "Python"} engine ${engineStatus?.engineVersion} · Tauri desktop` : "Local desktop · engine not connected"}</span><span>Reports and SQLite memory stay in the local application-data folder</span></footer>
       </div>
     </main>
   </div>;

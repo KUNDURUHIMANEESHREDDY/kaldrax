@@ -31,4 +31,14 @@ $executable = Join-Path $outputDirectory 'kaldrax-engine.exe'
 if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
   throw "Frozen KALDRAX executable was not produced at $executable"
 }
-Write-Output "Built frozen engine: $executable"
+$manifestPath = Join-Path $repoRoot 'pyproject.toml'
+$versionPath = Join-Path $outputDirectory 'version.txt'
+python -c "import sys, tomllib; from pathlib import Path; version = tomllib.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))['project']['version']; Path(sys.argv[2]).write_text(version, encoding='utf-8')" $manifestPath $versionPath
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $versionPath -PathType Leaf)) {
+  throw 'Could not write KALDRAX engine version metadata'
+}
+$engineVersion = (Get-Content -LiteralPath $versionPath -Raw).Trim()
+if ([string]::IsNullOrWhiteSpace($engineVersion)) {
+  throw 'KALDRAX engine version metadata is empty'
+}
+Write-Output "Built frozen engine $engineVersion - $executable"
