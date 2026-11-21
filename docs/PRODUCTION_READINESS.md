@@ -98,6 +98,16 @@ P1 portability is underway and can proceed independently. Provider configuration
 - Automatic deployment of generated repository changes.
 - Treating model-generated review or evaluation as human approval.
 
-## Decision record needed before packaging implementation
+## Packaging architecture decision
 
-The packaging spike must compare a frozen Python sidecar (for example, a PyInstaller executable) with a portable CPython runtime plus packaged KALDRAX sources. The choice must be tested against startup time, installer size, Windows antivirus false positives, native module compatibility, crash diagnostics, and reproducibility before adopting it as the release architecture.
+**Selected for the Windows x64 packaging prototype:** build the Python CLI as a PyInstaller one-folder (`--onedir`) console executable and include its complete output directory as a Tauri bundle resource. The Rust backend will launch the packaged executable directly through a fixed executable path and argument vector, preserving the existing native child-process progress/cancellation model. The webview will not receive a shell execution capability.
+
+Use one-folder mode first rather than a one-file executable. PyInstaller documents that one-file mode extracts into a temporary directory at startup and starts more slowly; its documentation recommends validating one-folder mode first because it is easier to diagnose. The Tauri resource API supports bundling directories and resolving them from Rust. References: [Tauri resources](https://v2.tauri.app/develop/resources/), [Tauri sidecars](https://v2.tauri.app/develop/sidecar/), and [PyInstaller operating modes](https://www.pyinstaller.org/en/stable/operating-mode.html).
+
+Prototype constraints:
+- Build on a Windows x64 runner with a pinned Python 3.13 patch release and pinned PyInstaller version; do not cross-compile the frozen executable.
+- Keep the executable as a console/CLI program so existing subcommands and structured JSON stdout continue to work.
+- Include package data and verify help, version, offline demo, memory initialization/search, report creation, and exit-code behavior in the frozen output.
+- Do not store SQLite data, reports, checkpoints, review sessions, logs, or backups beside the packaged executable. The app-data path migration is a prerequisite for using the runtime from a protected install directory.
+- Keep a developer-source mode for local engineering. Packaged mode must not depend on a user-selected source checkout or system Python.
+- Treat this as a prototype decision, not a release claim. Revisit only if a measured Windows build exposes unacceptable startup, size, compatibility, security, or antivirus issues.
