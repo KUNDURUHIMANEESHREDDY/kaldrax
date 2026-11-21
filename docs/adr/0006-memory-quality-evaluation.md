@@ -23,13 +23,13 @@ These capabilities need evaluation without introducing hosted vector infrastruct
 - Run every benchmark in an isolated temporary SQLite database.
 - Report Recall@k, Precision@k, NDCG@k, MRR, top-1 accuracy, and per-category breakdowns.
 - Keep the existing five-query fixture as a small regression baseline.
-- Keep local Ollama embeddings optional; lexical-only mode remains runnable without provider services.
+- Keep hosted embeddings optional; lexical-only mode remains runnable without provider credentials or services.
 
 ### Contradiction candidate detection
 
 - Move candidate analysis into a dedicated module independent of persistence.
 - Detect opposing cues across availability, visibility, location, connectivity, execution mode, mutability, retention, membership, obligation, operation result, automation, transport security, and strictness.
-- Require an opposing cue plus a minimum lexical subject-overlap score; when a local embedder is configured, permit high cosine similarity to identify paraphrased candidates.
+- Require an opposing cue plus a minimum lexical subject-overlap score; when a hosted embedder is configured, permit high cosine similarity to identify paraphrased candidates.
 - Exclude different explicit environment scopes and avoid comparisons between agent-private records belonging to different agents.
 - Batch embedding requests and fall back to lexical similarity if embedding is unavailable or fails.
 - Persist explainable diagnostics: conflict dimensions, subject Jaccard score, optional semantic cosine score.
@@ -61,8 +61,8 @@ These capabilities need evaluation without introducing hosted vector infrastruct
 - Add a second, source-backed retrieval dataset from the public KALDRAX main-branch snapshot `1b50f309c7cd2f9a0dc7ec444f12fc57c25cc7d9`, with 37 memories and 36 proposed queries.
 - Preserve a source path and anchor for every memory. Exclude local SQLite data, runtime reports, credentials, environment values, private conversations, and private repositories.
 - Mark every query judgment `assistant_proposed_pending_human_review` and privacy scope `pending_operator_signoff`. Assistant-created judgments are not human labels. A human must review every relevant-ID set and approve the source scope before any human-labeled or production claim.
-- Add paired lexical-versus-hybrid evaluation on the exact same queries. Publish paired deltas only when local embedding indexing and query vectors succeed; a failed or absent provider must never be presented as a hybrid result.
-- Run the repository corpus's lexical baseline in ordinary credential-free CI. Add the 10-case live extraction benchmark to the existing manual secret-gated provider job, with a 1,024-token completion cap and the shared run budget.
+- Add paired lexical-versus-hybrid evaluation on the exact same queries. Publish paired deltas only when hosted embedding indexing and query vectors succeed; a failed or absent provider must never be presented as a hybrid result.
+- Run the repository corpus's lexical baseline in ordinary credential-free CI. Add the expanded 30-case, 70-proposed-claim live extraction benchmark to the existing manual secret-gated provider job, with a 1,024-token completion cap and the shared run budget.
 - The live provider job has not been dispatched as part of this decision; provider extraction results remain unmeasured until a configured manual run completes.
 
 
