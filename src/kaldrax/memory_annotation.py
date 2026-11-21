@@ -180,6 +180,84 @@ def _new_session(dataset: dict[str, Any], source_path: Path, raw: bytes) -> dict
     }
 
 
+def _valid_review_timestamp(value: Any) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return True
+
+
+def _validate_approval_record(record: Any, label: str) -> None:
+    if not isinstance(record, dict):
+        raise ValueError(f"review session {label} approval is invalid")
+    status = record.get("status")
+    if status not in {"pending", "approved", "rejected"}:
+        raise ValueError(f"review session {label} approval status is invalid")
+    reviewer, reviewed_at = record.get("reviewer"), record.get("reviewed_at")
+    if status == "pending":
+        if reviewer is not None or reviewed_at is not None:
+            raise ValueError(f"pending {label} approval cannot contain reviewer provenance")
+    elif (
+        not isinstance(reviewer, str) or not reviewer.strip()
+        or not _valid_review_timestamp(reviewed_at)
+    ):
+        raise ValueError(f"review session {label} approval lacks valid reviewer provenance")
+
+
+def _validate_session_state(
+    session: dict[str, Any], dataset: dict[str, Any], raw: bytes,
+) -> None:
+    if session.get("source_sha256") != hashlib.sha256(raw).hexdigest():
+        raise ValueError("review session source digest is invalid")
+    memories = {item["id"] for item in dataset["memories"]}
+    source_queries = {item["id"]: item for item in dataset["queries"]}
+    decisions = session.get("queries")
+    if not isinstance(decisions, dict) or set(decisions) != set(source_queries):
+        raise ValueError("review session query IDs do not match the source dataset")
+
+    for query_id, source_query in source_queries.items():
+        state = decisions[query_id]
+        if not isinstance(state, dict):
+            raise ValueError(f"review session query {query_id} is invalid")
+        proposed = state.get("proposed_relevant")
+        relevant = state.get("relevant")
+        if proposed != source_query["relevant"]:
+            raise ValueError(f"review session query {query_id} proposed labels do not match source")
+        if (
+            not isinstance(relevant, list)
+            or len(relevant) != len(set(relevant))
+            or any(not isinstance(item, str) or item not in memories for item in relevant)
+        ):
+            raise ValueError(f"review session query {query_id} has invalid relevance labels")
+        status = state.get("status")
+        reviewer, reviewed_at = state.get("reviewer"), state.get("reviewed_at")
+        if status == "pending":
+            if reviewer is not None or reviewed_at is not None or relevant != proposed:
+                raise ValueError(f"pending query {query_id} contains unreviewed state changes")
+        elif status == "rejected":
+            if relevant or not isinstance(reviewer, str) or not reviewer.strip() or not _valid_review_timestamp(reviewed_at):
+                raise ValueError(f"rejected query {query_id} lacks valid review provenance")
+        elif status in _REVIEWED_QUERY_STATES:
+            if not relevant or not isinstance(reviewer, str) or not reviewer.strip() or not _valid_review_timestamp(reviewed_at):
+                raise ValueError(f"reviewed query {query_id} lacks valid labels or reviewer provenance")
+        else:
+            raise ValueError(f"review session query {query_id} has an invalid review status")
+        if state.get("review_note") is not None and not isinstance(state.get("review_note"), str):
+            raise ValueError(f"review session query {query_id} has an invalid review note")
+
+    _validate_approval_record(session.get("dataset_approval"), "dataset")
+    privacy = session.get("privacy_screening")
+    _validate_approval_record(privacy, "privacy")
+    source_privacy = dataset.get("privacy_screening")
+    expected_scope = source_privacy.get("scope", "") if isinstance(source_privacy, dict) else ""
+    expected_note = source_privacy.get("note", "") if isinstance(source_privacy, dict) else ""
+    if privacy.get("scope") != str(expected_scope) or privacy.get("note") != str(expected_note):
+        raise ValueError("review session privacy scope does not match the source dataset")
+
+
 def _load_session(
     dataset: dict[str, Any], source_path: Path, raw: bytes, session_path: Path,
 ) -> dict[str, Any]:
@@ -197,10 +275,7 @@ def _load_session(
             "source dataset changed since this review session began; preserve the session and "
             "start a new review session for the updated dataset"
         )
-    expected_ids = {query["id"] for query in dataset["queries"]}
-    session_queries = session.get("queries")
-    if not isinstance(session_queries, dict) or set(session_queries) != expected_ids:
-        raise ValueError("review session query IDs do not match the source dataset")
+    _validate_session_state(session, dataset, raw)
     return session
 
 

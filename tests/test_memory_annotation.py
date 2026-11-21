@@ -235,3 +235,36 @@ def test_tampered_export_fails_integrity_assessment(tmp_path):
     assert assess_dataset_review(exported)["validated"] is True
     exported["queries"][0]["query"] = "tampered query"
     assert assess_dataset_review(exported)["validated"] is False
+
+def test_tampered_review_session_approval_and_query_provenance_are_rejected(tmp_path):
+    source = tmp_path / "dataset.json"
+    _dataset(source)
+    session_path = tmp_path / "session.json"
+
+    get_annotation_review_state(source, reviewer="reviewer-a", session_path=session_path)
+    session = json.loads(session_path.read_text(encoding="utf-8"))
+    session["dataset_approval"] = {
+        "status": "approved", "reviewer": None, "reviewed_at": None,
+    }
+    session_path.write_text(json.dumps(session), encoding="utf-8")
+    with pytest.raises(ValueError, match="dataset approval lacks valid reviewer provenance"):
+        get_annotation_review_state(source, reviewer="reviewer-a", session_path=session_path)
+
+    get_annotation_review_state(source, reviewer="reviewer-a", session_path=session_path)
+    session = json.loads(session_path.read_text(encoding="utf-8"))
+    session["queries"]["q-memory"]["status"] = "approved"
+    session_path.write_text(json.dumps(session), encoding="utf-8")
+    with pytest.raises(ValueError, match="reviewed query q-memory lacks valid labels or reviewer provenance"):
+        get_annotation_review_state(source, reviewer="reviewer-a", session_path=session_path)
+
+
+def test_tampered_review_session_rejects_unknown_relevance_ids(tmp_path):
+    source = tmp_path / "dataset.json"
+    _dataset(source)
+    session_path = tmp_path / "session.json"
+    get_annotation_review_state(source, reviewer="reviewer-a", session_path=session_path)
+    session = json.loads(session_path.read_text(encoding="utf-8"))
+    session["queries"]["q-memory"]["relevant"] = ["not-in-dataset"]
+    session_path.write_text(json.dumps(session), encoding="utf-8")
+    with pytest.raises(ValueError, match="invalid relevance labels"):
+        get_annotation_review_state(source, reviewer="reviewer-a", session_path=session_path)
