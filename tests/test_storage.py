@@ -65,6 +65,7 @@ def test_migration_skips_symlinks_and_rejects_nested_paths(tmp_path: Path):
     assert not (destination / "private-link.txt").exists()
     with pytest.raises(ValueError, match="separate, non-nested"):
         migrate_state_directory(source, source / "nested")
+    assert not (source / "nested").exists()
 
 
 def test_missing_legacy_state_is_a_non_error(tmp_path: Path):
@@ -72,3 +73,18 @@ def test_missing_legacy_state_is_a_non_error(tmp_path: Path):
     result = migrate_state_directory(tmp_path / "missing", destination)
     assert result["status"] == "no_legacy_data"
     assert destination.is_dir()
+
+def test_migration_rejects_symlinked_destination_without_writing_through_it(tmp_path: Path):
+    source = tmp_path / "source"
+    destination_target = tmp_path / "outside"
+    source.mkdir()
+    destination_target.mkdir()
+    destination_link = tmp_path / "app-data-link"
+    try:
+        destination_link.symlink_to(destination_target, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is not permitted on this platform")
+
+    with pytest.raises(ValueError, match="destination must not be a symlink"):
+        migrate_state_directory(source, destination_link)
+    assert list(destination_target.iterdir()) == []

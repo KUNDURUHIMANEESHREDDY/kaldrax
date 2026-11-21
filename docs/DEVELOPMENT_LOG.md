@@ -853,3 +853,10 @@ This file records implementation decisions, changes, commands, verification, and
 - Engine verification runs the migration before reporting a successful connection and exposes the application-data location to the desktop UI.
 - Updated desktop and CLI documentation to distinguish source checkout paths from application-owned data.
 - No provider credentials or hosted requests are involved. Native package-mode execution and clean-install tests remain outstanding.
+
+
+## 2026-11-20 — Migration path safety regression
+
+- Corrected migration validation to resolve and reject equal or nested source/destination paths before creating the destination directory. A malicious or mistaken nested destination can no longer mutate the legacy source tree before rejection.
+- Reject symlinked source, app-data destination, and migration marker paths; added regression coverage for nested-path non-mutation and symlinked destination rejection.
+- This is a defense-in-depth fix on top of CI-green app-data isolation work. The new regression tests are awaiting CI verification.

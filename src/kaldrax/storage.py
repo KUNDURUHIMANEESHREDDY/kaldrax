@@ -67,10 +67,15 @@ def migrate_state_directory(source_dir: Path | str, destination_dir: Path | str)
     files are skipped rather than followed.
     """
     source_input = Path(source_dir).expanduser()
+    destination_input = Path(destination_dir).expanduser()
     if source_input.is_symlink():
         raise ValueError("legacy state source must not be a symlink")
+    if destination_input.is_symlink():
+        raise ValueError("application state destination must not be a symlink")
     source = source_input.resolve()
-    destination = Path(destination_dir).expanduser()
+    destination = destination_input.resolve()
+    if source == destination or source in destination.parents or destination in source.parents:
+        raise ValueError("source and destination state directories must be separate, non-nested paths")
     destination.mkdir(parents=True, exist_ok=True)
     destination = destination.resolve()
     if source == destination or source in destination.parents or destination in source.parents:
@@ -78,6 +83,8 @@ def migrate_state_directory(source_dir: Path | str, destination_dir: Path | str)
 
     source_key = hashlib.sha256(str(source).encode("utf-8")).hexdigest()[:16]
     marker = destination / f".legacy-migration-{source_key}.json"
+    if marker.is_symlink():
+        raise ValueError("legacy migration marker must not be a symlink")
     if marker.is_file():
         return {
             "status": "already_migrated",
