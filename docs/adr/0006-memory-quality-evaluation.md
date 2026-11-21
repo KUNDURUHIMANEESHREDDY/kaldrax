@@ -52,7 +52,7 @@ These capabilities need evaluation without introducing hosted vector infrastruct
 - Opposition-aware conflict detection should capture more practical policy changes, but remains vocabulary- and threshold-based. It is not a general natural-language inference or temporal-reasoning model.
 - Embedding similarity can improve paraphrase recall but may create false positives. Human review remains mandatory.
 - The extraction benchmark quantifies quality against an explicit, inspectable matching rubric. The rubric may miss valid paraphrases or produce broad matches; human-reviewed project data is still required.
-- Brier and ECE calculated over 30 expected claims are descriptive sample estimates and cannot establish model-wide calibration.
+- Brier and ECE on the expanded synthetic corpus (30 cases, 70 proposed expected claims) are descriptive sample estimates and cannot establish model-wide calibration.
 - No database schema migration is required; conflict data continues to use the existing `memory_conflicts` table. Benchmark datasets and reports are separate from runtime project memory.
 
 
