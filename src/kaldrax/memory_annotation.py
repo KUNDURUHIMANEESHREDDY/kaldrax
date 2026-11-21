@@ -228,8 +228,8 @@ def _validate_session_state(
             raise ValueError(f"review session query {query_id} proposed labels do not match source")
         if (
             not isinstance(relevant, list)
-            or len(relevant) != len(set(relevant))
             or any(not isinstance(item, str) or item not in memories for item in relevant)
+            or len(relevant) != len(set(relevant))
         ):
             raise ValueError(f"review session query {query_id} has invalid relevance labels")
         status = state.get("status")
