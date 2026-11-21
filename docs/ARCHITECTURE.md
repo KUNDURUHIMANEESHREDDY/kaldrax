@@ -14,8 +14,8 @@ KALDRAX is a local-first engineering application. The local Python control plane
 | Tests | pytest | Behavior-focused automated tests. |
 | Run records | JSON files | Human-inspectable provenance. |
 | Memory persistence | SQLite | Durable local records and vectors. |
-| Embeddings | Local Ollama API, optional | Local semantic vectors without a hosted vector DB. |
-| LLM transport | OpenAI-compatible chat completions | Configurable hosted or local model adapters. |
+| Embeddings | OpenAI-compatible hosted HTTPS API, optional | Hosted semantic vectors persisted in local SQLite; lexical-only mode needs no provider. |
+| LLM transport | OpenAI-compatible hosted HTTPS chat completions | Hosted model APIs only; no local model runtime. |
 | Desktop/web UI | v1 local app surface; not part of this memory milestone | Keep application policy in the Python core. |
 
 ## Component boundaries
@@ -24,10 +24,10 @@ KALDRAX is a local-first engineering application. The local Python control plane
 - **Chat client (llm):** model request transport, authentication, timeout, response size, and response validation.
 - **Executor (execution):** produces one candidate per iteration; cannot assign a verdict.
 - **Evaluator (evaluation):** evaluates only the task contract and candidate; the evaluator does not receive memory.
-- **Embedding adapter (embeddings):** generates local vectors through Ollama's loopback-only HTTP API.
+- **Embedding adapter (embeddings):** calls a configured OpenAI-compatible hosted HTTPS embeddings API; no local embedding runtime or model is installed.
 - **Memory (memory):** typed records, statuses, confidence, expiry, retrieval matches, conflicts, and SQLite persistence.
 - **Memory intelligence (memory_intelligence):** optional LLM extraction with exact-candidate evidence requirements and explicitly defined confidence semantics.
-- **Contradiction analysis (memory_contradictions):** explainable opposition-dimension, scope, lexical, and optional local-vector candidate detection; never auto-resolves.
+- **Contradiction analysis (memory_contradictions):** explainable opposition-dimension, scope, lexical, and optional hosted-vector candidate detection; never auto-resolves.
 - **Memory evaluation (memory_benchmarks, memory_quality):** isolated retrieval ranking and extraction quality/calibration benchmarks against versioned annotated corpora.
 - **Engine (engine):** controls iteration, memory retrieval, feedback, extraction, stop conditions, and event recording.
 - **CLI (cli):** configures adapters from environment variables and exposes local operator controls.
@@ -51,11 +51,11 @@ Each record stores project ID, memory type, content/summary, source run ID, sour
 
 ## Hybrid retrieval
 
-The optional \`OllamaEmbeddingProvider\` sends input to a local \`POST /api/embed\` endpoint. The base URL must resolve to localhost or a loopback IP. The returned vector is stored with the provider/model identifier. Query vectors are compared only to vectors created with the same model identifier and compatible dimension. A model change requires explicit reindexing.
+The optional \`HostedEmbeddingProvider\` sends project-memory text to a configured OpenAI-compatible \`POST /embeddings\` endpoint over HTTPS. The API key is required when configured; URL credentials, query strings, and fragments are rejected. Returned vectors are stored locally with an endpoint/model identity. Query vectors are compared only to vectors created with the same identity and compatible dimension. A model or endpoint change requires explicit reindexing.
 
 Hybrid relevance combines normalized cosine similarity and lexical token overlap, with configurable semantic weight. If embeddings are disabled, unavailable, absent for older records, or incompatible, the record uses lexical score only. Confidence and an exponential freshness decay then scale the result. The search excludes records whose expiry deadline has passed and retrieves active records only unless an operator explicitly asks to include pending records.
 
-The default engineering retrieval corpus contains 40 synthetic-curated memories and 42 judged queries across 15 engineering workload categories. Each query has a manually reviewed relevant-ID set. The runner validates IDs and reports Recall@k, Precision@k, NDCG@k, MRR, top-1, and category-level aggregates. Benchmark execution uses a temporary SQLite database and does not seed or modify the user's project memory. Optional Ollama embeddings run through the existing loopback-only adapter; without an embedder the same corpus measures lexical fallback.
+The default engineering retrieval corpus contains 40 synthetic-curated memories and 42 proposed relevance judgments across 15 engineering workload categories. The source-backed KALDRAX corpus is a separate 37-memory, 36-query annotation proposal derived from public repository files; its judgments and privacy scope require operator review. The runner validates IDs and reports Recall@k, Precision@k, NDCG@k, MRR, top-1, and category-level aggregates. Benchmark execution uses a temporary SQLite database and does not seed or modify the user's project memory. Optional hosted embeddings run through the HTTPS adapter; without a configured embedder the same corpus measures lexical fallback.
 
 ## Confidence, freshness, and approval
 
@@ -65,7 +65,7 @@ Episodic records default to 365 days; semantic records default to 180 days. Sear
 
 ## Contradiction detection and resolution
 
-The detector examines active and pending semantic records within one project and produces explainable review candidates. It covers explicit negation plus opposition dimensions including allow/deny, public/private, local/cloud, online/offline, sync/async, mutable/immutable, retain/delete, include/exclude, required/optional, accept/reject, automatic/manual, encrypted/plaintext, and strict/fail-open policy. Candidate generation requires an opposing cue and sufficient subject overlap (Jaccard ≥0.42), or optional same-batch local embedding similarity (cosine ≥0.84) for paraphrases. Environment tokens such as production and staging are treated as scope boundaries when both sides specify different environments. Agent-private records owned by different agents are not compared. If the local embedder fails, detection falls back to lexical subject overlap. Each conflict stores the detected dimensions and similarity diagnostics. A pending record involved in an open conflict cannot be approved until an operator resolves the pair. Resolution still activates one side and supersedes the other with reviewer provenance. These are heuristics, not natural-language inference; all candidates require human inspection.
+The detector examines active and pending semantic records within one project and produces explainable review candidates. It covers explicit negation plus opposition dimensions including allow/deny, public/private, local/cloud, online/offline, sync/async, mutable/immutable, retain/delete, include/exclude, required/optional, accept/reject, automatic/manual, encrypted/plaintext, and strict/fail-open policy. Candidate generation requires an opposing cue and sufficient subject overlap (Jaccard ≥0.42), or optional same-batch hosted embedding similarity (cosine ≥0.84) for paraphrases. Environment tokens such as production and staging are treated as scope boundaries when both sides specify different environments. Agent-private records owned by different agents are not compared. If the hosted embedder fails, detection falls back to lexical subject overlap. Each conflict stores the detected dimensions and similarity diagnostics. A pending record involved in an open conflict cannot be approved until an operator resolves the pair. Resolution still activates one side and supersedes the other with reviewer provenance. These are heuristics, not natural-language inference; all candidates require human inspection.
 
 ## Knowledge extraction
 
@@ -73,18 +73,18 @@ The offline extractor continues to recognize explicit Decision/Pattern/Lesson/Ru
 
 ## Trust, privacy, and local-first constraints
 
-Memory content and retrieved prompts are untrusted historical data. The executor is instructed not to follow embedded instructions and to consider staleness/relevance. Memory cannot alter acceptance criteria or evaluator policy. Ollama embeddings are restricted to loopback endpoints to prevent accidental remote transfer. LLM-backed task execution still sends prompts/candidates to the configured chat endpoint; use a local compatible endpoint for fully local model inference. Secrets are not stored in memory or run reports.
+Memory content and retrieved prompts are untrusted historical data. The executor is instructed not to follow embedded instructions and to consider staleness/relevance. Memory cannot alter acceptance criteria or evaluator policy. When hosted embeddings are enabled, project-memory text is sent to the configured HTTPS provider; leave embedding configuration unset to use lexical retrieval without that data transfer. LLM-backed execution sends prompts and candidate content to the configured hosted chat provider. KALDRAX does not install or run local models. Secrets are not stored in memory or run reports.
 
 ## Known limitations
 
-- Local embedding models must be installed and started separately; KALDRAX does not bundle model weights.
+- KALDRAX does not install or run local language or embedding models; semantic retrieval requires a configured hosted embeddings API.
 - Hybrid retrieval is a single-vector SQLite scan, suited to a local project memory store; it is not a distributed vector index.
-- Confidence is an estimated probability supplied by the extractor. The bundled calibration report is based on only 30 synthetic expected claims and is descriptive, not proof of population calibration.
+- Confidence is an estimated probability supplied by the extractor. The expanded synthetic extraction fixture has 30 cases and 70 proposed expected claims; calibration metrics on this fixture are descriptive, not proof of population calibration.
 - Freshness defaults are fixed by memory type in this release; per-project retention policy UI is deferred.
 - The contradiction detector covers a defined vocabulary of oppositions and similarity thresholds, but can miss contextual, temporal, modal, and domain-specific contradictions or generate false positives.
 - Extraction match terms are deterministic rubric annotations; they are interpretable but do not fully score paraphrastic semantic equivalence.
 - Both bundled memory corpora are synthetic curated regression fixtures. A representative production-quality assessment still needs privacy-reviewed real project queries, relevance labels, and extractor reviews.
-- Embedding-enhanced conflict detection requires a local model to be configured; without it the system uses lexical overlap.
+- Embedding-enhanced conflict detection requires configured hosted embedding credentials; without them the system uses lexical overlap.
 - Generated code is not executed; sandboxing and command policy are separate work.
 
 
@@ -104,7 +104,7 @@ The Python sandbox runs one source file in a disposable Docker container. It dis
 
 ### Multi-role orchestration
 
-The team coordinator runs a bounded sequential graph: planner → builder → reviewer → independent evaluator. All role clients share one budget. Planner, builder, and reviewer traces are stored as agent-private episodic records under the selected project namespace. Reviewer JSON is schema- and size-validated. A reviewer approval cannot bypass the independent evaluator, which assesses the original task and acceptance criteria. Failed findings/missing criteria are fed into the next builder cycle. The current coordinator does not yet apply changes to a local Git repository or automatically invoke the sandbox.
+The team coordinator runs a bounded sequential graph: planner → builder → reviewer → independent evaluator. All role clients share one budget. Planner, builder, and reviewer traces are stored as agent-private episodic records under the selected project namespace. Reviewer JSON is schema- and size-validated. A reviewer approval cannot bypass the independent evaluator, which assesses the original task and acceptance criteria. Failed findings/missing criteria are fed into the next builder cycle. The plain `team` workflow remains a sequential candidate-generation path. Workspace-backed team/DAG workflows can stage and verify patches in a disposable Docker copy and apply them to a clean checkout only with explicit authorization; they never commit or push.
 
 ### Live-provider verification
 
@@ -118,15 +118,15 @@ Run the default annotated retrieval workload:
 kaldrax memory benchmark --k 3
 ```
 
-Set `KALDRAX_EMBEDDING_MODEL` to the local Ollama embedding model to measure hybrid retrieval. The report contains aggregate and per-category metrics.
+Set `KALDRAX_EMBEDDING_MODEL` and the hosted embedding API credentials to measure hybrid retrieval. Without them, the report measures lexical retrieval only.
 
-Run extraction quality and confidence calibration against the annotated 10-case corpus:
+Run extraction quality and confidence calibration against the expanded 30-case, 70-proposed-claim corpus:
 
 ```powershell
 kaldrax memory extraction-benchmark
 ```
 
-This optional command makes one LLM extraction request per case. It reports the number of expected and predicted claims, one-to-one matches, false positives/negatives, precision/recall/F1, quote validity, Brier score, ECE, and reliability bins. The benchmark does not write results into the user's memory database. The synthetic dataset and its matching rubric must be replaced or supplemented with privacy-reviewed, human-labeled project examples before its metrics can support production claims.
+This optional command makes one hosted LLM extraction request per case. It reports the number of expected and predicted claims, one-to-one matches, false positives/negatives, precision/recall/F1, quote validity, Brier score, ECE, and reliability bins. The benchmark does not write results into the user's memory database. The synthetic dataset and its matching rubric must be replaced or supplemented with privacy-reviewed, human-labeled project examples before its metrics can support production claims.
 
 
 ## Repository intelligence
