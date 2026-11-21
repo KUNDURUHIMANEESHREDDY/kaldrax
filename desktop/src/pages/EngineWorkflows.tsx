@@ -130,7 +130,7 @@ function BenchmarkReviewPanel({
   }, [activeQuery?.id, activeQuery?.status]);
 
   const update = async (input: {
-    action: "query" | "dataset-approval" | "privacy-approval";
+    action: "query" | "dataset-approval" | "privacy-approval" | "auto-approve-proposals";
     queryId?: string;
     decision?: "approve" | "reject" | "modify";
     memoryIds?: string[];
@@ -169,7 +169,21 @@ function BenchmarkReviewPanel({
   const reviewedCount = review?.queries.filter(query =>
     query.status === "approved" || query.status === "modified"
   ).length ?? 0;
+  const autoApprovedCount = review?.queries.filter(query => query.status === "auto_approved").length ?? 0;
+  const pendingCount = review?.queries.filter(query => query.status === "pending").length ?? 0;
   const allQueries = Boolean(review?.review_ready);
+
+  const autoApproveProposals = () => {
+    if (pendingCount === 0) return;
+    const confirmed = window.confirm(
+      `Auto-accept all ${pendingCount} pending source proposals as machine-reviewed? This does not count as human review, approve the dataset, approve privacy, or enable a validated export.`
+    );
+    if (!confirmed) return;
+    void update({
+      action: "auto-approve-proposals",
+      successMessage: `KALDRAX machine-accepted ${pendingCount} unchanged proposals. Human review and both approval gates remain separate.`,
+    });
+  };
   const privacyApproved = review?.privacy_screening.status === "approved";
   const datasetApproved = review?.dataset_approval.status === "approved";
 
@@ -201,11 +215,14 @@ function BenchmarkReviewPanel({
             <p>{review.queries.length} proposed retrieval queries · {review.memories.length} source-backed memories · source revision {review.source_revision ?? "unspecified"}</p>
           </div>
           <Badge tone={review.benchmark_status === "validated_exported" ? "passed" : "warning"}>
-            {review.benchmark_status === "validated_exported" ? "Validated export" : "Human review pending"}
+            {review.benchmark_status === "validated_exported"
+              ? "Validated export"
+              : autoApprovedCount > 0 ? "Machine-reviewed · human sign-off pending" : "Human review pending"}
           </Badge>
         </div>
         <div className="kx-run-summary">
-          <div><small>QUERY LABELS</small><strong>{reviewedCount} / {review.queries.length}</strong></div>
+          <div><small>HUMAN-REVIEWED LABELS</small><strong>{reviewedCount} / {review.queries.length}</strong></div>
+          <div><small>MACHINE-ACCEPTED</small><strong>{autoApprovedCount}</strong></div>
           <div><small>DATASET APPROVAL</small><strong>{review.dataset_approval.status}</strong></div>
           <div><small>PRIVACY APPROVAL</small><strong>{review.privacy_screening.status}</strong></div>
           <div><small>REVIEW SESSION</small><strong>Resumable</strong></div>
@@ -220,7 +237,19 @@ function BenchmarkReviewPanel({
       <section className="kx-panel">
         <div className="kx-panel__head">
           <div><h2>Review relevance labels</h2><p>Inspect each query, accept the proposed memory IDs, correct the set, or reject it. Changes reset dataset-level approval.</p></div>
-          <Badge tone={allQueries ? "passed" : "neutral"}>{reviewedCount} reviewed</Badge>
+          <Badge tone={allQueries ? "passed" : "neutral"}>{reviewedCount} human-reviewed</Badge>
+        </div>
+        {autoApprovedCount > 0 && <Alert>
+          {autoApprovedCount} proposals were accepted automatically by KALDRAX. They remain machine-reviewed, not human-reviewed; confirm each proposal individually before dataset approval or export.
+        </Alert>}
+        <div className="kx-settings-actions">
+          <button
+            className="kx-button kx-button--quiet"
+            disabled={busy || pendingCount === 0}
+            onClick={autoApproveProposals}
+          >
+            Auto-accept {pendingCount} pending proposals (machine-only)
+          </button>
         </div>
         <div className="kw-tabs" role="tablist" aria-label="Benchmark query review">
           {review.queries.map(query => <button
@@ -238,7 +267,9 @@ function BenchmarkReviewPanel({
           <div className="kw-memory-card">
             <div className="kw-memory-card__head">
               <div><span className="kw-memory-type">{activeQuery.category} · {activeQuery.id}</span><h3>{activeQuery.query}</h3></div>
-              <Badge tone={activeQuery.status === "approved" || activeQuery.status === "modified" ? "passed" : "warning"}>{activeQuery.status}</Badge>
+              <Badge tone={activeQuery.status === "approved" || activeQuery.status === "modified" ? "passed" : "warning"}>
+                {activeQuery.status === "auto_approved" ? "Machine accepted" : activeQuery.status}
+              </Badge>
             </div>
             {activeQuery.rationale && <p>{activeQuery.rationale}</p>}
             <p className="kx-muted">Proposed IDs: {activeQuery.proposed_relevant.join(", ")}</p>

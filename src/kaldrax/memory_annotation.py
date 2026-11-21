@@ -12,6 +12,7 @@ from typing import Any, Callable
 
 _SESSION_SCHEMA_VERSION = 1
 _REVIEWED_QUERY_STATES = {"approved", "modified"}
+_AUTO_REVIEW_POLICY = "accept-source-proposed-relevance-v1"
 _VERSION_RE = re.compile(r"^[0-9]+[.][0-9]+[.][0-9]+$")
 
 
@@ -174,6 +175,7 @@ def _new_session(dataset: dict[str, Any], source_path: Path, raw: bytes) -> dict
                 "reviewer": None,
                 "reviewed_at": None,
                 "review_note": None,
+                "decision_source": None,
             }
             for query in dataset["queries"]
         },
@@ -218,6 +220,29 @@ def _validate_session_state(
     if not isinstance(decisions, dict) or set(decisions) != set(source_queries):
         raise ValueError("review session query IDs do not match the source dataset")
 
+    automation_runs = session.get("automation_runs", [])
+    if not isinstance(automation_runs, list):
+        raise ValueError("review session automation history is invalid")
+    automated_query_ids: set[str] = set()
+    source_digest = hashlib.sha256(raw).hexdigest()
+    for run in automation_runs:
+        if not isinstance(run, dict):
+            raise ValueError("review session automation record is invalid")
+        query_ids = run.get("query_ids")
+        if (
+            run.get("policy") != _AUTO_REVIEW_POLICY
+            or run.get("source_sha256") != source_digest
+            or not isinstance(run.get("triggered_by"), str)
+            or not run["triggered_by"].strip()
+            or not _valid_review_timestamp(run.get("triggered_at"))
+            or not isinstance(query_ids, list) or not query_ids
+            or any(not isinstance(item, str) or item not in source_queries for item in query_ids)
+            or len(query_ids) != len(set(query_ids))
+            or automated_query_ids.intersection(query_ids)
+        ):
+            raise ValueError("review session automation provenance is invalid")
+        automated_query_ids.update(query_ids)
+
     for query_id, source_query in source_queries.items():
         state = decisions[query_id]
         if not isinstance(state, dict):
@@ -234,14 +259,34 @@ def _validate_session_state(
             raise ValueError(f"review session query {query_id} has invalid relevance labels")
         status = state.get("status")
         reviewer, reviewed_at = state.get("reviewer"), state.get("reviewed_at")
+        decision_source = state.get("decision_source")
         if status == "pending":
-            if reviewer is not None or reviewed_at is not None or relevant != proposed:
+            if (
+                reviewer is not None or reviewed_at is not None or relevant != proposed
+                or decision_source not in {None, ""}
+            ):
                 raise ValueError(f"pending query {query_id} contains unreviewed state changes")
+        elif status == "auto_approved":
+            if (
+                query_id not in automated_query_ids
+                or decision_source != "automated"
+                or relevant != proposed
+                or reviewer is not None or reviewed_at is not None
+            ):
+                raise ValueError(f"auto-approved query {query_id} lacks valid machine provenance")
         elif status == "rejected":
-            if relevant or not isinstance(reviewer, str) or not reviewer.strip() or not _valid_review_timestamp(reviewed_at):
+            if (
+                relevant or decision_source not in {None, "human"}
+                or not isinstance(reviewer, str) or not reviewer.strip()
+                or not _valid_review_timestamp(reviewed_at)
+            ):
                 raise ValueError(f"rejected query {query_id} lacks valid review provenance")
         elif status in _REVIEWED_QUERY_STATES:
-            if not relevant or not isinstance(reviewer, str) or not reviewer.strip() or not _valid_review_timestamp(reviewed_at):
+            if (
+                not relevant or decision_source not in {None, "human"}
+                or not isinstance(reviewer, str) or not reviewer.strip()
+                or not _valid_review_timestamp(reviewed_at)
+            ):
                 raise ValueError(f"reviewed query {query_id} lacks valid labels or reviewer provenance")
         else:
             raise ValueError(f"review session query {query_id} has an invalid review status")
@@ -424,6 +469,7 @@ def get_annotation_review_state(
             "reviewer": state.get("reviewer"),
             "reviewed_at": state.get("reviewed_at"),
             "review_note": state.get("review_note"),
+            "decision_source": state.get("decision_source"),
         })
 
     return {
@@ -444,10 +490,18 @@ def get_annotation_review_state(
             for memory in dataset["memories"]
         ],
         "queries": queries,
+        "automation_runs": [dict(run) for run in session.get("automation_runs", [])],
         "dataset_approval": dict(session["dataset_approval"]),
         "privacy_screening": dict(session["privacy_screening"]),
         "review_ready": review_ready,
-        "benchmark_status": "validated_exported" if export_path else "review_pending",
+        "auto_approved_count": sum(query["status"] == "auto_approved" for query in queries),
+        "benchmark_status": (
+            "validated_exported" if export_path
+            else "machine_reviewed_pending_human" if any(
+                query["status"] == "auto_approved" for query in queries
+            )
+            else "review_pending"
+        ),
         "export_path": str(export_path) if export_path else None,
     }
 
@@ -467,12 +521,14 @@ def update_annotation_review(
     export_dir: str | Path = ".kaldrax/benchmark-exports",
     version: str = "1.0.0",
 ) -> dict[str, Any]:
-    """Apply one explicit human decision, then export only after both review gates pass."""
+    """Apply one explicit review action, exporting only after both human gates pass."""
     reviewer = reviewer.strip()
     if not reviewer:
         raise ValueError("reviewer identity must be non-empty")
-    if action not in {"query", "dataset-approval", "privacy-approval"}:
-        raise ValueError("action must be query, dataset-approval, or privacy-approval")
+    if action not in {"query", "dataset-approval", "privacy-approval", "auto-approve-proposals"}:
+        raise ValueError(
+            "action must be query, dataset-approval, privacy-approval, or auto-approve-proposals"
+        )
     if approval is not None and approval not in {"approve", "reject"}:
         raise ValueError("approval must be approve or reject")
     if not _VERSION_RE.fullmatch(version):
@@ -485,7 +541,52 @@ def update_annotation_review(
     )
     session = _load_session(dataset, source_path, raw, review_path)
 
-    if action == "query":
+    if action == "auto-approve-proposals":
+        if any(value is not None for value in (
+            query_id, decision, relevant_ids, note, approval, privacy_confirmation,
+        )):
+            raise ValueError("auto-approve-proposals does not accept per-query or approval arguments")
+        pending_ids = [
+            identifier for identifier, state in session["queries"].items()
+            if state.get("status") == "pending"
+        ]
+        if pending_ids:
+            duplicate_proposals = [
+                identifier for identifier in pending_ids
+                if len(session["queries"][identifier]["proposed_relevant"])
+                != len(set(session["queries"][identifier]["proposed_relevant"]))
+            ]
+            if duplicate_proposals:
+                raise ValueError(
+                    "cannot auto-approve proposals with duplicate relevance IDs: "
+                    + ", ".join(duplicate_proposals)
+                )
+            triggered_at = _now()
+            for identifier in pending_ids:
+                state = session["queries"][identifier]
+                state.update({
+                    "status": "auto_approved",
+                    "relevant": list(state["proposed_relevant"]),
+                    "reviewer": None,
+                    "reviewed_at": None,
+                    "decision_source": "automated",
+                    "review_note": (
+                        "KALDRAX automatically accepted the unchanged source proposal; "
+                        "this is not a human relevance review."
+                    ),
+                })
+            session.setdefault("automation_runs", []).append({
+                "policy": _AUTO_REVIEW_POLICY,
+                "triggered_by": reviewer,
+                "triggered_at": triggered_at,
+                "source_sha256": hashlib.sha256(raw).hexdigest(),
+                "query_ids": pending_ids,
+            })
+            session["dataset_approval"] = {
+                "status": "pending", "reviewer": None, "reviewed_at": None,
+            }
+
+    elif action == "query":
         if not query_id or query_id not in session["queries"]:
             raise ValueError("query action requires a known query ID")
         if decision not in {"approve", "reject", "modify"}:
@@ -512,6 +613,7 @@ def update_annotation_review(
             state["review_note"] = (note or "").strip() or None
         state["reviewer"] = reviewer
         state["reviewed_at"] = _now()
+        state["decision_source"] = "human"
         session["dataset_approval"] = {
             "status": "pending", "reviewer": None, "reviewed_at": None,
         }
@@ -642,6 +744,7 @@ def run_annotation_review(
             continue
         state["reviewer"] = reviewer
         state["reviewed_at"] = _now()
+        state["decision_source"] = "human"
         session["dataset_approval"] = {
             "status": "pending", "reviewer": None, "reviewed_at": None,
         }

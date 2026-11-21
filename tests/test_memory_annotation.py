@@ -174,6 +174,7 @@ def test_structured_review_api_requires_separate_privacy_approval(tmp_path):
         session_path=session, export_dir=export_dir,
     )
     assert state["queries"][0]["status"] == "modified"
+    assert state["queries"][0]["decision_source"] == "human"
     assert state["dataset_approval"]["status"] == "pending"
     assert state["export_path"] is None
 
@@ -240,6 +241,141 @@ def test_structured_review_api_rejects_unknown_memory_ids_and_resets_approval(tm
     )
     assert changed["dataset_approval"]["status"] == "pending"
     assert changed["privacy_screening"]["status"] == "pending"
+
+
+
+def test_auto_approve_marks_proposals_as_machine_reviewed_without_unlocking_human_gates(tmp_path):
+    from kaldrax.memory_annotation import update_annotation_review
+
+    source = tmp_path / "dataset.json"
+    _dataset(source)
+    session = tmp_path / "session.json"
+    export_dir = tmp_path / "exports"
+
+    state = update_annotation_review(
+        source,
+        reviewer="operator-trigger",
+        action="auto-approve-proposals",
+        session_path=session,
+        export_dir=export_dir,
+    )
+
+    query = state["queries"][0]
+    assert query["status"] == "auto_approved"
+    assert query["relevant"] == query["proposed_relevant"] == ["one"]
+    assert query["reviewer"] is None
+    assert query["reviewed_at"] is None
+    assert query["decision_source"] == "automated"
+    assert state["auto_approved_count"] == 1
+    assert state["review_ready"] is False
+    assert state["benchmark_status"] == "machine_reviewed_pending_human"
+    assert state["dataset_approval"]["status"] == "pending"
+    assert state["privacy_screening"]["status"] == "pending"
+    assert state["export_path"] is None
+    run = state["automation_runs"][0]
+    assert run["policy"] == "accept-source-proposed-relevance-v1"
+    assert run["triggered_by"] == "operator-trigger"
+    assert run["source_sha256"] == state["source_sha256"]
+    assert run["query_ids"] == ["q-memory"]
+    assert run["triggered_at"]
+    assert not list(export_dir.glob("*.json"))
+
+    with pytest.raises(ValueError, match="every query must be approved or modified"):
+        update_annotation_review(
+            source, reviewer="operator-trigger", action="dataset-approval",
+            approval="approve", session_path=session, export_dir=export_dir,
+        )
+
+
+def test_auto_approved_proposal_requires_human_reconfirmation_before_validation(tmp_path):
+    from kaldrax.memory_annotation import update_annotation_review
+
+    source = tmp_path / "dataset.json"
+    _dataset(source)
+    session = tmp_path / "session.json"
+
+    update_annotation_review(
+        source, reviewer="operator-trigger", action="auto-approve-proposals",
+        session_path=session,
+    )
+    state = update_annotation_review(
+        source, reviewer="human-reviewer", action="query", query_id="q-memory",
+        decision="approve", session_path=session,
+    )
+
+    query = state["queries"][0]
+    assert query["status"] == "approved"
+    assert query["decision_source"] == "human"
+    assert query["reviewer"] == "human-reviewer"
+    assert query["reviewed_at"]
+    assert state["review_ready"] is True
+    assert state["auto_approved_count"] == 0
+    assert state["automation_runs"][0]["query_ids"] == ["q-memory"]
+    assert state["dataset_approval"]["status"] == "pending"
+    assert state["privacy_screening"]["status"] == "pending"
+    assert state["export_path"] is None
+
+
+def test_auto_approve_preserves_existing_human_decisions_and_rejects_tampered_machine_state(tmp_path):
+    from kaldrax.memory_annotation import update_annotation_review
+
+    source = tmp_path / "dataset.json"
+    payload = {
+        "name": "mixed-review",
+        "privacy_screening": {"scope": "Public source only.", "status": "pending"},
+        "memories": [
+            {"id": "m1", "content": "SQLite stores project data."},
+            {"id": "m2", "content": "Docker isolates execution."},
+        ],
+        "queries": [
+            {"id": "q-human", "query": "Where is data stored?", "relevant": ["m1"]},
+            {"id": "q-auto", "query": "How is execution isolated?", "relevant": ["m2"]},
+        ],
+    }
+    source.write_text(json.dumps(payload), encoding="utf-8")
+    session = tmp_path / "session.json"
+
+    update_annotation_review(
+        source, reviewer="human-reviewer", action="query", query_id="q-human",
+        decision="approve", session_path=session,
+    )
+    state = update_annotation_review(
+        source, reviewer="operator-trigger", action="auto-approve-proposals",
+        session_path=session,
+    )
+
+    assert [query["status"] for query in state["queries"]] == ["approved", "auto_approved"]
+    assert state["queries"][0]["reviewer"] == "human-reviewer"
+    assert state["queries"][1]["reviewer"] is None
+    assert state["review_ready"] is False
+    assert state["auto_approved_count"] == 1
+
+    saved = json.loads(session.read_text(encoding="utf-8"))
+    saved["queries"]["q-auto"]["decision_source"] = "human"
+    session.write_text(json.dumps(saved), encoding="utf-8")
+    with pytest.raises(ValueError, match="auto-approved query q-auto lacks valid machine provenance"):
+        update_annotation_review(
+            source, reviewer="operator-trigger", action="auto-approve-proposals",
+            session_path=session,
+        )
+
+
+
+def test_auto_approve_rejects_duplicate_proposed_relevance_ids(tmp_path):
+    from kaldrax.memory_annotation import update_annotation_review
+
+    source = tmp_path / "dataset.json"
+    source.write_text(json.dumps({
+        "name": "duplicate-proposal",
+        "privacy_screening": {"scope": "Public source only.", "status": "pending"},
+        "memories": [{"id": "m1", "content": "One valid source memory."}],
+        "queries": [{"id": "q1", "query": "Question?", "relevant": ["m1", "m1"]}],
+    }), encoding="utf-8")
+    with pytest.raises(ValueError, match="duplicate relevance IDs"):
+        update_annotation_review(
+            source, reviewer="operator", action="auto-approve-proposals",
+            session_path=tmp_path / "session.json",
+        )
 
 
 def test_tampered_export_fails_integrity_assessment(tmp_path):

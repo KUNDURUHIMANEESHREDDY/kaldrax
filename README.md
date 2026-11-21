@@ -300,6 +300,22 @@ Dataset annotation approval and privacy approval are separate gates. Privacy app
 
 Exports use a numeric MAJOR.MINOR.PATCH version, a SHA-256 content digest, and write-once filenames. Retrieval benchmark reports expose `benchmark_validation.status`; datasets without complete review provenance and a valid integrity digest are labelled `exploratory_only`, not validated. Review sessions and exports are local operator data and are ignored by Git.
 
+## Retrieval benchmark proposal automation
+
+For a fast exploratory pass, KALDRAX can accept every still-pending relevance proposal without representing the action as human review:
+
+```bash
+kaldrax memory benchmark-review-update \
+  --dataset benchmarks/memory_retrieval_kaldrax_v1.json \
+  --reviewer "<operator-id>" \
+  --action auto-approve-proposals
+```
+
+This deterministic action preserves the proposed relevant IDs, records the triggering operator, policy, timestamp, source digest, and affected query IDs, and marks those decisions `auto_approved`. It does not overwrite prior human decisions or rejected queries. Auto-accepted labels remain exploratory: they do not satisfy human-review requirements, cannot unlock dataset annotation approval, and cannot produce a validated export. A human must reopen and explicitly approve or correct each auto-accepted query. Dataset approval and privacy approval always remain separate human actions; automation never approves either gate.
+
+The desktop **Memory → Benchmark review** panel exposes the same action after an explicit confirmation. Machine-accepted proposals are displayed separately from human-reviewed labels.
+
+
 
 ### Repository-aware team workflow
 

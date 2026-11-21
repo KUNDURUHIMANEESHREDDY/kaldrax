@@ -98,7 +98,8 @@ export interface BenchmarkReviewQuery {
   rationale: string;
   proposed_relevant: string[];
   relevant: string[];
-  status: "pending" | "approved" | "modified" | "rejected";
+  status: "pending" | "approved" | "modified" | "rejected" | "auto_approved";
+  decision_source?: "human" | "automated" | null;
   reviewer?: string | null;
   reviewed_at?: string | null;
   review_note?: string | null;
@@ -111,6 +112,14 @@ export interface BenchmarkReviewState {
   session_path: string;
   memories: BenchmarkReviewMemory[];
   queries: BenchmarkReviewQuery[];
+  automation_runs: Array<{
+    policy: string;
+    triggered_by: string;
+    triggered_at: string;
+    source_sha256: string;
+    query_ids: string[];
+  }>;
+  auto_approved_count: number;
   dataset_approval: { status: string; reviewer?: string | null; reviewed_at?: string | null };
   privacy_screening: { status: string; scope: string; note: string; reviewer?: string | null; reviewed_at?: string | null };
   review_ready: boolean;
@@ -229,7 +238,7 @@ export async function benchmarkReviewUpdate(input: {
   enginePath: string;
   pythonExecutable: string;
   reviewer: string;
-  action: "query" | "dataset-approval" | "privacy-approval";
+  action: "query" | "dataset-approval" | "privacy-approval" | "auto-approve-proposals";
   queryId?: string;
   decision?: "approve" | "reject" | "modify";
   memoryIds?: string[];

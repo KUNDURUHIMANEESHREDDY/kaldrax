@@ -1076,12 +1076,16 @@ def main() -> int:
     benchmark_review_state.add_argument("--version", default="1.0.0")
 
     benchmark_review_update = memory_actions.add_parser(
-        "benchmark-review-update", help="record one explicit human retrieval-label or approval decision",
+        "benchmark-review-update", help="record a human retrieval-label/approval decision or machine auto-accept pending proposals",
     )
     benchmark_review_update.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_retrieval_kaldrax_v1.json"))
     benchmark_review_update.add_argument("--reviewer", required=True)
     benchmark_review_update.add_argument("--session", type=Path, default=None)
-    benchmark_review_update.add_argument("--action", choices=("query", "dataset-approval", "privacy-approval"), required=True)
+    benchmark_review_update.add_argument(
+        "--action",
+        choices=("query", "dataset-approval", "privacy-approval", "auto-approve-proposals"),
+        required=True,
+    )
     benchmark_review_update.add_argument("--query-id", default=None)
     benchmark_review_update.add_argument("--decision", choices=("approve", "reject", "modify"), default=None)
     benchmark_review_update.add_argument("--memory-id", action="append", default=None)

@@ -161,6 +161,33 @@ def test_memory_benchmark_review_update_cli_records_only_explicit_decision(tmp_p
     assert result["queries"][0]["reviewer"] == "operator"
 
 
+
+def test_memory_benchmark_auto_approve_cli_records_machine_provenance_only(tmp_path, monkeypatch, capsys):
+    dataset = tmp_path / "dataset.json"
+    dataset.write_text(json.dumps({
+        "name": "cli-auto-review",
+        "privacy_screening": {"scope": "Public repository files only.", "status": "pending"},
+        "memories": [{"id": "m1", "content": "Project memory uses SQLite."}],
+        "queries": [{"id": "q1", "query": "Where is project memory stored?", "relevant": ["m1"]}],
+    }), encoding="utf-8")
+    session = tmp_path / "review-session.json"
+    monkeypatch.setattr("sys.argv", [
+        "kaldrax", "memory", "benchmark-review-update",
+        "--dataset", str(dataset), "--reviewer", "operator",
+        "--session", str(session), "--action", "auto-approve-proposals",
+    ])
+
+    assert main() == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["queries"][0]["status"] == "auto_approved"
+    assert result["queries"][0]["reviewer"] is None
+    assert result["queries"][0]["decision_source"] == "automated"
+    assert result["review_ready"] is False
+    assert result["dataset_approval"]["status"] == "pending"
+    assert result["privacy_screening"]["status"] == "pending"
+    assert result["export_path"] is None
+
+
 def test_memory_benchmark_cli_runs_without_external_services(monkeypatch, capsys):
     monkeypatch.setattr("sys.argv", ["kaldrax", "memory", "benchmark"])
     monkeypatch.delenv("KALDRAX_EMBEDDING_MODEL", raising=False)

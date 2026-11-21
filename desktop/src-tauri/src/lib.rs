@@ -968,7 +968,7 @@ fn benchmark_review_update(
     if reviewer.trim().is_empty() {
         return Err("Reviewer identity is required.".to_string());
     }
-    if !["query", "dataset-approval", "privacy-approval"].contains(&action.as_str()) {
+    if !["query", "dataset-approval", "privacy-approval", "auto-approve-proposals"].contains(&action.as_str()) {
         return Err("Unsupported benchmark review action.".to_string());
     }
     let mut args = vec![

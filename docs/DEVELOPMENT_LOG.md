@@ -793,3 +793,13 @@ This file records implementation decisions, changes, commands, verification, and
 - Preserved all 36 retrieval judgments as `assistant_proposed_pending_human_review`, the top-level corpus as exploratory, reviewer as unset, and privacy screening as `pending_operator_signoff`.
 - Added a focused CI invocation for the structured memory quality-review case and approval tests.
 - No query labels, dataset approval, or privacy approval were recorded as human decisions. The next operator action is to inspect and approve/correct each query and separately sign off the displayed public-source privacy scope.
+
+
+## 2026-11-21 — Explicit machine auto-review for retrieval proposals
+
+- Added an opt-in `auto-approve-proposals` review action for pending source-proposed relevance labels.
+- Machine acceptance is recorded as `auto_approved`, with a fixed policy identifier, triggering operator, UTC timestamp, source SHA-256, and exact query IDs. It never fills human reviewer or human review timestamp fields.
+- Existing human decisions and rejected proposals are preserved. A human can later reopen a machine-accepted query and explicitly confirm or correct it; that decision receives human provenance.
+- Machine-accepted proposals do not satisfy the human review-ready predicate, dataset annotation approval, privacy approval, or immutable validated export gate.
+- Added the action to the CLI and desktop workflow with an explicit confirmation and separate machine-accepted count.
+- Added regression coverage for machine provenance, approval-gate isolation, human reconfirmation, mixed human/machine sessions, and CLI behavior.
