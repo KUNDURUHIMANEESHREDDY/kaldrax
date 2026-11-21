@@ -361,6 +361,37 @@ def test_auto_approve_preserves_existing_human_decisions_and_rejects_tampered_ma
 
 
 
+
+def test_terminal_review_can_human_reconfirm_machine_accepted_proposal(tmp_path):
+    from kaldrax.memory_annotation import update_annotation_review
+
+    source = tmp_path / "dataset.json"
+    _dataset(source)
+    session = tmp_path / "session.json"
+
+    update_annotation_review(
+        source, reviewer="operator-trigger", action="auto-approve-proposals",
+        session_path=session,
+    )
+    result = run_annotation_review(
+        source,
+        reviewer="human-reviewer",
+        session_path=session,
+        input_fn=_inputs(["a", "s", "s"]),
+        output_fn=lambda _line: None,
+    )
+
+    saved = json.loads(session.read_text(encoding="utf-8"))
+    query = saved["queries"]["q-memory"]
+    assert query["status"] == "approved"
+    assert query["decision_source"] == "human"
+    assert query["reviewer"] == "human-reviewer"
+    assert query["reviewed_at"]
+    assert result["dataset_approval_status"] == "pending"
+    assert result["privacy_approval_status"] == "pending"
+    assert result["export_path"] is None
+
+
 def test_auto_approve_rejects_duplicate_proposed_relevance_ids(tmp_path):
     from kaldrax.memory_annotation import update_annotation_review
 
