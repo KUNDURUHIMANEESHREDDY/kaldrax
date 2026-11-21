@@ -25,24 +25,24 @@ The baseline credential-free CI run (44872710002, commit eea0b6d) passed Python 
 
 ### P0 — Self-contained desktop installation
 
-**Implementation status:** The frozen Windows x64 CLI is configured as a Tauri resource alongside benchmark data. Rust resolves the executable from the application resource directory, locks packaged builds to that runtime, rejects alternate source/executable paths at the Tauri command boundary, and launches the bundled executable with fixed arguments. Source-checkout/Python execution remains available only when no packaged resource is present. Windows CI is being extended to build MSI/NSIS installers and install/smoke-test the NSIS package. These installer checks are not yet verified.
+**Verified for Windows x64:** The MSI and NSIS installers are built by CI. The NSIS package is installed on a clean Windows runner; the installed Tauri desktop is launched; its first-run webview/native engine probe creates app-data run history; and the bundled engine passes legacy-state migration, CLI-help, offline-demo, SQLite and report checks. The packaged runtime is locked to the executable resolved from Tauri resources; installed builds do not use system Python or a source checkout. This is a verified Windows installer build, not yet a signed public release.
 
 **Acceptance:**
 - A clean supported Windows machine can install and launch KALDRAX without Git, a pre-existing Python installation, or a separately cloned source repository.
-- The installer includes a reproducible engine build and its runtime dependencies; the engine version matches the desktop version contract.
+- The installer includes a reproducible engine build and its runtime dependencies; the packaged engine version is embedded and displayed. The desktop package is currently 0.1.0 while the Python engine is 0.6.0, so a formal compatibility/versioning policy still needs to be defined before release.
 - The offline demo, local memory, report listing, and credential-free operations work immediately after installation.
 - The packaged engine is invoked through fixed executable/argument paths, not shell-interpreted strings.
 - MSI and NSIS packages are built in CI and tested on a clean Windows runner.
 - A packaging failure prevents release artifact publication.
 
-**Verified installer evidence:** Windows GitHub Actions run 44876877340 on commit 8537edcff189117f052e2d72503bb43edf891d89 passed Python 3.11/3.13, desktop lint/build, frozen engine build/smoke, Rust packaged-runtime tests, MSI/NSIS generation, NSIS installation, bundled CLI startup, Python-independent legacy migration/source preservation, offline demo, SQLite and JSON-report checks. CI uploaded the MSI/NSIS artifact archive (25,276,005 bytes compressed) and frozen-engine archive (11,411,124 bytes compressed). These are workflow archive sizes, not individual installer sizes. The follow-up commit adds a Tauri GUI startup/app-data probe; its CI run remains pending.
+**Verified installer evidence:** Windows GitHub Actions run [44877341111](https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/actions/runs/44877341111) on commit `c8a36eec2d2c91a310cf41f1d0d02d51bec6680f` passed Python 3.11/3.13, desktop lint/build, frozen engine build/smoke, Rust packaged-runtime tests, MSI/NSIS generation, NSIS installation, installed Tauri GUI startup, bundled-engine auto-detection through native IPC, Python-independent legacy migration/source preservation, offline demo, SQLite and JSON-report checks. CI uploaded the MSI/NSIS archive (25,271,956 bytes compressed) and frozen-engine archive (11,409,470 bytes compressed); these are workflow ZIP sizes, not individual installer file sizes. The MSI is built but only NSIS is installed and smoke-tested in CI.
 
 ### P1 — Portable first-run and configuration
 
 **Status:** First-run defaults no longer point to a developer-specific Windows checkout. Engine and repository paths start empty on fresh installations; existing saved user settings are preserved.
 
 **Remaining acceptance:**
-- First-run onboarding clearly distinguishes bundled engine detection, developer source checkout, repository selection, and optional provider configuration. The UI auto-detects the packaged resource when present; this must be verified in an installed GUI session. Add a packaged-engine status path so end users no longer need to select source/Python.
+- First-run onboarding distinguishes bundled engine detection, developer source checkout, repository selection, and optional provider configuration. Installed GUI startup and automatic bundled-engine detection are verified in Windows CI. Source/Python selectors are hidden for bundled mode.
 - Add direct loopback Ollama support without a credential; remote HTTPS endpoints still require a provider-issued key. Live provider setup remains optional.
 - No user-specific absolute paths appear in shipped defaults, examples, or release configuration.
 - A missing engine, interpreter, Docker daemon, or provider credential produces a clear capability-specific state rather than a generic application failure.
@@ -53,7 +53,7 @@ The baseline credential-free CI run (44872710002, commit eea0b6d) passed Python 
 **Implemented foundation:** Desktop operations now target the Tauri application-data directory under `.kaldrax/`. First engine verification invokes a non-destructive migration command: missing files are copied, SQLite is migrated through the online backup API, symlinks/special files are skipped, and a per-source idempotency marker is recorded. Existing checkout data is never deleted and destination files are never overwritten.
 
 **Remaining acceptance:**
-- Verify every Tauri command and CLI default uses the same OS application-data root, not a source checkout or installer directory. The native bridge paths and Python CLI defaults have been redirected; packaged-runtime mode still needs end-to-end verification.
+- The installed GUI startup probe confirms native engine verification and run-history access use Tauri app-data. Continue auditing all less common stateful commands (review sessions, checkpoints, backup/export/reset) and test their packaged paths.
 - Existing .kaldrax/ data can be discovered and migrated non-destructively, with a manifest and rollback-safe copy.
 - Operators can back up, restore, export, and deliberately reset local data.
 - Schema and artifact compatibility are versioned; interrupted migration never destroys the source data.
@@ -89,7 +89,7 @@ The baseline credential-free CI run (44872710002, commit eea0b6d) passed Python 
 
 P0 packaging decision and build -> packaged-engine Rust integration -> P3 native smoke tests -> P2 app-data migration -> P4 security regression -> P5 release pipeline.
 
-P1 portability is underway and can proceed independently. Provider configuration and live model-quality validation are deliberately deferred until the local product can be installed, launched, exercised, and verified without a provider key.
+P1 portability is underway and can proceed independently. Provider configuration and live model-quality validation remain optional and deliberately deferred. The current Windows installer uses Tauri's default WebView2 `downloadBootstrapper` mode: Windows 10 (April 2018+) and Windows 11 include WebView2, but systems without it need internet access. Tauri's `offlineInstaller` option removes that runtime download dependency but adds about 127 MB; this distribution-size decision remains open.
 
 ## Non-goals for the first desktop release
 

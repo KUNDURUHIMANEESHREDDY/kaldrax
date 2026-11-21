@@ -913,3 +913,14 @@ This file records implementation decisions, changes, commands, verification, and
 - It does not automate visual UI assertions or user interaction; upgrade/repair/uninstall lifecycle and code signing remain outstanding.
 - Tauri WebView2 remains on the default download-bootstrapper install mode; machines missing WebView2 need internet access. Offline WebView2 bundling is a separate installer-size/distribution decision.
 - Preceding run 44876877340 passed frozen engine packaging, native Rust tests, MSI/NSIS build, NSIS installation, packaged legacy migration and offline demo. The GUI startup extension is awaiting a fresh run.
+
+
+## 2026-11-20 — Windows installer and GUI startup verified
+
+- GitHub Actions run `44877341111` on commit `c8a36eec2d2c91a310cf41f1d0d02d51bec6680f` completed successfully.
+- Passed: Python 3.11 and 3.13; desktop Oxlint and TypeScript/Vite production build; Windows x64 frozen-engine build; frozen CLI help/offline-demo/SQLite/report/deterministic evaluator smoke; Rust native packaged-engine tests; Tauri MSI and NSIS build; NSIS installation; installed engine resource/CLI smoke; bundled legacy-state migration without system Python; and installed Tauri GUI startup.
+- The GUI smoke started the installed desktop executable and observed its first-run webview/native engine probe create `%APPDATA%/dev.kaldrax.desktop/.kaldrax/runs`. This verifies packaged resource auto-detection and the native command path at application startup; it does not automate rendered UI assertions or clicks.
+- Artifact `kaldrax-windows-installers-c8a36eec2d2c91a310cf41f1d0d02d51bec6680f` is 25,271,956 bytes compressed and contains MSI and NSIS installers. Only NSIS was installed and smoke-tested in CI. Frozen-engine artifact is 11,409,470 bytes compressed. These values are ZIP sizes, not installed size.
+- Run URL: https://github.com/KUNDURUHIMANEESHREDDY/kaldrax/actions/runs/44877341111
+- Optional live-provider smoke and tag-only memory release-threshold checks were skipped. No API key or hosted model call was used.
+- Remaining release work: upgrade/repair/uninstall and app-data retention, signing and trusted updates, version compatibility policy, Linux/macOS packaging, and whether to bundle the WebView2 offline runtime.

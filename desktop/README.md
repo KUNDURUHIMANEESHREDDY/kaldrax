@@ -136,3 +136,8 @@ Desktop state lives in the platform application-data directory, not inside the i
 ### Windows runtime prerequisite
 
 The packaged desktop includes the KALDRAX engine and benchmark resources and does not need a separate Python installation or source checkout. The default Tauri Windows bundle uses the WebView2 bootstrapper; recent Windows 10/11 releases include WebView2, but a machine missing it needs internet access for the bootstrapper. An offline WebView2 installer can be selected later at the cost of roughly 127 MB additional installer size.
+
+
+### CI-verified Windows install
+
+Windows CI builds both MSI and NSIS packages. The NSIS package is installed and smoke-tested with the bundled engine, including a migration from a legacy checkout, offline demo, SQLite/report persistence, and a first-run launch of the installed Tauri desktop. The GUI startup check verifies native engine detection through the webview but is not a visual or interactive UI test.
