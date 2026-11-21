@@ -131,3 +131,8 @@ The MSI/NSIS bundle contains the PyInstaller one-folder CLI under the Tauri reso
 ### Data migration
 
 Desktop state lives in the platform application-data directory, not inside the install or engine resources. The first source-mode connection copies legacy checkout-local `.kaldrax/` state without deleting the source. SQLite is copied through the online backup API, existing destination files are not overwritten, symlinks/special files are skipped, and an idempotency marker is recorded. The installer smoke exercises an isolated data directory and does not use provider credentials.
+
+
+### Windows runtime prerequisite
+
+The packaged desktop includes the KALDRAX engine and benchmark resources and does not need a separate Python installation or source checkout. The default Tauri Windows bundle uses the WebView2 bootstrapper; recent Windows 10/11 releases include WebView2, but a machine missing it needs internet access for the bootstrapper. An offline WebView2 installer can be selected later at the cost of roughly 127 MB additional installer size.

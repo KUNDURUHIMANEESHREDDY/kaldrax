@@ -47,3 +47,8 @@
 ## Packaged process selection hardening
 
 Packaged builds enforce the resource-root boundary for all Tauri commands. When a bundled resource is present, the Rust command builder ignores the webview-supplied Python executable and launches only the executable resolved from Tauri's resource directory. Alternate engine paths are rejected. The prior source checkout is inspected only by a separate read-only validator for migration; migration execution itself uses the bundled CLI. Developer mode remains available only in builds without packaged resources.
+
+
+## Installed GUI startup verification
+
+The Windows installer smoke now starts the installed Tauri executable and waits for first-run engine verification/run-history initialization to create the Tauri application-data `.kaldrax/runs` directory. This exercises the bundled resource resolver and native command path through the running webview at startup, although it does not assert rendered UI content or perform interactive click-through testing. CI verification of this extension is pending.

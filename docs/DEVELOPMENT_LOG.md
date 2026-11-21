@@ -903,3 +903,13 @@ This file records implementation decisions, changes, commands, verification, and
 - Packaged-mode legacy migration now runs through the bundled executable instead of requiring the prior desktop's saved Python interpreter.
 - Extended the installed NSIS smoke to create a legacy state file, migrate it through the installed executable, verify the destination copy and confirm the original remains intact.
 - This follows the native Rust fix and is awaiting fresh installer CI verification.
+
+
+## 2026-11-20 — Add installed Tauri GUI startup smoke
+
+- The Windows installer smoke now locates and starts the installed KALDRAX desktop executable after the engine CLI/data checks.
+- It waits for the first-run webview flow to invoke the Tauri engine-verification and run-history commands, observed through creation of the Tauri app-data `.kaldrax/runs` directory.
+- This provides CI evidence for installed GUI startup and bundled-engine resource auto-detection, in addition to direct CLI invocation.
+- It does not automate visual UI assertions or user interaction; upgrade/repair/uninstall lifecycle and code signing remain outstanding.
+- Tauri WebView2 remains on the default download-bootstrapper install mode; machines missing WebView2 need internet access. Offline WebView2 bundling is a separate installer-size/distribution decision.
+- Preceding run 44876877340 passed frozen engine packaging, native Rust tests, MSI/NSIS build, NSIS installation, packaged legacy migration and offline demo. The GUI startup extension is awaiting a fresh run.

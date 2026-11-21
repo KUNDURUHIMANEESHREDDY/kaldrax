@@ -35,7 +35,7 @@ The baseline credential-free CI run (44872710002, commit eea0b6d) passed Python 
 - MSI and NSIS packages are built in CI and tested on a clean Windows runner.
 - A packaging failure prevents release artifact publication.
 
-**Prototype evidence:** The PyInstaller one-folder console build and credential-free CLI smoke test passed on a clean Windows x64 GitHub Actions runner (run 44873532171, commit 4a90000). The compressed frozen-engine workflow artifact was 11,404,466 bytes; this is not installed application size. The app-data migration foundation is implemented. The packaged executable/resource integration and native installer workflow have now been added, but their current CI run must pass before these changes count as verified.
+**Verified installer evidence:** Windows GitHub Actions run 44876877340 on commit 8537edcff189117f052e2d72503bb43edf891d89 passed Python 3.11/3.13, desktop lint/build, frozen engine build/smoke, Rust packaged-runtime tests, MSI/NSIS generation, NSIS installation, bundled CLI startup, Python-independent legacy migration/source preservation, offline demo, SQLite and JSON-report checks. CI uploaded the MSI/NSIS artifact archive (25,276,005 bytes compressed) and frozen-engine archive (11,411,124 bytes compressed). These are workflow archive sizes, not individual installer sizes. The follow-up commit adds a Tauri GUI startup/app-data probe; its CI run remains pending.
 
 ### P1 — Portable first-run and configuration
 
@@ -112,3 +112,5 @@ Prototype constraints:
 - Do not store SQLite data, reports, checkpoints, review sessions, logs, or backups beside the packaged executable. The app-data path migration is a prerequisite for using the runtime from a protected install directory.
 - Keep a developer-source mode for local engineering. Packaged mode must not depend on a user-selected source checkout or system Python.
 - Treat this as a prototype decision, not a release claim. Revisit only if a measured Windows build exposes unacceptable startup, size, compatibility, security, or antivirus issues.
+
+**Windows dependency note:** The current Tauri installer keeps the default WebView2 `downloadBootstrapper` install mode. Recent Windows 10 (April 2018+) and Windows 11 releases include WebView2; a system missing it requires internet access for the bootstrapper. A fully offline installer can use Tauri's `offlineInstaller` mode but increases package size by approximately 127 MB. This project has not selected that larger distribution mode.

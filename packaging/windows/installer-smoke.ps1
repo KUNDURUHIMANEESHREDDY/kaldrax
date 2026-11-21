@@ -85,7 +85,52 @@ if ($reports.Count -lt 1) {
 foreach ($report in $reports) {
   Get-Content -LiteralPath $report.FullName -Raw | ConvertFrom-Json | Out-Null
 }
+# Launch the installed Tauri desktop and wait for its first-run engine probe.
+# The probe creates <app-data>/.kaldrax/runs only after the webview calls the
+# named native engine-verification and run-history commands.
+$desktopAppData = Join-Path $env:APPDATA 'dev.kaldrax.desktop'
+if (Test-Path -LiteralPath $desktopAppData) {
+  Remove-Item -LiteralPath $desktopAppData -Recurse -Force
+}
+$desktopExecutable = Get-ChildItem -LiteralPath $installRoot -Filter '*.exe' -File -Recurse |
+  Where-Object { $_.Name -notmatch 'kaldrax-engine|uninstall' } |
+  Select-Object -First 1
+if (-not $desktopExecutable) {
+  throw 'Installed KALDRAX desktop executable was not found.'
+}
+
+$desktopProcess = Start-Process -FilePath $desktopExecutable.FullName -PassThru
+$nativeStartupVerified = $false
+try {
+  $deadline = (Get-Date).AddSeconds(25)
+  $nativeRunsDirectory = Join-Path $desktopAppData '.kaldrax/runs'
+  while ((Get-Date) -lt $deadline) {
+    $desktopProcess.Refresh()
+    if ($desktopProcess.HasExited) {
+      throw "Installed KALDRAX desktop exited during startup (exit $($desktopProcess.ExitCode))."
+    }
+    if (Test-Path -LiteralPath $nativeRunsDirectory -PathType Container) {
+      $nativeStartupVerified = $true
+      break
+    }
+    Start-Sleep -Milliseconds 500
+  }
+  if (-not $nativeStartupVerified) {
+    throw 'Installed Tauri desktop did not complete its bundled-engine first-run probe and create app-data run history.'
+  }
+} finally {
+  $desktopProcess.Refresh()
+  if (-not $desktopProcess.HasExited) {
+    Stop-Process -Id $desktopProcess.Id -Force
+    Wait-Process -Id $desktopProcess.Id -Timeout 10 -ErrorAction SilentlyContinue
+  }
+}
+
+Write-Output 'INSTALLED_TAURI_GUI_STARTUP_OK'
+Write-Output "Verified desktop executable: $($desktopExecutable.FullName)"
+Write-Output "Verified Tauri app data: $desktopAppData"
+
 Write-Output 'INSTALLED_TAURI_RESOURCE_SMOKE_OK'
 Write-Output "Verified installer: $($installer.Name)"
 Write-Output "Verified bundled CLI: $($engine.FullName)"
-Write-Output 'Verified: install, executable discovery, version metadata, CLI help, bundled legacy migration without system Python, source preservation, offline demo, SQLite persistence and JSON report.'
+Write-Output 'Verified: install, Tauri GUI startup, resource auto-detection, native engine health check, app-data initialization, CLI help, bundled legacy migration without system Python, source preservation, offline demo, SQLite persistence and JSON report.'
