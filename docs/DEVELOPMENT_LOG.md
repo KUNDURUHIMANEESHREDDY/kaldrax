@@ -815,3 +815,14 @@ This file records implementation decisions, changes, commands, verification, and
 - Final verification: GitHub Actions run `44872551345` passed Python 3.11, Python 3.13, desktop Oxlint, and the desktop production build. The optional live provider smoke test and v0.6 release-threshold job were skipped.
 
 - Data-minimization regression asserts source metadata is not included in the model prompt payload.
+
+
+## 2026-11-20 — Production-readiness track started
+
+- Confirmed the current Windows desktop integration build still requires a separately installed Python 3.11+ interpreter and a selected KALDRAX source checkout; the Tauri bundle does not include the Python engine/runtime.
+- Confirmed ordinary CI validates both Python test matrices and the desktop frontend but does not build/smoke-test the native Tauri installer. Live provider and tag-only memory release-threshold jobs remain separate and were skipped on the baseline run.
+- Added docs/PRODUCTION_READINESS.md with an ordered Windows-first release plan, acceptance criteria, dependency order, and packaging decision to resolve before implementation.
+- Removed developer-specific absolute engine/repository paths from fresh desktop defaults. Existing saved local settings remain intact.
+- Clarified in the desktop settings and documentation that provider credentials come from the selected model provider and are needed only for live model calls; they are not KALDRAX account credentials.
+- No provider key, hosted model call, or live-provider configuration was used for this work.
+- Verification for this change is the GitHub Actions Python matrix and desktop lint/build run triggered by the commit; native installer packaging and clean-machine runtime behavior remain outstanding.

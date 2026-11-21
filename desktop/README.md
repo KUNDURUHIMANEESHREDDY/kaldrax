@@ -30,7 +30,7 @@ python -m kaldrax.cli --help
 python -m pytest -q
 ```
 
-The desktop's default engine folder is `C:\Users\himan\Projects\kaldrax`. Change it in Settings if your checkout lives elsewhere. The selected folder must contain `pyproject.toml` and `src/kaldrax/cli.py`.
+A fresh installation has no developer-specific engine or repository path preconfigured. Open Settings and browse to the local KALDRAX Python project folder; it must contain `pyproject.toml` and `src/kaldrax/cli.py`. This integration build still expects Python 3.11+ and a separate source checkout. Bundling the engine and runtime is tracked in [the production-readiness plan](../docs/PRODUCTION_READINESS.md).
 
 ## Run the desktop app
 
@@ -64,7 +64,7 @@ The Task Builder maps to the v0.5 task contract and CLI:
 - optional agent namespace
 - memory retrieval limit
 
-A provider API key, executor model and a different evaluator model are required. The API key is held in React state for the current app session and passed to the local Rust bridge as a child-process environment value. It is not stored in LocalStorage or reports. LLM prompts and candidate content are sent to the configured provider; use a local OpenAI-compatible endpoint if data must stay local.
+A key issued by the configured model provider, an executor model and a different evaluator model are required only for live LLM-backed tasks. This is not a KALDRAX service/account key. The offline demo, local SQLite memory and deterministic benchmarks do not require provider credentials. The API key is held in React state for the current app session and passed to the local Rust bridge as a child-process environment value. It is not stored in LocalStorage or reports. LLM prompts and candidate content are sent to the configured provider; use a local OpenAI-compatible endpoint if data must stay local.
 
 ### Run history and details
 Runs are read from actual JSON files in `.kaldrax/runs/`. Run detail displays the engine event sequence, iteration evaluations, criterion evidence quotes, final candidate and provider budget/usage when the report includes it. The candidate is a text artifact and does not imply repository files were changed.

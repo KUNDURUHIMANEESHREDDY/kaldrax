@@ -7,7 +7,7 @@
 - Accessibility target: WCAG 2.2 AA baseline.
 
 ## Source of truth
-- Python engine: `C:\Users\himan\Projects\kaldrax`, branch `main`, commit `98d85f9` at completion of this integration.
+- Python engine: the local source checkout selected by the operator in Settings. Fresh installations do not assume a developer-specific path; the current integration build still requires a separate Python 3.11+ checkout.
 - Product and architecture: engine repository `docs/PRD.md`, `docs/ARCHITECTURE.md`, `README.md`, CLI and typed run models.
 - UI design: `DESIGN.md`.
 - Runtime token/component source: `src/styles/kaldrax.css`.
