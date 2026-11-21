@@ -351,7 +351,7 @@ def test_auto_approve_preserves_existing_human_decisions_and_rejects_tampered_ma
     assert state["auto_approved_count"] == 1
 
     saved = json.loads(session.read_text(encoding="utf-8"))
-    saved["queries"]["q-auto"]["decision_source"] = "human"
+    saved["queries"]["q-auto"]["decision_source"] = []
     session.write_text(json.dumps(saved), encoding="utf-8")
     with pytest.raises(ValueError, match="auto-approved query q-auto lacks valid machine provenance"):
         update_annotation_review(

@@ -258,12 +258,14 @@ def _validate_session_state(
         ):
             raise ValueError(f"review session query {query_id} has invalid relevance labels")
         status = state.get("status")
+        if not isinstance(status, str):
+            raise ValueError(f"review session query {query_id} has an invalid review status")
         reviewer, reviewed_at = state.get("reviewer"), state.get("reviewed_at")
         decision_source = state.get("decision_source")
         if status == "pending":
             if (
                 reviewer is not None or reviewed_at is not None or relevant != proposed
-                or decision_source not in {None, ""}
+                or (decision_source is not None and decision_source != "")
             ):
                 raise ValueError(f"pending query {query_id} contains unreviewed state changes")
         elif status == "auto_approved":
@@ -276,14 +278,14 @@ def _validate_session_state(
                 raise ValueError(f"auto-approved query {query_id} lacks valid machine provenance")
         elif status == "rejected":
             if (
-                relevant or decision_source not in {None, "human"}
+                relevant or (decision_source is not None and decision_source != "human")
                 or not isinstance(reviewer, str) or not reviewer.strip()
                 or not _valid_review_timestamp(reviewed_at)
             ):
                 raise ValueError(f"rejected query {query_id} lacks valid review provenance")
         elif status in _REVIEWED_QUERY_STATES:
             if (
-                not relevant or decision_source not in {None, "human"}
+                not relevant or (decision_source is not None and decision_source != "human")
                 or not isinstance(reviewer, str) or not reviewer.strip()
                 or not _valid_review_timestamp(reviewed_at)
             ):
