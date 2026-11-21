@@ -36,6 +36,9 @@ jobs:
       - name: Run test suite
         run: python -m pytest -q
 
+      - name: Verify memory quality review state and approval API tests
+        run: python -m pytest -q tests/test_memory_quality_review.py
+
       - name: Run project memory retrieval benchmark
         run: python -m kaldrax.cli memory benchmark
 
