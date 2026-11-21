@@ -1,7 +1,7 @@
 """Explainable contradiction-candidate detection for engineering memories.
 
 This module detects review candidates, not truth. It combines opposition
-vocabularies, subject overlap, optional local embedding similarity, and
+vocabularies, subject overlap, optional hosted embedding similarity, and
 environment scoping. A human still resolves every candidate.
 """
 from __future__ import annotations
