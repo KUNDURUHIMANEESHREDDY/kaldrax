@@ -12,8 +12,31 @@ from pathlib import Path
 from uuid import uuid4
 
 
-def _copy_regular_file(source: Path, destination: Path) -> bool:
-    destination.parent.mkdir(parents=True, exist_ok=True)
+def _ensure_destination_parent(root: Path, parent: Path) -> None:
+    """Create destination parents while rejecting symlinks and non-directory components."""
+    try:
+        relative = parent.relative_to(root)
+    except ValueError:
+        raise PermissionError("destination parent escaped the application-data root") from None
+
+    current = root
+    for component in relative.parts:
+        current = current / component
+        try:
+            info = current.lstat()
+        except FileNotFoundError:
+            try:
+                current.mkdir()
+            except FileExistsError:
+                info = current.lstat()
+            else:
+                continue
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+            raise PermissionError("destination path contains a symlink or non-directory component")
+
+
+def _copy_regular_file(source: Path, destination: Path, destination_root: Path) -> bool:
+    _ensure_destination_parent(destination_root, destination.parent)
     if destination.exists():
         return False
     temporary = destination.with_name(f".{destination.name}.{uuid4().hex}.migration-tmp")
@@ -29,8 +52,8 @@ def _copy_regular_file(source: Path, destination: Path) -> bool:
         temporary.unlink(missing_ok=True)
 
 
-def _backup_sqlite_database(source: Path, destination: Path) -> bool:
-    destination.parent.mkdir(parents=True, exist_ok=True)
+def _backup_sqlite_database(source: Path, destination: Path, destination_root: Path) -> bool:
+    _ensure_destination_parent(destination_root, destination.parent)
     if destination.exists():
         return False
     temporary = destination.with_name(f".{destination.name}.{uuid4().hex}.migration-tmp")
@@ -112,7 +135,7 @@ def migrate_state_directory(source_dir: Path | str, destination_dir: Path | str)
     database_source = source / "memory.sqlite3"
     database_destination = destination / "memory.sqlite3"
     if database_source.is_file() and not database_source.is_symlink():
-        if _backup_sqlite_database(database_source, database_destination):
+        if _backup_sqlite_database(database_source, database_destination, destination):
             files_copied += 1
             bytes_copied += database_source.stat().st_size
 
@@ -153,7 +176,7 @@ def migrate_state_directory(source_dir: Path | str, destination_dir: Path | str)
                 continue
             target = destination / relative
             try:
-                copied = _copy_regular_file(candidate, target)
+                copied = _copy_regular_file(candidate, target, destination)
             except OSError as exc:
                 raise RuntimeError(
                     f"could not migrate {relative.as_posix()}: {type(exc).__name__}"

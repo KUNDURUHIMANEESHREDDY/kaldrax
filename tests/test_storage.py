@@ -88,3 +88,23 @@ def test_migration_rejects_symlinked_destination_without_writing_through_it(tmp_
     with pytest.raises(ValueError, match="destination must not be a symlink"):
         migrate_state_directory(source, destination_link)
     assert list(destination_target.iterdir()) == []
+
+
+def test_migration_rejects_symlinked_destination_subdirectory(tmp_path: Path):
+    source = tmp_path / "source"
+    destination = tmp_path / "app-data"
+    external = tmp_path / "outside"
+    (source / "runs").mkdir(parents=True)
+    destination.mkdir()
+    external.mkdir()
+    (source / "runs" / "report.json").write_text('{"safe":true}', encoding="utf-8")
+    try:
+        (destination / "runs").symlink_to(external, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is not permitted on this platform")
+
+    with pytest.raises(RuntimeError, match="could not migrate runs/report.json"):
+        migrate_state_directory(source, destination)
+
+    assert list(external.iterdir()) == []
+    assert (source / "runs" / "report.json").is_file()

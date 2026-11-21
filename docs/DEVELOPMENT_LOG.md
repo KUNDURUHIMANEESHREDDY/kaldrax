@@ -877,3 +877,11 @@ This file records implementation decisions, changes, commands, verification, and
 - The first packaged-runtime integration CI exposed a TypeScript error: the Overview component referenced EngineStatus without receiving it as a prop.
 - Added a typed `bundled` prop and passed the connected engine's runtime mode at the route boundary.
 - Python 3.11 and 3.13 passed on the integration run; desktop compilation failed only on this missing component prop. The Windows installer job was still running at the time of this correction.
+
+
+## 2026-11-20 — Reject symlinked migration destination subdirectories
+
+- Security review found that checking source symlinks alone was insufficient: an existing destination subdirectory symlink could redirect a copied file outside the app-data root.
+- Added parent-by-parent destination checks before directory creation and file/SQLite writes. Symlinks and non-directory path components cause migration to fail closed.
+- Added a regression test proving a symlinked `runs/` destination cannot write a report into an external directory.
+- CI verification is pending for this additional hardening.
