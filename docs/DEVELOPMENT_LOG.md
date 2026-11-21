@@ -826,3 +826,12 @@ This file records implementation decisions, changes, commands, verification, and
 - Clarified in the desktop settings and documentation that provider credentials come from the selected model provider and are needed only for live model calls; they are not KALDRAX account credentials.
 - No provider key, hosted model call, or live-provider configuration was used for this work.
 - Verification for this change is the GitHub Actions Python matrix and desktop lint/build run triggered by the commit; native installer packaging and clean-machine runtime behavior remain outstanding.
+
+## 2026-11-20 — Windows frozen-engine packaging prototype
+
+- Added a Windows x64 packaging entrypoint that calls the existing Python CLI without changing CLI behavior.
+- Added a pinned PyInstaller build-tool requirement and a PowerShell one-folder build script. Generated files stay under ignored build/windows/.
+- Added a Windows CI job using Python 3.13.17 to build the frozen CLI, verify its help output, run the offline demo against temporary SQLite/report paths, and execute the deterministic evaluator benchmark using packaged fixture data.
+- The job uploads the frozen engine directory and build-toolchain evidence only after the credential-free smoke checks pass.
+- The Rust bridge and Tauri installer are not yet connected to this resource. The prototype is not yet a self-contained desktop release.
+- No provider credentials or hosted model requests are involved.

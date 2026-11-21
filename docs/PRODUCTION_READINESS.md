@@ -19,7 +19,7 @@ The repository already contains the v0.6 Python engine and a Tauri 2 + React des
 - Repository patch generation, file-scope enforcement, disposable Docker verification, reviewer/evaluator gates, and explicit patch application.
 - Desktop workflows for offline demo, runs, memory, team execution, sandbox operations, and repository inspection/editing.
 
-The latest credential-free CI run at the start of this plan (44872710002, commit eea0b6d) passed Python 3.11 and 3.13 tests, deterministic quality checks, the Python 3.13 Docker integration steps, desktop lint, and the Vite production build. The optional live-provider smoke test and tag-only memory release-threshold job were skipped. The CI workflow does not yet build and smoke-test the native Tauri installer.
+The baseline credential-free CI run (44872710002, commit eea0b6d) passed Python 3.11 and 3.13 tests, deterministic quality checks, the Python 3.13 Docker integration steps, desktop lint, and the Vite production build. The portable-default change (44873241896, commit d1a98a5) also passed both Python jobs and desktop lint/build. The optional live-provider smoke test and tag-only memory release-threshold job were skipped. CI now also builds and smoke-tests a frozen Windows engine prototype; it does not yet build or install the native Tauri MSI/NSIS installer.
 
 ## Release blockers and workstreams
 
@@ -35,7 +35,7 @@ The latest credential-free CI run at the start of this plan (44872710002, commit
 - MSI and NSIS packages are built in CI and tested on a clean Windows runner.
 - A packaging failure prevents release artifact publication.
 
-**Implementation sequence:** choose and document the engine packaging format; create a reproducible Windows build; connect the Rust bridge to the packaged engine while retaining an explicit developer mode; then smoke-test the installed application.
+**Architecture decision:** ADR 0013 selects a PyInstaller one-folder console build for Windows x64, embedded as a Tauri resource and launched by the existing Rust process manager. The first prototype build and smoke check is now a dedicated Windows CI job. This does not yet make the Tauri installer self-contained; Rust runtime selection, app-data migration, native installer build, and clean-machine installation remain open.
 
 ### P1 — Portable first-run and configuration
 

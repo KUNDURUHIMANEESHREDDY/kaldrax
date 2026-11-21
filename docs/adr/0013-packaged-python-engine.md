@@ -40,10 +40,10 @@ References:
 - Installer size, cold/warm startup, antivirus behavior, crash diagnostics, dependency collection, reproducibility, upgrade/uninstall behavior, and clean-machine installation remain measured prototype gates.
 - If the one-folder prototype fails those gates, the decision must be revisited with measured evidence rather than switching to one-file by assumption.
 
-## Verification required
+## Packaging prototype implementation
 
-- Build the frozen CLI from a clean Windows x64 CI runner with pinned inputs.
-- Run `--help` and representative credential-free commands from the frozen directory.
+- Build the frozen CLI from a clean Windows x64 CI runner with Python 3.13.17 and PyInstaller 6.22.3 pinned.
+- Run `--help`, the offline demo with isolated SQLite/report paths, and the deterministic evaluator benchmark from the frozen directory; the benchmark invocation also proves the evaluator fixture was packaged.
 - Confirm packaged data files are readable and writable state is redirected to the app-data location.
 - Build MSI and NSIS installers, install on a clean Windows runner without Python/Git, and verify first launch, offline demo, memory, reports, upgrade, and uninstall data-retention semantics.
 - Verify no API key is needed for installation, first launch, offline demo, or deterministic operations.
