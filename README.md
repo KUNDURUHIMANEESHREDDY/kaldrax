@@ -115,7 +115,7 @@ kaldrax memory benchmark
 
 The benchmark reports Recall@k, Precision@k, NDCG@k, mean reciprocal rank, top-1 accuracy, and per-category results. The default curated corpus contains 40 synthetic memories and 42 queries across engineering workloads. It uses an isolated temporary database and does not modify project memory. Configure a hosted embedding model and API key to benchmark hybrid retrieval; without one it measures the lexical fallback.
 
-Evaluate LLM memory extraction against the 10-case, 30-claim annotated corpus:
+Evaluate LLM memory extraction against the expanded 30-case, 70-proposed-claim synthetic corpus:
 
 ```powershell
 $env:KALDRAX_API_KEY = "..."
@@ -123,7 +123,7 @@ $env:KALDRAX_MODEL = "extraction-model"
 kaldrax memory extraction-benchmark
 ```
 
-This makes one extraction request per case (10 by default). The report includes claim precision/recall/F1 and confidence Brier/ECE metrics. `KALDRAX_MODEL` must point at a hosted HTTPS provider endpoint. The benchmark's `match_terms` are explicit annotation rules, and its confidence metrics describe this sample only.
+This makes one hosted extraction request per case (30 in the current corpus). The report includes claim precision/recall/F1 and confidence Brier/ECE metrics. `KALDRAX_MODEL` must point at a hosted HTTPS provider endpoint. The benchmark's `match_terms` are assistant-proposed annotation rules and remain pending human review; confidence metrics describe this synthetic sample only.
 
 ## Repository-grounded memory validation
 
