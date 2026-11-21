@@ -107,6 +107,28 @@ new file mode 100644
     assert RepositoryWorkspace.changed_paths(patch) == ("new_file.py",)
 
 
+@pytest.mark.parametrize(
+    "mode_line",
+    (
+        "new file mode 120000",
+        "deleted file mode 120000",
+        "new file mode 160000",
+        "deleted file mode 160000",
+    ),
+)
+def test_patch_rejects_symlink_and_gitlink_modes(mode_line):
+    patch = f"""diff --git a/app.py b/app.py
+{mode_line}
+--- a/app.py
++++ b/app.py
+@@ -1 +1 @@
+-old
++new
+"""
+    with pytest.raises(WorkspaceError, match="mode changes"):
+        RepositoryWorkspace.changed_paths(patch)
+
+
 def test_snapshot_prioritizes_source_and_tests_over_large_documentation(tmp_path):
     root = tmp_path / "repo"
     docs = "d" * 45_000

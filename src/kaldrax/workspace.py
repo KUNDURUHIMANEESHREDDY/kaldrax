@@ -265,7 +265,10 @@ class RepositoryWorkspace:
             raise WorkspaceError("builder patch exceeds the 750 KB limit")
         forbidden_markers = (
             "GIT binary patch", "Binary files ", "Submodule ",
-            "old mode ", "new mode ", "rename from ", "rename to ",
+            "old mode ", "new mode ",
+            "new file mode 120000", "deleted file mode 120000",
+            "new file mode 160000", "deleted file mode 160000",
+            "rename from ", "rename to ",
         )
         if any(marker in patch for marker in forbidden_markers):
             raise WorkspaceError("binary patches, renames, submodules, and mode changes are not supported")
