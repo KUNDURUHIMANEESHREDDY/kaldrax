@@ -64,10 +64,10 @@ The Task Builder maps to the v0.5 task contract and CLI:
 - optional agent namespace
 - memory retrieval limit
 
-A key issued by the configured model provider, an executor model and a different evaluator model are required only for live LLM-backed tasks. This is not a KALDRAX service/account key. The offline demo, local SQLite memory and deterministic benchmarks do not require provider credentials. The API key is held in React state for the current app session and passed to the local Rust bridge as a child-process environment value. It is not stored in LocalStorage or reports. LLM prompts and candidate content are sent to the configured provider; use a local OpenAI-compatible endpoint if data must stay local.
+A key issued by the configured model provider, an executor model and a different evaluator model are required only for live LLM-backed tasks. This is not a KALDRAX service/account key. The offline demo, local SQLite memory and deterministic benchmarks do not require provider credentials. The provider key is held in React state for the current app session and passed to the local Rust bridge as a child-process environment value. It is not stored in LocalStorage or reports. LLM prompts and candidate content are sent to the configured provider. This integration currently accepts HTTPS provider endpoints; direct loopback Ollama support is not implemented yet. Offline workflows do not require a provider key.
 
 ### Run history and details
-Runs are read from actual JSON files in `.kaldrax/runs/`. Run detail displays the engine event sequence, iteration evaluations, criterion evidence quotes, final candidate and provider budget/usage when the report includes it. The candidate is a text artifact and does not imply repository files were changed.
+Runs are read from actual JSON files in the OS application-data directory under `.kaldrax/runs/`. Run detail displays the engine event sequence, iteration evaluations, criterion evidence quotes, final candidate and provider budget/usage when the report includes it. The candidate is a text artifact and does not imply repository files were changed.
 
 ## Connected workflow surfaces
 
@@ -118,3 +118,8 @@ The desktop now connects these v0.5 engine capabilities:
 - Repository workspace: inspect a selected Git worktree, list/read supported text/code files and explicitly apply a single-file replacement. Existing files require the last-read SHA-256; backups are created before atomic writes.
 
 Repository writes are operator-approved and single-file only. The desktop does not run arbitrary commands from a selected worktree, install its dependencies, run all project tests, create commits, push branches or deploy. The Docker sandbox still executes a single Python file rather than a complete project.
+
+
+### Local application data
+
+Desktop-owned state is stored under the operating system application-data directory in a `.kaldrax/` subdirectory, separate from the engine checkout and installer resources. On first engine verification, the desktop copies legacy `.kaldrax/` files from the selected checkout into the app-data directory. The original checkout data is not removed or overwritten. SQLite memory is copied with SQLite's backup API so committed WAL transactions are included. Existing destination files take precedence. A per-source migration marker makes the operation idempotent; symlinks and special files are skipped.

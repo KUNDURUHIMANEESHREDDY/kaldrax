@@ -3,8 +3,32 @@ import subprocess
 
 import pytest
 
-from kaldrax.cli import main
+from kaldrax.cli import _state_path, main
 from kaldrax.memory import MemoryRecord, MemoryStatus, MemoryType, SQLiteMemoryStore
+
+
+def test_cli_state_paths_use_configured_application_data_directory(tmp_path, monkeypatch):
+    monkeypatch.setenv("KALDRAX_DATA_DIR", str(tmp_path))
+    assert _state_path("memory.sqlite3") == tmp_path / ".kaldrax" / "memory.sqlite3"
+
+
+def test_storage_migrate_cli_copies_legacy_state(tmp_path, monkeypatch, capsys):
+    source = tmp_path / "legacy" / ".kaldrax"
+    destination = tmp_path / "app-data" / ".kaldrax"
+    source.mkdir(parents=True)
+    (source / "runs").mkdir()
+    (source / "runs" / "example.json").write_text('{"run_id":"example"}', encoding="utf-8")
+    monkeypatch.setattr("sys.argv", [
+        "kaldrax", "storage", "migrate",
+        "--source", str(source),
+        "--destination", str(destination),
+    ])
+
+    assert main() == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "migrated"
+    assert (destination / "runs" / "example.json").is_file()
+    assert (source / "runs" / "example.json").is_file()
 
 
 def test_memory_benchmark_model_review_requires_explicit_provider_data_egress(tmp_path, monkeypatch):

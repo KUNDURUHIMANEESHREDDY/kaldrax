@@ -11,6 +11,7 @@ from .agents import MultiAgentCoordinator
 from .benchmark import load_cases, run_benchmark
 from .budgets import RunBudget
 from .sandbox import SandboxRunner
+from .storage import migrate_state_directory
 from .engineering import RepositoryTeamCoordinator
 from .workspace_sandbox import WorkspaceSandboxRunner
 
@@ -58,8 +59,17 @@ from .orchestration import (
 from .live_validation import run_live_validation
 
 
+def _data_directory() -> Path:
+    configured = os.getenv("KALDRAX_DATA_DIR", "").strip()
+    return Path(configured).expanduser() if configured else Path.cwd()
+
+
+def _state_path(*parts: str) -> Path:
+    return _data_directory() / ".kaldrax" / Path(*parts)
+
+
 def _memory_path(args: argparse.Namespace) -> Path:
-    return args.memory_db or Path(".kaldrax/memory.sqlite3")
+    return args.memory_db or _state_path("memory.sqlite3")
 
 
 def _embedding_provider() -> HostedEmbeddingProvider | None:
@@ -266,7 +276,7 @@ def _team(args: argparse.Namespace) -> int:
             )
         RepositoryWorkspace(args.workspace).checkpoint_binding()
         repository_sandbox = WorkspaceSandboxRunner(
-            workspace_root=getattr(args, "sandbox_workspace_root", Path(".kaldrax/sandbox")),
+            workspace_root=getattr(args, "sandbox_workspace_root", _state_path("sandbox")),
             image=image,
         )
         repository_sandbox.preflight_full_suite()
@@ -457,7 +467,7 @@ def _orchestrate(args: argparse.Namespace) -> int:
                 "full verification requires KALDRAX_SANDBOX_IMAGE pointing to a prebuilt Python/Node image with pytest and lockfile-matched desktop dependencies"
             )
         repository_sandbox = WorkspaceSandboxRunner(
-            workspace_root=getattr(args, "sandbox_workspace_root", Path(".kaldrax/sandbox")),
+            workspace_root=getattr(args, "sandbox_workspace_root", _state_path("sandbox")),
             image=image,
         )
         repository_sandbox.preflight_full_suite()
@@ -469,7 +479,7 @@ def _orchestrate(args: argparse.Namespace) -> int:
         "acceptance_criteria": list(args.criterion or ()),
     }, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
     checkpoint_path = args.checkpoint or (
-        Path(".kaldrax/checkpoints") / f"{request_fingerprint}.json"
+        _state_path("checkpoints") / f"{request_fingerprint}.json"
     )
     checkpoint_store = CheckpointStore(
         checkpoint_path,
@@ -867,7 +877,7 @@ def _orchestrate(args: argparse.Namespace) -> int:
                 workspace_root=workspace_root,
                 sandbox=repository_sandbox or WorkspaceSandboxRunner(
                     workspace_root=getattr(
-                        args, "sandbox_workspace_root", Path(".kaldrax/sandbox")
+                        args, "sandbox_workspace_root", _state_path("sandbox")
                     ),
                     image=os.getenv("KALDRAX_SANDBOX_IMAGE") or None,
                 ),
@@ -1022,7 +1032,7 @@ def main() -> int:
     commands = parser.add_subparsers(dest="command", required=True)
 
     demo = commands.add_parser("demo", help="run the offline recursive-loop demonstration")
-    demo.add_argument("--artifacts", type=Path, default=Path(".kaldrax/runs"))
+    demo.add_argument("--artifacts", type=Path, default=_state_path("runs"))
     demo.add_argument("--memory-db", type=Path, default=None)
     demo.add_argument("--project", default="default")
     demo.add_argument("--progress-jsonl", type=Path, default=None)
@@ -1031,7 +1041,7 @@ def main() -> int:
     run.add_argument("--objective", required=True)
     run.add_argument("--criterion", action="append", required=True, help="acceptance criterion; repeat for multiple")
     run.add_argument("--max-iterations", type=int, default=3)
-    run.add_argument("--artifacts", type=Path, default=Path(".kaldrax/runs"))
+    run.add_argument("--artifacts", type=Path, default=_state_path("runs"))
     run.add_argument("--memory-db", type=Path, default=None)
     run.add_argument("--project", default="default", help="memory isolation key for this project")
     run.add_argument("--agent", default=None, help="optional agent namespace; project-shared memory remains visible")
@@ -1047,35 +1057,35 @@ def main() -> int:
     search.add_argument("--limit", type=int, default=10)
     search.add_argument("--agent", default=None)
     search.add_argument("--include-pending", action="store_true")
-    search.add_argument("--memory-db", type=Path, default=Path(".kaldrax/memory.sqlite3"))
+    search.add_argument("--memory-db", type=Path, default=_state_path("memory.sqlite3"))
 
     review = memory_actions.add_parser("review", help="approve or reject a pending semantic memory")
     review.add_argument("--id", required=True)
     review.add_argument("--decision", required=True, choices=("approve", "reject"))
     review.add_argument("--reviewer", default="local-user")
-    review.add_argument("--memory-db", type=Path, default=Path(".kaldrax/memory.sqlite3"))
+    review.add_argument("--memory-db", type=Path, default=_state_path("memory.sqlite3"))
 
     conflicts = memory_actions.add_parser("conflicts", help="detect and list possible semantic contradictions")
     conflicts.add_argument("--project", required=True)
-    conflicts.add_argument("--memory-db", type=Path, default=Path(".kaldrax/memory.sqlite3"))
+    conflicts.add_argument("--memory-db", type=Path, default=_state_path("memory.sqlite3"))
 
     resolve = memory_actions.add_parser("resolve-conflict", help="keep one side of a reviewed contradiction")
     resolve.add_argument("--conflict-id", required=True)
     resolve.add_argument("--keep-memory-id", required=True)
     resolve.add_argument("--reviewer", default="local-user")
-    resolve.add_argument("--memory-db", type=Path, default=Path(".kaldrax/memory.sqlite3"))
+    resolve.add_argument("--memory-db", type=Path, default=_state_path("memory.sqlite3"))
 
     expire = memory_actions.add_parser("expire", help="mark expired records inactive")
     expire.add_argument("--project", default=None)
-    expire.add_argument("--memory-db", type=Path, default=Path(".kaldrax/memory.sqlite3"))
+    expire.add_argument("--memory-db", type=Path, default=_state_path("memory.sqlite3"))
 
     reindex = memory_actions.add_parser("reindex", help="create or refresh local embeddings")
     reindex.add_argument("--project", default=None)
-    reindex.add_argument("--memory-db", type=Path, default=Path(".kaldrax/memory.sqlite3"))
+    reindex.add_argument("--memory-db", type=Path, default=_state_path("memory.sqlite3"))
 
     consolidate = memory_actions.add_parser("consolidate", help="merge exact duplicate memories")
     consolidate.add_argument("--project", default=None)
-    consolidate.add_argument("--memory-db", type=Path, default=Path(".kaldrax/memory.sqlite3"))
+    consolidate.add_argument("--memory-db", type=Path, default=_state_path("memory.sqlite3"))
 
     benchmark = memory_actions.add_parser("benchmark", help="measure retrieval quality on an annotated engineering corpus")
     benchmark.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_retrieval_engineering_v2.json"))
@@ -1095,7 +1105,7 @@ def main() -> int:
     benchmark_annotate.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_retrieval_kaldrax_v1.json"))
     benchmark_annotate.add_argument("--reviewer", required=True, help="reviewer identity recorded with every decision")
     benchmark_annotate.add_argument("--session", type=Path, default=None, help="resumable review-session path")
-    benchmark_annotate.add_argument("--export-dir", type=Path, default=Path(".kaldrax/benchmark-exports"))
+    benchmark_annotate.add_argument("--export-dir", type=Path, default=_state_path("benchmark-exports"))
     benchmark_annotate.add_argument("--version", default="1.0.0", help="immutable export version (MAJOR.MINOR.PATCH)")
 
     benchmark_review_state = memory_actions.add_parser(
@@ -1104,7 +1114,7 @@ def main() -> int:
     benchmark_review_state.add_argument("--dataset", type=Path, default=Path("benchmarks/memory_retrieval_kaldrax_v1.json"))
     benchmark_review_state.add_argument("--reviewer", required=True)
     benchmark_review_state.add_argument("--session", type=Path, default=None)
-    benchmark_review_state.add_argument("--export-dir", type=Path, default=Path(".kaldrax/benchmark-exports"))
+    benchmark_review_state.add_argument("--export-dir", type=Path, default=_state_path("benchmark-exports"))
     benchmark_review_state.add_argument("--version", default="1.0.0")
 
     benchmark_review_update = memory_actions.add_parser(
@@ -1129,8 +1139,8 @@ def main() -> int:
         help="confirm that the source corpus and queries may be sent to the configured model endpoint",
     )
     benchmark_review_update.add_argument("--confidence-threshold", type=float, default=0.75)
-    benchmark_review_update.add_argument("--ai-export-dir", type=Path, default=Path(".kaldrax/benchmark-ai-exports"))
-    benchmark_review_update.add_argument("--export-dir", type=Path, default=Path(".kaldrax/benchmark-exports"))
+    benchmark_review_update.add_argument("--ai-export-dir", type=Path, default=_state_path("benchmark-ai-exports"))
+    benchmark_review_update.add_argument("--export-dir", type=Path, default=_state_path("benchmark-exports"))
     benchmark_review_update.add_argument("--version", default="1.0.0")
 
     contradiction_benchmark = memory_actions.add_parser("contradiction-benchmark", help="evaluate contradiction candidates against labeled pairs")
@@ -1150,7 +1160,7 @@ def main() -> int:
     quality_review.add_argument("--reviewer", required=True)
     quality_review.add_argument("--contradiction-dataset", type=Path, default=Path("benchmarks/memory_contradictions_v1.json"))
     quality_review.add_argument("--extraction-dataset", type=Path, default=Path("benchmarks/memory_extraction_v1.json"))
-    quality_review.add_argument("--session", type=Path, default=Path(".kaldrax/memory-quality-review.session.json"))
+    quality_review.add_argument("--session", type=Path, default=_state_path("memory-quality-review.session.json"))
     quality_review.add_argument("--export-dir", type=Path, default=Path("benchmarks/reviewed"))
     quality_review.add_argument("--retrieval-dataset", type=Path, default=Path("benchmarks/memory_retrieval_kaldrax_v1.json"))
     quality_review.add_argument("--approval-file", type=Path, default=DEFAULT_APPROVAL)
@@ -1162,7 +1172,7 @@ def main() -> int:
     quality_review_state.add_argument("--reviewer", required=True)
     quality_review_state.add_argument("--contradiction-dataset", type=Path, default=Path("benchmarks/memory_contradictions_v1.json"))
     quality_review_state.add_argument("--extraction-dataset", type=Path, default=Path("benchmarks/memory_extraction_v1.json"))
-    quality_review_state.add_argument("--session", type=Path, default=Path(".kaldrax/memory-quality-review.desktop.session.json"))
+    quality_review_state.add_argument("--session", type=Path, default=_state_path("memory-quality-review.desktop.session.json"))
 
     quality_review_update = memory_actions.add_parser(
         "quality-review-update",
@@ -1171,8 +1181,8 @@ def main() -> int:
     quality_review_update.add_argument("--reviewer", required=True)
     quality_review_update.add_argument("--contradiction-dataset", type=Path, default=Path("benchmarks/memory_contradictions_v1.json"))
     quality_review_update.add_argument("--extraction-dataset", type=Path, default=Path("benchmarks/memory_extraction_v1.json"))
-    quality_review_update.add_argument("--session", type=Path, default=Path(".kaldrax/memory-quality-review.desktop.session.json"))
-    quality_review_update.add_argument("--export-dir", type=Path, default=Path(".kaldrax/memory-quality-exports"))
+    quality_review_update.add_argument("--session", type=Path, default=_state_path("memory-quality-review.desktop.session.json"))
+    quality_review_update.add_argument("--export-dir", type=Path, default=_state_path("memory-quality-exports"))
     quality_review_update.add_argument("--action", choices=("case", "dataset-approval"), required=True)
     quality_review_update.add_argument("--kind", choices=("contradiction", "extraction"), required=True)
     quality_review_update.add_argument("--case-id", default=None)
@@ -1203,15 +1213,15 @@ def main() -> int:
     quality_report.add_argument("--extraction-dataset", type=Path, default=Path("benchmarks/memory_extraction_v1.json"))
     quality_report.add_argument("--thresholds", type=Path, default=Path("benchmarks/memory_release_thresholds_v1.json"))
     quality_report.add_argument("--approval-file", type=Path, default=DEFAULT_APPROVAL)
-    quality_report.add_argument("--json-report", type=Path, default=Path(".kaldrax/evaluation/memory-quality.json"))
-    quality_report.add_argument("--markdown-report", type=Path, default=Path(".kaldrax/evaluation/memory-quality.md"))
+    quality_report.add_argument("--json-report", type=Path, default=_state_path("evaluation/memory-quality.json"))
+    quality_report.add_argument("--markdown-report", type=Path, default=_state_path("evaluation/memory-quality.md"))
     quality_report.add_argument("--k", type=int, default=3)
     quality_report.add_argument("--live-extraction", action="store_true", help="run the configured live extraction provider")
 
 
     provider = commands.add_parser("provider-check", help="smoke-test configured executor and evaluator models")
     live = commands.add_parser("validate-live", help="run credential-gated provider, Memory, Team Run and Docker validation")
-    live.add_argument("--artifacts", type=Path, default=Path(".kaldrax/validation"))
+    live.add_argument("--artifacts", type=Path, default=_state_path("validation"))
     live.add_argument("--timeout", type=int, default=90, help="Docker verification timeout in seconds (1-120)")
     benchmark_eval = commands.add_parser("benchmark-evaluator", help="measure evaluator behavior against a regression fixture")
     benchmark_eval.add_argument("--mode", choices=("deterministic", "llm"), default="deterministic")
@@ -1230,7 +1240,7 @@ def main() -> int:
     orchestrate.add_argument("--checkpoint", type=Path, default=None)
     orchestrate.add_argument("--fresh", action="store_true", help="ignore an existing checkpoint")
     orchestrate.add_argument("--retry-failed", action="store_true", help="explicitly retry previously failed tasks")
-    orchestrate.add_argument("--artifact", type=Path, default=Path(".kaldrax/runs/orchestration.json"))
+    orchestrate.add_argument("--artifact", type=Path, default=_state_path("runs/orchestration.json"))
     orchestrate.add_argument("--progress-jsonl", type=Path, default=None)
     orchestrate.add_argument("--workspace", type=Path, default=None, help="clean Git repository root to turn accepted task outputs into a verified patch")
     orchestrate.add_argument("--apply", action="store_true", help="apply the repository patch only after Docker verification, reviewer approval and independent evaluation")
@@ -1242,7 +1252,7 @@ def main() -> int:
     )
     orchestrate.add_argument("--verify-arg", action="append", default=None, help="repeat to add a verification-module argument")
     orchestrate.add_argument("--sandbox-timeout", type=int, default=120)
-    orchestrate.add_argument("--sandbox-workspace-root", type=Path, default=Path(".kaldrax/sandbox"))
+    orchestrate.add_argument("--sandbox-workspace-root", type=Path, default=_state_path("sandbox"))
 
     team = commands.add_parser("team", help="run a bounded planner-builder-reviewer workflow")
     team.add_argument("--objective", required=True)
@@ -1250,7 +1260,7 @@ def main() -> int:
     team.add_argument("--project", default="default")
     team.add_argument("--agent-namespace", default="team")
     team.add_argument("--max-cycles", type=int, default=2)
-    team.add_argument("--artifacts", type=Path, default=Path(".kaldrax/runs"))
+    team.add_argument("--artifacts", type=Path, default=_state_path("runs"))
     team.add_argument("--memory-db", type=Path, default=None)
     team.add_argument("--workspace", type=Path, default=None, help="Git repository root for real file changes")
     team.add_argument("--apply", action="store_true", help="apply the patch to the clean checkout after all checks pass")
@@ -1261,7 +1271,7 @@ def main() -> int:
     )
     team.add_argument("--verify-arg", action="append", default=None, help="repeat to add a verification-module argument")
     team.add_argument("--sandbox-timeout", type=int, default=120)
-    team.add_argument("--sandbox-workspace-root", type=Path, default=Path(".kaldrax/sandbox"))
+    team.add_argument("--sandbox-workspace-root", type=Path, default=_state_path("sandbox"))
     team.add_argument("--progress-jsonl", type=Path, default=None)
     team.add_argument("--cancel-file", type=Path, default=None)
 
@@ -1273,8 +1283,16 @@ def main() -> int:
     sandbox_run.add_argument("--memory-mb", type=int, default=256)
     sandbox_run.add_argument("--cpu-count", type=float, default=1.0)
     sandbox_run.add_argument("--pids-limit", type=int, default=64)
-    sandbox_run.add_argument("--workspace-root", type=Path, default=Path(".kaldrax/sandbox"))
+    sandbox_run.add_argument("--workspace-root", type=Path, default=_state_path("sandbox"))
     sandbox_run.add_argument("--cancel-file", type=Path, default=None)
+
+    storage = commands.add_parser("storage", help="manage local KALDRAX application data")
+    storage_actions = storage.add_subparsers(dest="storage_action", required=True)
+    storage_migrate = storage_actions.add_parser(
+        "migrate", help="copy legacy .kaldrax state into application data without deleting the source",
+    )
+    storage_migrate.add_argument("--source", type=Path, required=True)
+    storage_migrate.add_argument("--destination", type=Path, required=True)
 
     repository = commands.add_parser("repo", help="inspect and explicitly edit a local Git worktree")
     repository_actions = repository.add_subparsers(dest="repo_action", required=True)
@@ -1299,6 +1317,13 @@ def main() -> int:
     repo_apply.add_argument("--expected-sha256", default=None)
 
     args = parser.parse_args()
+    if args.command == "storage" and args.storage_action == "migrate":
+        try:
+            result = migrate_state_directory(args.source, args.destination)
+        except (OSError, ValueError, RuntimeError) as exc:
+            parser.error(str(exc))
+        print(json.dumps(result, indent=2))
+        return 0
     if args.command == "repo":
         try:
             workspace = RepositoryWorkspace(args.root)

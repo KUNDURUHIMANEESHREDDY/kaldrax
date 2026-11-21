@@ -42,17 +42,18 @@ The baseline credential-free CI run (44872710002, commit eea0b6d) passed Python 
 **Status:** First-run defaults no longer point to a developer-specific Windows checkout. Engine and repository paths start empty on fresh installations; existing saved user settings are preserved.
 
 **Remaining acceptance:**
-- First-run onboarding clearly distinguishes engine setup, repository selection, and optional provider configuration.
+- First-run onboarding clearly distinguishes engine setup, repository selection, and optional provider configuration. Add a packaged-engine status path so end users no longer need to select source/Python.
+- Add direct loopback Ollama support without a credential; remote HTTPS endpoints still require a provider-issued key. Live provider setup remains optional.
 - No user-specific absolute paths appear in shipped defaults, examples, or release configuration.
 - A missing engine, interpreter, Docker daemon, or provider credential produces a clear capability-specific state rather than a generic application failure.
 - Provider credentials remain session-only until a separately reviewed secure-credential-storage design is approved.
 
 ### P2 — Application data lifecycle
 
-**Current gap:** The desktop derives memory, run, operation, and review data paths from the selected engine checkout.
+**Implemented foundation:** Desktop operations now target the Tauri application-data directory under `.kaldrax/`. First engine verification invokes a non-destructive migration command: missing files are copied, SQLite is migrated through the online backup API, symlinks/special files are skipped, and a per-source idempotency marker is recorded. Existing checkout data is never deleted and destination files are never overwritten.
 
-**Acceptance:**
-- Desktop-owned persistent data lives in the operating system's application-data directory, not inside a source checkout or installer directory.
+**Remaining acceptance:**
+- Verify every Tauri command and CLI default uses the same OS application-data root, not a source checkout or installer directory. The native bridge paths and Python CLI defaults have been redirected; packaged-runtime mode still needs end-to-end verification.
 - Existing .kaldrax/ data can be discovered and migrated non-destructively, with a manifest and rollback-safe copy.
 - Operators can back up, restore, export, and deliberately reset local data.
 - Schema and artifact compatibility are versioned; interrupted migration never destroys the source data.

@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 static OPERATION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
@@ -28,6 +28,7 @@ struct EngineStatus {
     engine_path: String,
     python_executable: String,
     engine_version: String,
+    data_path: String,
 }
 
 #[derive(Deserialize)]
@@ -152,22 +153,79 @@ fn engine_version(engine_path: &Path) -> String {
     version.unwrap_or_else(|| "unknown".to_string())
 }
 
-fn memory_database(engine_path: &Path) -> PathBuf {
-    engine_path.join(".kaldrax").join("memory.sqlite3")
+fn app_data_directory(app: &AppHandle) -> Result<PathBuf, String> {
+    let path = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Cannot locate KALDRAX application data directory: {error}"))?;
+    fs::create_dir_all(&path)
+        .map_err(|error| format!("Cannot create KALDRAX application data directory: {error}"))?;
+    Ok(path)
 }
 
-fn report_directory(engine_path: &Path) -> PathBuf {
-    engine_path.join(".kaldrax").join("runs")
+fn state_directory(app: &AppHandle) -> Result<PathBuf, String> {
+    let path = app_data_directory(app)?.join(".kaldrax");
+    fs::create_dir_all(&path)
+        .map_err(|error| format!("Cannot create KALDRAX state directory: {error}"))?;
+    Ok(path)
+}
+
+fn memory_database(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(state_directory(app)?.join("memory.sqlite3"))
+}
+
+fn report_directory(app: &AppHandle) -> Result<PathBuf, String> {
+    let path = state_directory(app)?.join("runs");
+    fs::create_dir_all(&path)
+        .map_err(|error| format!("Cannot create run history directory: {error}"))?;
+    Ok(path)
+}
+
+fn migrate_legacy_state(
+    app: &AppHandle,
+    engine_path: &Path,
+    python_executable: &str,
+) -> Result<(), String> {
+    let data_root = app_data_directory(app)?;
+    let destination = state_directory(app)?;
+    let source = engine_path.join(".kaldrax");
+    let output = python_command(python_executable, engine_path)
+        .arg("-m")
+        .arg("kaldrax.cli")
+        .arg("storage")
+        .arg("migrate")
+        .arg("--source")
+        .arg(&source)
+        .arg("--destination")
+        .arg(&destination)
+        .env("KALDRAX_DATA_DIR", &data_root)
+        .output()
+        .map_err(|error| format!("Could not migrate existing KALDRAX data: {error}"))?;
+    if !output.status.success() {
+        let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if detail.is_empty() {
+            "Existing KALDRAX data could not be migrated. The original data was not deleted.".to_string()
+        } else {
+            format!("Existing KALDRAX data migration failed; the original data was not deleted: {detail}")
+        });
+    }
+    Ok(())
 }
 
 fn cli_json(
+    app: &AppHandle,
     engine_path: &Path,
     python_executable: &str,
     args: &[String],
     envs: &[(&str, &str)],
 ) -> Result<Value, String> {
+    let data_root = app_data_directory(app)?;
     let mut command = python_command(python_executable, engine_path);
-    command.arg("-m").arg("kaldrax.cli").args(args);
+    command
+        .arg("-m")
+        .arg("kaldrax.cli")
+        .args(args)
+        .env("KALDRAX_DATA_DIR", data_root);
     for (key, value) in envs {
         command.env(key, value);
     }
@@ -221,6 +279,7 @@ fn now_timestamp() -> String {
 }
 
 fn start_cli_operation(
+    app: &AppHandle,
     manager: &OperationManager,
     engine_path: &str,
     python_executable: &str,
@@ -238,7 +297,8 @@ fn start_cli_operation(
         now_timestamp(),
         OPERATION_SEQUENCE.fetch_add(1, Ordering::Relaxed)
     );
-    let operation_dir = root.join(".kaldrax").join("operations").join(&operation_id);
+    let data_root = app_data_directory(app)?;
+    let operation_dir = state_directory(app)?.join("operations").join(&operation_id);
     fs::create_dir_all(&operation_dir)
         .map_err(|error| format!("Cannot create operation workspace: {error}"))?;
     let progress_path = operation_dir.join("progress.jsonl");
@@ -261,6 +321,7 @@ fn start_cli_operation(
         .args(args)
         .env("PYTHONUNBUFFERED", "1")
         .env("KALDRAX_DESKTOP_OPERATION_ID", &operation_id)
+        .env("KALDRAX_DATA_DIR", &data_root)
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr));
     for (key, value) in &envs {
@@ -382,6 +443,7 @@ fn start_cli_operation(
 
 #[tauri::command]
 async fn verify_engine(
+    app: AppHandle,
     engine_path: String,
     python_executable: String,
 ) -> Result<EngineStatus, String> {
@@ -403,11 +465,13 @@ async fn verify_engine(
                 format!("KALDRAX CLI check failed: {detail}")
             });
         }
+        migrate_legacy_state(&app, &path, &python_executable)?;
         Ok(EngineStatus {
             connected: true,
             engine_path: path.display().to_string(),
             python_executable,
             engine_version: engine_version(&path),
+            data_path: state_directory(&app)?.display().to_string(),
         })
     })
     .await
@@ -416,6 +480,7 @@ async fn verify_engine(
 
 #[tauri::command]
 fn start_offline_demo(
+    app: AppHandle,
     engine_path: String,
     python_executable: String,
     project_id: String,
@@ -425,7 +490,7 @@ fn start_offline_demo(
         return Err("Project ID must not be empty.".to_string());
     }
     let root = validate_engine_path(&engine_path)?;
-    let artifacts = report_directory(&root);
+    let artifacts = report_directory(&app)?;
     let args = vec![
         "demo".to_string(),
         "--project".to_string(),
@@ -433,9 +498,9 @@ fn start_offline_demo(
         "--artifacts".to_string(),
         artifacts.to_string_lossy().into_owned(),
         "--memory-db".to_string(),
-        memory_database(&root).to_string_lossy().into_owned(),
+        memory_database(&app)?.to_string_lossy().into_owned(),
         "--progress-jsonl".to_string(),
-        root.join(".kaldrax")
+        state_directory(&app)?
             .join("operations")
             .join("pending-progress.jsonl")
             .to_string_lossy()
@@ -447,6 +512,7 @@ fn start_offline_demo(
     let _ = args.pop();
     let _ = args.pop();
     start_cli_operation(
+        &app,
         &manager,
         &engine_path,
         &python_executable,
@@ -459,6 +525,7 @@ fn start_offline_demo(
 
 #[tauri::command]
 fn start_task_run(
+    app: AppHandle,
     request: TaskRunRequest,
     manager: State<'_, OperationManager>,
 ) -> Result<OperationSnapshot, String> {
@@ -516,9 +583,9 @@ fn start_task_run(
         "--memory-limit".to_string(),
         request.memory_limit.unwrap_or(5).clamp(1, 20).to_string(),
         "--artifacts".to_string(),
-        report_directory(&root).to_string_lossy().into_owned(),
+        report_directory(&app)?.to_string_lossy().into_owned(),
         "--memory-db".to_string(),
-        memory_database(&root).to_string_lossy().into_owned(),
+        memory_database(&app)?.to_string_lossy().into_owned(),
     ]);
     if let Some(agent_id) = request.agent_id.filter(|value| !value.trim().is_empty()) {
         args.push("--agent".to_string());
@@ -536,6 +603,7 @@ fn start_task_run(
         envs.push(("KALDRAX_BASE_URL".to_string(), base_url));
     }
     start_cli_operation(
+        &app,
         &manager,
         &request.engine_path,
         &request.python_executable,
@@ -548,6 +616,7 @@ fn start_task_run(
 
 #[tauri::command]
 fn start_team_run(
+    app: AppHandle,
     request: TeamRunRequest,
     manager: State<'_, OperationManager>,
 ) -> Result<OperationSnapshot, String> {
@@ -609,9 +678,9 @@ fn start_team_run(
         "--max-cycles".to_string(),
         request.max_cycles.to_string(),
         "--artifacts".to_string(),
-        report_directory(&root).to_string_lossy().into_owned(),
+        report_directory(&app)?.to_string_lossy().into_owned(),
         "--memory-db".to_string(),
-        memory_database(&root).to_string_lossy().into_owned(),
+        memory_database(&app)?.to_string_lossy().into_owned(),
     ]);
     if request.apply_changes
         && request
@@ -651,7 +720,7 @@ fn start_team_run(
             "--sandbox-timeout".to_string(),
             sandbox_timeout.to_string(),
         ]);
-        let cancel_path = root.join(".kaldrax").join("operations").join(format!(
+        let cancel_path = state_directory(&app)?.join("operations").join(format!(
             "repository-team-cancel-{}.flag",
             OPERATION_SEQUENCE.fetch_add(1, Ordering::Relaxed)
         ));
@@ -683,6 +752,7 @@ fn start_team_run(
         envs.push(("KALDRAX_BASE_URL".to_string(), base_url));
     }
     start_cli_operation(
+        &app,
         &manager,
         &request.engine_path,
         &request.python_executable,
@@ -695,6 +765,7 @@ fn start_team_run(
 
 #[tauri::command]
 fn start_sandbox_run(
+    app: AppHandle,
     engine_path: String,
     python_executable: String,
     source_path: String,
@@ -733,7 +804,7 @@ fn start_sandbox_run(
         now_timestamp(),
         OPERATION_SEQUENCE.fetch_add(1, Ordering::Relaxed)
     );
-    let workspace = root.join(".kaldrax").join("sandbox-inputs");
+    let workspace = state_directory(&app)?.join("sandbox-inputs");
     fs::create_dir_all(&workspace)
         .map_err(|error| format!("Cannot create sandbox input folder: {error}"))?;
     let safe_source = workspace.join(format!("{operation_id}.py"));
@@ -754,7 +825,7 @@ fn start_sandbox_run(
         "--pids-limit".to_string(),
         pids_limit.to_string(),
         "--workspace-root".to_string(),
-        root.join(".kaldrax")
+        state_directory(&app)?
             .join("sandbox")
             .to_string_lossy()
             .into_owned(),
@@ -762,6 +833,7 @@ fn start_sandbox_run(
         cancel_file.to_string_lossy().into_owned(),
     ];
     let result = start_cli_operation(
+        &app,
         &manager,
         &engine_path,
         &python_executable,
@@ -829,9 +901,9 @@ fn cancel_operation(
 }
 
 #[tauri::command]
-fn list_runs(engine_path: String) -> Result<Vec<Value>, String> {
-    let root = validate_engine_path(&engine_path)?;
-    let directory = report_directory(&root);
+fn list_runs(app: AppHandle, engine_path: String) -> Result<Vec<Value>, String> {
+    let _root = validate_engine_path(&engine_path)?;
+    let directory = report_directory(&app)?;
     if !directory.exists() {
         return Ok(Vec::new());
     }
@@ -867,9 +939,9 @@ fn list_runs(engine_path: String) -> Result<Vec<Value>, String> {
 }
 
 #[tauri::command]
-fn list_team_runs(engine_path: String) -> Result<Vec<Value>, String> {
+fn list_team_runs(app: AppHandle, engine_path: String) -> Result<Vec<Value>, String> {
     let root = validate_engine_path(&engine_path)?;
-    let directory = report_directory(&root);
+    let directory = report_directory(&app)?;
     if !directory.exists() {
         return Ok(Vec::new());
     }
@@ -903,7 +975,7 @@ fn list_team_runs(engine_path: String) -> Result<Vec<Value>, String> {
 }
 
 #[tauri::command]
-fn get_run_report(engine_path: String, run_id: String) -> Result<Value, String> {
+fn get_run_report(app: AppHandle, engine_path: String, run_id: String) -> Result<Value, String> {
     if run_id.is_empty()
         || !run_id
             .chars()
@@ -911,12 +983,12 @@ fn get_run_report(engine_path: String, run_id: String) -> Result<Value, String> 
     {
         return Err("Invalid run identifier.".to_string());
     }
-    let root = validate_engine_path(&engine_path)?;
-    let report_path = report_directory(&root).join(format!("{run_id}.json"));
+    let _root = validate_engine_path(&engine_path)?;
+    let report_path = report_directory(&app)?.join(format!("{run_id}.json"));
     let canonical = report_path
         .canonicalize()
         .map_err(|_| "Run report was not found.".to_string())?;
-    if !canonical.starts_with(report_directory(&root)) {
+    if !canonical.starts_with(report_directory(&app)?) {
         return Err("Run report path is outside the engine artifacts directory.".to_string());
     }
     let content = fs::read_to_string(&canonical)
@@ -926,6 +998,7 @@ fn get_run_report(engine_path: String, run_id: String) -> Result<Value, String> 
 
 #[tauri::command]
 fn benchmark_review_state(
+    app: AppHandle,
     engine_path: String,
     python_executable: String,
     reviewer: String,
@@ -942,17 +1015,18 @@ fn benchmark_review_state(
         "--reviewer".to_string(),
         reviewer,
         "--session".to_string(),
-        ".kaldrax/benchmark-reviews/memory_retrieval_kaldrax_v1.review.json".to_string(),
+        state_directory(&app)?.join("benchmark-reviews/memory_retrieval_kaldrax_v1.review.json").to_string_lossy().into_owned(),
         "--export-dir".to_string(),
-        ".kaldrax/benchmark-exports".to_string(),
+        state_directory(&app)?.join("benchmark-exports").to_string_lossy().into_owned(),
         "--version".to_string(),
         "1.0.0".to_string(),
     ];
-    cli_json(&root, &python_executable, &args, &[])
+    cli_json(&app, &root, &python_executable, &args, &[])
 }
 
 #[tauri::command]
 fn benchmark_review_update(
+    app: AppHandle,
     engine_path: String,
     python_executable: String,
     reviewer: String,
@@ -983,9 +1057,9 @@ fn benchmark_review_update(
         "--reviewer".to_string(),
         reviewer,
         "--session".to_string(),
-        ".kaldrax/benchmark-reviews/memory_retrieval_kaldrax_v1.review.json".to_string(),
+        state_directory(&app)?.join("benchmark-reviews/memory_retrieval_kaldrax_v1.review.json").to_string_lossy().into_owned(),
         "--export-dir".to_string(),
-        ".kaldrax/benchmark-exports".to_string(),
+        state_directory(&app)?.join("benchmark-exports").to_string_lossy().into_owned(),
         "--version".to_string(),
         "1.0.0".to_string(),
         "--action".to_string(),
@@ -1017,11 +1091,12 @@ fn benchmark_review_update(
     if action == "model-review" && confirm_provider_data_egress {
         args.push("--confirm-provider-data-egress".to_string());
     }
-    cli_json(&root, &python_executable, &args, &[])
+    cli_json(&app, &root, &python_executable, &args, &[])
 }
 
 #[tauri::command]
 fn quality_review_state(
+    app: AppHandle,
     engine_path: String,
     python_executable: String,
     reviewer: String,
@@ -1040,13 +1115,14 @@ fn quality_review_state(
         "--reviewer".to_string(),
         reviewer,
         "--session".to_string(),
-        ".kaldrax/memory-quality-review.desktop.session.json".to_string(),
+        state_directory(&app)?.join("memory-quality-review.desktop.session.json").to_string_lossy().into_owned(),
     ];
-    cli_json(&root, &python_executable, &args, &[])
+    cli_json(&app, &root, &python_executable, &args, &[])
 }
 
 #[tauri::command]
 fn quality_review_update(
+    app: AppHandle,
     engine_path: String,
     python_executable: String,
     reviewer: String,
@@ -1080,9 +1156,9 @@ fn quality_review_update(
         "--reviewer".to_string(),
         reviewer,
         "--session".to_string(),
-        ".kaldrax/memory-quality-review.desktop.session.json".to_string(),
+        state_directory(&app)?.join("memory-quality-review.desktop.session.json").to_string_lossy().into_owned(),
         "--export-dir".to_string(),
-        ".kaldrax/memory-quality-exports".to_string(),
+        state_directory(&app)?.join("memory-quality-exports").to_string_lossy().into_owned(),
         "--action".to_string(),
         action,
         "--kind".to_string(),
@@ -1114,11 +1190,12 @@ fn quality_review_update(
     if let Some(value) = approval {
         args.extend(["--approval".to_string(), value]);
     }
-    cli_json(&root, &python_executable, &args, &[])
+    cli_json(&app, &root, &python_executable, &args, &[])
 }
 
 #[tauri::command]
 fn memory_search(
+    app: AppHandle,
     engine_path: String,
     python_executable: String,
     project_id: String,
@@ -1141,7 +1218,7 @@ fn memory_search(
         "--limit".to_string(),
         limit.to_string(),
         "--memory-db".to_string(),
-        memory_database(&root).to_string_lossy().into_owned(),
+        memory_database(&app)?.to_string_lossy().into_owned(),
     ];
     if let Some(agent) = agent_id.filter(|value| !value.trim().is_empty()) {
         args.extend(["--agent".to_string(), agent]);
@@ -1149,11 +1226,12 @@ fn memory_search(
     if include_pending {
         args.push("--include-pending".to_string());
     }
-    cli_json(&root, &python_executable, &args, &[])
+    cli_json(&app, &root, &python_executable, &args, &[])
 }
 
 #[tauri::command]
 fn memory_conflicts(
+    app: AppHandle,
     engine_path: String,
     python_executable: String,
     project_id: String,
@@ -1168,13 +1246,14 @@ fn memory_conflicts(
         "--project".to_string(),
         project_id,
         "--memory-db".to_string(),
-        memory_database(&root).to_string_lossy().into_owned(),
+        memory_database(&app)?.to_string_lossy().into_owned(),
     ];
-    cli_json(&root, &python_executable, &args, &[])
+    cli_json(&app, &root, &python_executable, &args, &[])
 }
 
 #[tauri::command]
 fn memory_review(
+    app: AppHandle,
     engine_path: String,
     python_executable: String,
     memory_id: String,
@@ -1199,13 +1278,14 @@ fn memory_review(
             reviewer
         },
         "--memory-db".to_string(),
-        memory_database(&root).to_string_lossy().into_owned(),
+        memory_database(&app)?.to_string_lossy().into_owned(),
     ];
-    cli_json(&root, &python_executable, &args, &[])
+    cli_json(&app, &root, &python_executable, &args, &[])
 }
 
 #[tauri::command]
 fn memory_resolve_conflict(
+    app: AppHandle,
     engine_path: String,
     python_executable: String,
     conflict_id: String,
@@ -1230,13 +1310,14 @@ fn memory_resolve_conflict(
             reviewer
         },
         "--memory-db".to_string(),
-        memory_database(&root).to_string_lossy().into_owned(),
+        memory_database(&app)?.to_string_lossy().into_owned(),
     ];
-    cli_json(&root, &python_executable, &args, &[])
+    cli_json(&app, &root, &python_executable, &args, &[])
 }
 
 #[tauri::command]
 fn repository_status(
+    app: AppHandle,
     engine_path: String,
     python_executable: String,
     repository_path: String,
@@ -1248,11 +1329,12 @@ fn repository_status(
         "--root".to_string(),
         repository_path,
     ];
-    cli_json(&root, &python_executable, &args, &[])
+    cli_json(&app, &root, &python_executable, &args, &[])
 }
 
 #[tauri::command]
 fn repository_files(
+    app: AppHandle,
     engine_path: String,
     python_executable: String,
     repository_path: String,
@@ -1273,11 +1355,12 @@ fn repository_files(
         "--limit".to_string(),
         limit.to_string(),
     ];
-    cli_json(&root, &python_executable, &args, &[])
+    cli_json(&app, &root, &python_executable, &args, &[])
 }
 
 #[tauri::command]
 fn repository_read_file(
+    app: AppHandle,
     engine_path: String,
     python_executable: String,
     repository_path: String,
@@ -1292,11 +1375,12 @@ fn repository_read_file(
         "--path".to_string(),
         relative_path,
     ];
-    cli_json(&root, &python_executable, &args, &[])
+    cli_json(&app, &root, &python_executable, &args, &[])
 }
 
 #[tauri::command]
 fn repository_apply_file(
+    app: AppHandle,
     engine_path: String,
     python_executable: String,
     repository_path: String,
@@ -1308,7 +1392,7 @@ fn repository_apply_file(
     if content.len() > 1_000_000 {
         return Err("Edited file exceeds the 1 MB limit.".to_string());
     }
-    let staging = root.join(".kaldrax").join("desktop-edits");
+    let staging = state_directory(&app)?.join("desktop-edits");
     fs::create_dir_all(&staging).map_err(|error| format!("Cannot stage file edit: {error}"))?;
     let sequence = OPERATION_SEQUENCE.fetch_add(1, Ordering::Relaxed);
     let staged_file = staging.join(format!("edit-{sequence}.txt"));
@@ -1326,7 +1410,7 @@ fn repository_apply_file(
     if let Some(hash) = expected_sha256 {
         args.extend(["--expected-sha256".to_string(), hash]);
     }
-    let result = cli_json(&root, &python_executable, &args, &[]);
+    let result = cli_json(&app, &root, &python_executable, &args, &[]);
     let _ = fs::remove_file(staged_file);
     result
 }

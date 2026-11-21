@@ -844,3 +844,12 @@ This file records implementation decisions, changes, commands, verification, and
 - The successful run uploaded the frozen engine prototype as artifact `kaldrax-frozen-engine-windows-x64-4a90000213a9a386e2e11c3c00b9e174443293b1` (11,404,466 bytes compressed). This artifact is a build prototype, not a Tauri installer.
 - The live-provider smoke and tag-only memory release gate remained skipped. No provider credentials or hosted requests were used.
 - Remaining release blockers: Tauri resource integration, application-data isolation/migration, native installer build and clean-machine install/upgrade/uninstall tests.
+
+## 2026-11-20 — Separate desktop state from engine checkout
+
+- Added `KALDRAX_DATA_DIR` as the shared runtime data-root contract. CLI default state paths (SQLite, reports, sandbox workspaces, checkpoints, benchmark review sessions/exports, and evaluation reports) now resolve beneath `<KALDRAX_DATA_DIR>/.kaldrax`; without the variable, CLI behavior remains checkout/current-directory relative.
+- Added `kaldrax storage migrate`, a non-destructive migration command. It preserves existing destination files, copies regular files without following symlinks, and uses the SQLite backup API for `memory.sqlite3` to include committed WAL data. It records per-source completion metadata and does not delete the original state.
+- Tauri now resolves writable state from its OS application-data directory, supplies `KALDRAX_DATA_DIR` to engine processes, and stores operation logs, reports, memory, review state, sandbox inputs, cancellation flags, and staged edits there.
+- Engine verification runs the migration before reporting a successful connection and exposes the application-data location to the desktop UI.
+- Updated desktop and CLI documentation to distinguish source checkout paths from application-owned data.
+- No provider credentials or hosted requests are involved. Native package-mode execution and clean-install tests remain outstanding.
