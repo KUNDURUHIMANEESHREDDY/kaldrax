@@ -2,7 +2,7 @@
   "name": "kaldrax_public_repository_engineering_v1",
   "provenance": "public_repository_snapshot",
   "source_repository": "https://github.com/KUNDURUHIMANEESHREDDY/kaldrax",
-  "source_revision": "4cf97d2bb3fef588801717a4391d2b1c111ec832",
+  "source_revision": "5cd04935bff8aba58833ac570b1745bb9183643b",
   "privacy_screening": {
     "scope": "Public main-branch files only; no local SQLite databases, .kaldrax runtime reports, secrets, environment values, private conversation content, or private repositories were read.",
     "status": "pending_operator_signoff",
@@ -327,7 +327,7 @@
       ],
       "source": {
         "path": "README.md",
-        "anchor": "expanded 30-case, 70-proposed-claim synthetic corpus"
+        "anchor": "The expanded candidate fixtures now meet the numerical size floors"
       }
     },
     {
@@ -357,8 +357,8 @@
         "limitations"
       ],
       "source": {
-        "path": "docs/adr/0006-memory-quality-evaluation.md",
-        "anchor": "Consequences"
+        "path": "README.md",
+        "anchor": "confidence Brier/ECE metrics"
       }
     },
     {
