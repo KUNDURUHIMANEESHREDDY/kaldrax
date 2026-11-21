@@ -98,8 +98,20 @@ export interface BenchmarkReviewQuery {
   rationale: string;
   proposed_relevant: string[];
   relevant: string[];
-  status: "pending" | "approved" | "modified" | "rejected" | "auto_approved";
-  decision_source?: "human" | "automated" | null;
+  status: "pending" | "approved" | "modified" | "rejected" | "auto_approved" | "ai_reviewed" | "ai_abstained";
+  decision_source?: "human" | "automated" | "ai_model" | null;
+  ai_review?: {
+    model: string;
+    reviewed_at: string;
+    decision: "accept" | "correct" | "abstain";
+    model_decision: "accept" | "correct" | "abstain";
+    confidence: number;
+    confidence_threshold: number;
+    rationale: string;
+    evidence: Array<{ memory_id: string; start: number; end: number; quote_sha256: string }>;
+    source_sha256: string;
+    policy: string;
+  } | null;
   reviewer?: string | null;
   reviewed_at?: string | null;
   review_note?: string | null;
@@ -120,6 +132,17 @@ export interface BenchmarkReviewState {
     query_ids: string[];
   }>;
   auto_approved_count: number;
+  ai_review_runs: Array<{ policy: string; model: string; triggered_by: string; reviewed_at: string; source_sha256: string; query_ids: string[]; privacy_status: string }>;
+  ai_reviewed_count: number;
+  ai_abstained_count: number;
+  ai_privacy_screening?: {
+    policy: string; model: string; reviewed_at: string; triggered_by: string;
+    source_sha256: string; status: string; decision: "clear" | "flag" | "abstain";
+    summary: string; reviewed_memory_ids: string[];
+    findings: Array<{ memory_id: string; category: string; severity: "low" | "medium" | "high"; rationale: string; start: number; end: number; quote_sha256: string }>;
+    human_approval_status: "pending";
+  } | null;
+  ai_export_path?: string | null;
   dataset_approval: { status: string; reviewer?: string | null; reviewed_at?: string | null };
   privacy_screening: { status: string; scope: string; note: string; reviewer?: string | null; reviewed_at?: string | null };
   review_ready: boolean;
@@ -238,13 +261,14 @@ export async function benchmarkReviewUpdate(input: {
   enginePath: string;
   pythonExecutable: string;
   reviewer: string;
-  action: "query" | "dataset-approval" | "privacy-approval" | "auto-approve-proposals";
+  action: "query" | "dataset-approval" | "privacy-approval" | "auto-approve-proposals" | "model-review";
   queryId?: string;
   decision?: "approve" | "reject" | "modify";
   memoryIds?: string[];
   note?: string;
   approval?: "approve" | "reject";
   privacyConfirmation?: string;
+  confirmProviderDataEgress?: boolean;
 }): Promise<BenchmarkReviewState> {
   return invoke<BenchmarkReviewState>("benchmark_review_update", {
     enginePath: input.enginePath,
@@ -257,6 +281,7 @@ export async function benchmarkReviewUpdate(input: {
     note: input.note,
     approval: input.approval,
     privacyConfirmation: input.privacyConfirmation,
+    confirmProviderDataEgress: input.confirmProviderDataEgress ?? false,
   });
 }
 

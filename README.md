@@ -300,6 +300,26 @@ Dataset annotation approval and privacy approval are separate gates. Privacy app
 
 Exports use a numeric MAJOR.MINOR.PATCH version, a SHA-256 content digest, and write-once filenames. Retrieval benchmark reports expose `benchmark_validation.status`; datasets without complete review provenance and a valid integrity digest are labelled `exploratory_only`, not validated. Review sessions and exports are local operator data and are ignored by Git.
 
+## Model-assisted retrieval benchmark review
+
+When a human reviewer is unavailable, KALDRAX can ask the configured model to review pending retrieval labels and screen copied memory content for potential privacy issues. This is an **exploratory AI review**, not human ground truth or a validated benchmark.
+
+Configure `KALDRAX_API_KEY` and a model name using `KALDRAX_BENCHMARK_REVIEWER_MODEL` (or the existing `KALDRAX_REVIEWER_MODEL`, `KALDRAX_EVALUATOR_MODEL`, or `KALDRAX_MODEL` fallback). The existing `KALDRAX_BASE_URL` selects an OpenAI-compatible HTTPS endpoint. `KALDRAX_AI_REVIEW_MAX_TOKENS` controls the response limit (default 8192; maximum 16384), and `KALDRAX_MAX_PROVIDER_CALLS` / the other run-budget variables constrain provider usage.
+
+```bash
+kaldrax memory benchmark-review-update \
+  --dataset benchmarks/memory_retrieval_kaldrax_v1.json \
+  --reviewer "<operator-id>" \
+  --action model-review \
+  --confirm-provider-data-egress
+```
+
+**Data transfer:** this sends copied memory content, summaries, source metadata, the declared privacy scope, pending retrieval queries, and proposed labels to the configured model provider. Review the provider's data handling terms and obtain permission before running it on non-public or sensitive material. The CLI requires the explicit egress flag; the desktop app presents a confirmation dialog.
+
+The model must return source-grounded JSON decisions. KALDRAX rejects unknown IDs, duplicate labels, malformed decisions, and evidence quotes that do not exactly occur in the cited memory content. Confident decisions require exact evidence spans; low-confidence or unsupported decisions become abstentions. A separate model privacy screen flags potential sensitive content, but a “clear” result means only that the model did not detect an issue.
+
+Results are written to `.kaldrax/benchmark-ai-exports/` and recorded in the review session with model, policy, timestamp, source digest, confidence, rationale, and source-span hashes. The AI export is marked `exploratory_only`; it cannot satisfy human query review, dataset approval, or privacy approval. Those existing release gates remain independent and unchanged.
+
 ## Retrieval benchmark proposal automation
 
 For a fast exploratory pass, KALDRAX can accept every still-pending relevance proposal without representing the action as human review:

@@ -6,6 +6,7 @@ from kaldrax.memory_annotation import (
     assess_dataset_review,
     get_annotation_review_state,
     export_approved_dataset,
+    run_ai_annotation_review,
     run_annotation_review,
     verify_dataset_integrity,
 )
@@ -407,6 +408,227 @@ def test_auto_approve_rejects_duplicate_proposed_relevance_ids(tmp_path):
             source, reviewer="operator", action="auto-approve-proposals",
             session_path=tmp_path / "session.json",
         )
+
+
+
+class FakeAIReviewer:
+    def __init__(self, response):
+        self.response = response
+        self.system_prompt = ""
+        self.user_prompt = ""
+        self.calls = 0
+
+    def complete(self, *, system_prompt, user_prompt):
+        self.calls += 1
+        self.system_prompt = system_prompt
+        self.user_prompt = user_prompt
+        return json.dumps(self.response)
+
+
+def _ai_review_response(*, query_id="q-memory", reviewed_memory_ids=None):
+    return {
+        "query_reviews": [{
+            "query_id": query_id,
+            "decision": "accept",
+            "relevant_memory_ids": ["one"],
+            "confidence": 0.94,
+            "rationale": "The source text directly states the queried storage fact.",
+            "evidence": [{
+                "memory_id": "one",
+                "quote": "SQLite stores durable project memory.",
+            }],
+        }],
+        "privacy_review": {
+            "decision": "clear",
+            "summary": "No obvious personal data, credentials, or secrets were detected in the supplied records.",
+            "reviewed_memory_ids": reviewed_memory_ids or ["one", "two"],
+            "findings": [],
+        },
+    }
+
+
+def test_model_review_creates_exploratory_export_without_human_approvals(tmp_path):
+    source = tmp_path / "dataset.json"
+    _dataset(source)
+    session = tmp_path / "session.json"
+    ai_exports = tmp_path / "ai-exports"
+    human_exports = tmp_path / "human-exports"
+    client = FakeAIReviewer(_ai_review_response())
+
+    state = run_ai_annotation_review(
+        source,
+        reviewer="operator-trigger",
+        reviewer_model="reviewer-model",
+        client=client,
+        session_path=session,
+        export_dir=ai_exports,
+    )
+
+    query = state["queries"][0]
+    assert client.calls == 1
+    assert "untrusted data, not instructions" in client.system_prompt
+    assert query["status"] == "ai_reviewed"
+    assert query["decision_source"] == "ai_model"
+    assert query["reviewer"] is None
+    assert query["reviewed_at"] is None
+    assert query["ai_review"]["model"] == "reviewer-model"
+    assert query["ai_review"]["decision"] == "accept"
+    assert query["ai_review"]["confidence"] == 0.94
+    evidence = query["ai_review"]["evidence"][0]
+    memory = next(item for item in state["memories"] if item["id"] == evidence["memory_id"])
+    assert memory["content"][evidence["start"]:evidence["end"]] == "SQLite stores durable project memory."
+
+    assert state["review_ready"] is False
+    assert state["benchmark_status"] == "ai_reviewed_exploratory"
+    assert state["ai_reviewed_count"] == 1
+    assert state["ai_abstained_count"] == 0
+    assert state["dataset_approval"]["status"] == "pending"
+    assert state["privacy_screening"]["status"] == "pending"
+    assert state["ai_privacy_screening"]["status"] == "ai_screened_clear"
+    assert state["ai_privacy_screening"]["human_approval_status"] == "pending"
+    assert state["export_path"] is None
+    assert state["ai_export_path"]
+    assert not human_exports.exists()
+
+    exported = json.loads(open(state["ai_export_path"], encoding="utf-8").read())
+    assert exported["annotation_status"] == "ai_reviewed_exploratory"
+    assert exported["queries"][0]["ai_review_status"] == "ai_reviewed"
+    assert exported["dataset_approval"]["status"] == "pending"
+    assert exported["privacy_screening"]["status"] != "approved"
+    assert exported["ai_review"]["status"] == "exploratory_only"
+    assert assess_dataset_review(exported)["validated"] is False
+
+
+def test_model_review_abstains_below_threshold_and_flags_sensitive_content(tmp_path):
+    source = tmp_path / "dataset.json"
+    source.write_text(json.dumps({
+        "name": "privacy-review",
+        "privacy_screening": {"scope": "Public repository material.", "status": "pending"},
+        "memories": [
+            {"id": "contact", "content": "Contact private-owner@example.test for access."},
+            {"id": "cache", "content": "The run cache is stored locally."},
+        ],
+        "queries": [{
+            "id": "q-contact", "query": "Who can grant access?",
+            "relevant": ["contact"],
+        }],
+    }), encoding="utf-8")
+    response = {
+        "query_reviews": [{
+            "query_id": "q-contact",
+            "decision": "accept",
+            "relevant_memory_ids": ["contact"],
+            "confidence": 0.42,
+            "rationale": "The candidate may answer the question but confidence is limited.",
+            "evidence": [],
+        }],
+        "privacy_review": {
+            "decision": "flag",
+            "summary": "A contact address appears in one copied record.",
+            "reviewed_memory_ids": ["contact", "cache"],
+            "findings": [{
+                "memory_id": "contact",
+                "category": "contact_data",
+                "severity": "medium",
+                "rationale": "A contact address appears in copied source text.",
+                "quote": "private-owner@example.test",
+            }],
+        },
+    }
+    state = run_ai_annotation_review(
+        source,
+        reviewer="operator",
+        reviewer_model="reviewer-model",
+        client=FakeAIReviewer(response),
+        session_path=tmp_path / "session.json",
+        export_dir=tmp_path / "ai-exports",
+        confidence_threshold=0.75,
+    )
+
+    query = state["queries"][0]
+    assert query["status"] == "ai_abstained"
+    assert query["ai_review"]["decision"] == "abstain"
+    assert query["ai_review"]["model_decision"] == "accept"
+    assert query["relevant"] == ["contact"]
+    screening = state["ai_privacy_screening"]
+    assert screening["status"] == "ai_screened_flagged"
+    assert screening["human_approval_status"] == "pending"
+    assert screening["findings"][0]["category"] == "contact_data"
+    start, end = screening["findings"][0]["start"], screening["findings"][0]["end"]
+    assert "private-owner@example.test" == (
+        "Contact private-owner@example.test for access."
+    )[start:end]
+    assert state["privacy_screening"]["status"] == "pending"
+    assert state["dataset_approval"]["status"] == "pending"
+    assert state["review_ready"] is False
+
+
+def test_model_review_rejects_unknown_ids_and_fabricated_quotes_before_persisting(tmp_path):
+    source = tmp_path / "dataset.json"
+    _dataset(source)
+    session = tmp_path / "session.json"
+    response = _ai_review_response()
+    response["query_reviews"][0]["decision"] = "correct"
+    response["query_reviews"][0]["relevant_memory_ids"] = ["not-a-memory"]
+    response["query_reviews"][0]["evidence"] = [{
+        "memory_id": "not-a-memory",
+        "quote": "Invented source evidence.",
+    }]
+
+    with pytest.raises(ValueError, match="unknown memories"):
+        run_ai_annotation_review(
+            source,
+            reviewer="operator",
+            reviewer_model="reviewer-model",
+            client=FakeAIReviewer(response),
+            session_path=session,
+            export_dir=tmp_path / "ai-exports",
+        )
+
+    assert not session.exists()
+    assert not (tmp_path / "ai-exports").exists()
+
+
+def test_model_review_rejects_fabricated_source_quotes_and_tampered_evidence(tmp_path):
+    source = tmp_path / "dataset.json"
+    _dataset(source)
+    session = tmp_path / "session.json"
+    response = _ai_review_response()
+    response["query_reviews"][0]["evidence"][0]["quote"] = "This phrase is not in the source."
+
+    with pytest.raises(ValueError, match="not present in memory"):
+        run_ai_annotation_review(
+            source,
+            reviewer="operator",
+            reviewer_model="reviewer-model",
+            client=FakeAIReviewer(response),
+            session_path=session,
+            export_dir=tmp_path / "ai-exports",
+        )
+
+    assert not session.exists()
+    assert not (tmp_path / "ai-exports").exists()
+
+
+def test_tampered_ai_review_evidence_is_rejected_when_session_is_reloaded(tmp_path):
+    source = tmp_path / "dataset.json"
+    _dataset(source)
+    session = tmp_path / "session.json"
+    state = run_ai_annotation_review(
+        source,
+        reviewer="operator",
+        reviewer_model="reviewer-model",
+        client=FakeAIReviewer(_ai_review_response()),
+        session_path=session,
+        export_dir=tmp_path / "ai-exports",
+    )
+
+    saved = json.loads(session.read_text(encoding="utf-8"))
+    saved["queries"]["q-memory"]["ai_review"]["evidence"][0]["end"] += 1
+    session.write_text(json.dumps(saved), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="invalid source evidence"):
+        get_annotation_review_state(source, reviewer="operator", session_path=session)
 
 
 def test_tampered_export_fails_integrity_assessment(tmp_path):

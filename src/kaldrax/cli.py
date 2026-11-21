@@ -24,6 +24,7 @@ from .memory_benchmarks import run_retrieval_benchmark
 from .memory_benchmark_comparison import run_retrieval_comparison
 from .memory_annotation import (
     get_annotation_review_state,
+    run_ai_annotation_review,
     run_annotation_review,
     update_annotation_review,
 )
@@ -145,6 +146,37 @@ def _client(model: str, budget: RunBudget) -> OpenAICompatibleClient:
         base_url=os.getenv("KALDRAX_BASE_URL") or "https://api.openai.com/v1",
         timeout=float(os.getenv("KALDRAX_TIMEOUT_SECONDS", "60")),
         max_tokens=int(os.getenv("KALDRAX_MAX_TOKENS", "2048")),
+        token_parameter=os.getenv("KALDRAX_TOKEN_PARAMETER", "max_completion_tokens"),
+        budget=budget,
+    )
+
+
+def _benchmark_reviewer_model() -> str:
+    for name in (
+        "KALDRAX_BENCHMARK_REVIEWER_MODEL",
+        "KALDRAX_REVIEWER_MODEL",
+        "KALDRAX_EVALUATOR_MODEL",
+        "KALDRAX_MODEL",
+    ):
+        value = os.getenv(name, "").strip()
+        if value:
+            return value
+    raise ValueError(
+        "Configure KALDRAX_BENCHMARK_REVIEWER_MODEL, KALDRAX_REVIEWER_MODEL, "
+        "KALDRAX_EVALUATOR_MODEL, or KALDRAX_MODEL for AI benchmark review"
+    )
+
+
+def _benchmark_ai_client(model: str, budget: RunBudget) -> OpenAICompatibleClient:
+    max_tokens = int(os.getenv("KALDRAX_AI_REVIEW_MAX_TOKENS", "8192"))
+    if not 1 <= max_tokens <= 16384:
+        raise ValueError("KALDRAX_AI_REVIEW_MAX_TOKENS must be between 1 and 16384")
+    return OpenAICompatibleClient(
+        api_key=os.getenv("KALDRAX_API_KEY", ""),
+        model=model,
+        base_url=os.getenv("KALDRAX_BASE_URL") or "https://api.openai.com/v1",
+        timeout=float(os.getenv("KALDRAX_TIMEOUT_SECONDS", "60")),
+        max_tokens=max_tokens,
         token_parameter=os.getenv("KALDRAX_TOKEN_PARAMETER", "max_completion_tokens"),
         budget=budget,
     )
@@ -1083,7 +1115,7 @@ def main() -> int:
     benchmark_review_update.add_argument("--session", type=Path, default=None)
     benchmark_review_update.add_argument(
         "--action",
-        choices=("query", "dataset-approval", "privacy-approval", "auto-approve-proposals"),
+        choices=("query", "dataset-approval", "privacy-approval", "auto-approve-proposals", "model-review"),
         required=True,
     )
     benchmark_review_update.add_argument("--query-id", default=None)
@@ -1092,6 +1124,12 @@ def main() -> int:
     benchmark_review_update.add_argument("--note", default=None)
     benchmark_review_update.add_argument("--approval", choices=("approve", "reject"), default=None)
     benchmark_review_update.add_argument("--privacy-confirmation", default=None)
+    benchmark_review_update.add_argument(
+        "--confirm-provider-data-egress", action="store_true",
+        help="confirm that the source corpus and queries may be sent to the configured model endpoint",
+    )
+    benchmark_review_update.add_argument("--confidence-threshold", type=float, default=0.75)
+    benchmark_review_update.add_argument("--ai-export-dir", type=Path, default=Path(".kaldrax/benchmark-ai-exports"))
     benchmark_review_update.add_argument("--export-dir", type=Path, default=Path(".kaldrax/benchmark-exports"))
     benchmark_review_update.add_argument("--version", default="1.0.0")
 
@@ -1401,20 +1439,43 @@ def main() -> int:
 
         if args.memory_action == "benchmark-review-update":
             try:
-                result = update_annotation_review(
-                    args.dataset,
-                    reviewer=args.reviewer,
-                    action=args.action,
-                    session_path=args.session,
-                    query_id=args.query_id,
-                    decision=args.decision,
-                    relevant_ids=args.memory_id,
-                    note=args.note,
-                    approval=args.approval,
-                    privacy_confirmation=args.privacy_confirmation,
-                    export_dir=args.export_dir,
-                    version=args.version,
-                )
+                if args.action == "model-review":
+                    if not args.confirm_provider_data_egress:
+                        parser.error(
+                            "model-review sends the dataset and queries to the configured model endpoint; "
+                            "rerun with --confirm-provider-data-egress after reviewing that data transfer"
+                        )
+                    if any(value is not None for value in (
+                        args.query_id, args.decision, args.memory_id, args.note,
+                        args.approval, args.privacy_confirmation,
+                    )):
+                        parser.error("model-review does not accept per-query or human-approval arguments")
+                    model = _benchmark_reviewer_model()
+                    result = run_ai_annotation_review(
+                        args.dataset,
+                        reviewer=args.reviewer,
+                        reviewer_model=model,
+                        client=_benchmark_ai_client(model, _budget_from_env()),
+                        session_path=args.session,
+                        export_dir=args.ai_export_dir,
+                        version=args.version,
+                        confidence_threshold=args.confidence_threshold,
+                    )
+                else:
+                    result = update_annotation_review(
+                        args.dataset,
+                        reviewer=args.reviewer,
+                        action=args.action,
+                        session_path=args.session,
+                        query_id=args.query_id,
+                        decision=args.decision,
+                        relevant_ids=args.memory_id,
+                        note=args.note,
+                        approval=args.approval,
+                        privacy_confirmation=args.privacy_confirmation,
+                        export_dir=args.export_dir,
+                        version=args.version,
+                    )
             except (ValueError, TypeError, RuntimeError, OSError) as exc:
                 parser.error(str(exc))
             print(json.dumps(result, indent=2))

@@ -803,3 +803,13 @@ This file records implementation decisions, changes, commands, verification, and
 - Machine-accepted proposals do not satisfy the human review-ready predicate, dataset annotation approval, privacy approval, or immutable validated export gate.
 - Added the action to the CLI and desktop workflow with an explicit confirmation and separate machine-accepted count.
 - Added regression coverage for machine provenance, approval-gate isolation, human reconfirmation, mixed human/machine sessions, and CLI behavior.
+
+## Model-assisted retrieval benchmark review
+
+- Added an explicit `model-review` action for source-grounded AI relevance review and advisory privacy screening.
+- The configured OpenAI-compatible model is selected from `KALDRAX_BENCHMARK_REVIEWER_MODEL`, then existing reviewer/evaluator/executor model settings. Provider calls use the existing `RunBudget` and standard client.
+- The CLI requires `--confirm-provider-data-egress`; the desktop requires a confirmation dialog before sending copied source-backed memories and queries to the configured endpoint.
+- AI decisions include confidence, rationale, exact source quotes, offsets, source digest, model, timestamp, and policy. Unknown IDs and fabricated quotes are rejected. Low confidence becomes an explicit abstention.
+- AI review and AI privacy screening are advisory. They produce a separate exploratory export and do not satisfy human query review, dataset approval, privacy approval, or validated export requirements.
+- Added CLI and unit coverage for egress confirmation, model selection, evidence grounding, abstention, privacy flags, tampering, and human approval separation.
+- Verification is pending CI on the resulting commit.

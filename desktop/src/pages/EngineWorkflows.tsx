@@ -130,13 +130,14 @@ function BenchmarkReviewPanel({
   }, [activeQuery?.id, activeQuery?.status]);
 
   const update = async (input: {
-    action: "query" | "dataset-approval" | "privacy-approval" | "auto-approve-proposals";
+    action: "query" | "dataset-approval" | "privacy-approval" | "auto-approve-proposals" | "model-review";
     queryId?: string;
     decision?: "approve" | "reject" | "modify";
     memoryIds?: string[];
     note?: string;
     approval?: "approve" | "reject";
     privacyConfirmation?: string;
+    confirmProviderDataEgress?: boolean;
     successMessage: string;
   }) => {
     setBusy(true);
@@ -154,6 +155,7 @@ function BenchmarkReviewPanel({
         note: input.note,
         approval: input.approval,
         privacyConfirmation: input.privacyConfirmation,
+        confirmProviderDataEgress: input.confirmProviderDataEgress,
       });
       setReview(result);
       setNotice(result.export_path
@@ -171,7 +173,23 @@ function BenchmarkReviewPanel({
   ).length ?? 0;
   const autoApprovedCount = review?.queries.filter(query => query.status === "auto_approved").length ?? 0;
   const pendingCount = review?.queries.filter(query => query.status === "pending").length ?? 0;
+  const aiReviewedCount = review?.ai_reviewed_count ?? 0;
+  const aiAbstainedCount = review?.ai_abstained_count ?? 0;
+  const modelReviewPendingCount = pendingCount + autoApprovedCount;
   const allQueries = Boolean(review?.review_ready);
+
+  const runModelReview = () => {
+    if (!review || (modelReviewPendingCount === 0 && review.ai_privacy_screening)) return;
+    const confirmed = window.confirm(
+      "KALDRAX will send every copied memory's content, summary, source path and all pending retrieval queries to the configured model endpoint for review. The provider may process or retain this data under its own terms. Do not continue unless this transfer is permitted. Model decisions are exploratory only; this does not approve the dataset or privacy scope."
+    );
+    if (!confirmed) return;
+    void update({
+      action: "model-review",
+      confirmProviderDataEgress: true,
+      successMessage: "AI review completed. Model decisions and privacy findings are recorded as exploratory; human approval gates remain separate.",
+    });
+  };
 
   const autoApproveProposals = () => {
     if (pendingCount === 0) return;
@@ -217,21 +235,32 @@ function BenchmarkReviewPanel({
           <Badge tone={review.benchmark_status === "validated_exported" ? "passed" : "warning"}>
             {review.benchmark_status === "validated_exported"
               ? "Validated export"
-              : autoApprovedCount > 0 ? "Machine-reviewed · human sign-off pending" : "Human review pending"}
+              : review.benchmark_status === "ai_reviewed_exploratory"
+                ? "AI-reviewed · exploratory only"
+                : autoApprovedCount > 0 ? "Machine-reviewed · human sign-off pending" : "Human review pending"}
           </Badge>
         </div>
         <div className="kx-run-summary">
           <div><small>HUMAN-REVIEWED LABELS</small><strong>{reviewedCount} / {review.queries.length}</strong></div>
           <div><small>MACHINE-ACCEPTED</small><strong>{autoApprovedCount}</strong></div>
+          <div><small>AI-REVIEWED</small><strong>{aiReviewedCount}</strong></div>
+          <div><small>AI ABSTENTIONS</small><strong>{aiAbstainedCount}</strong></div>
           <div><small>DATASET APPROVAL</small><strong>{review.dataset_approval.status}</strong></div>
           <div><small>PRIVACY APPROVAL</small><strong>{review.privacy_screening.status}</strong></div>
           <div><small>REVIEW SESSION</small><strong>Resumable</strong></div>
         </div>
         <p className="kx-muted">Session: <code>{review.session_path}</code></p>
         <p className="kx-muted">Source SHA-256: <code>{review.source_sha256}</code></p>
-        <button className="kx-button kx-button--quiet" onClick={() => void refresh()} disabled={busy}>
-          <Icon name="refresh" size={14}/> Refresh review state
-        </button>
+        <div className="kx-settings-actions">
+          <button className="kx-button kx-button--primary" onClick={runModelReview}
+            disabled={busy || (modelReviewPendingCount === 0 && Boolean(review.ai_privacy_screening))}>
+            Review with configured AI model
+          </button>
+          <button className="kx-button kx-button--quiet" onClick={() => void refresh()} disabled={busy}>
+            <Icon name="refresh" size={14}/> Refresh review state
+          </button>
+        </div>
+        {review.ai_export_path && <p className="kx-muted">AI-reviewed exploratory export: <code>{review.ai_export_path}</code></p>}
       </section>
 
       <section className="kx-panel">
@@ -241,6 +270,9 @@ function BenchmarkReviewPanel({
         </div>
         {autoApprovedCount > 0 && <Alert>
           {autoApprovedCount} proposals were accepted automatically by KALDRAX. They remain machine-reviewed, not human-reviewed; confirm each proposal individually before dataset approval or export.
+        </Alert>}
+        {(aiReviewedCount > 0 || aiAbstainedCount > 0) && <Alert>
+          The configured model has reviewed {aiReviewedCount} queries and abstained on {aiAbstainedCount}. These are AI judgments, not human ground truth. Review every rationale and evidence span before using the exploratory export.
         </Alert>}
         <div className="kx-settings-actions">
           <button
@@ -268,12 +300,26 @@ function BenchmarkReviewPanel({
             <div className="kw-memory-card__head">
               <div><span className="kw-memory-type">{activeQuery.category} · {activeQuery.id}</span><h3>{activeQuery.query}</h3></div>
               <Badge tone={activeQuery.status === "approved" || activeQuery.status === "modified" ? "passed" : "warning"}>
-                {activeQuery.status === "auto_approved" ? "Machine accepted" : activeQuery.status}
+                {activeQuery.status === "auto_approved" ? "Machine accepted"
+                  : activeQuery.status === "ai_reviewed" ? "AI reviewed"
+                  : activeQuery.status === "ai_abstained" ? "AI abstained"
+                  : activeQuery.status}
               </Badge>
             </div>
             {activeQuery.rationale && <p>{activeQuery.rationale}</p>}
             <p className="kx-muted">Proposed IDs: {activeQuery.proposed_relevant.join(", ")}</p>
             {activeQuery.review_note && <p>Previous review note: {activeQuery.review_note}</p>}
+            {activeQuery.ai_review && <div className="kw-memory-meta">
+              <span>Model: {activeQuery.ai_review.model}</span>
+              <span>Decision: {activeQuery.ai_review.decision} · confidence {Math.round(activeQuery.ai_review.confidence * 100)}%</span>
+              <span>{activeQuery.ai_review.rationale}</span>
+              {activeQuery.ai_review.evidence.map(evidence => {
+                const memory = review.memories.find(item => item.id === evidence.memory_id);
+                return <span key={evidence.memory_id}>
+                  Evidence {evidence.memory_id}: {memory?.content.slice(evidence.start, evidence.end) ?? "source span unavailable"}
+                </span>;
+              })}
+            </div>}
           </div>
           <div className="kw-memory-list">
             {review.memories.map(memory => <label className="kw-memory-card" key={memory.id}>
@@ -342,6 +388,23 @@ function BenchmarkReviewPanel({
         <div className="kx-panel__head"><div><h2>Independent privacy screening</h2><p>Review all source paths and the copied content below before signing off. Label approval does not imply privacy approval.</p></div><Badge tone={privacyApproved ? "passed" : "warning"}>{review.privacy_screening.status}</Badge></div>
         <p><strong>Declared scope:</strong> {review.privacy_screening.scope || "No scope description provided."}</p>
         {review.privacy_screening.note && <p>{review.privacy_screening.note}</p>}
+        {review.ai_privacy_screening && <div className="kw-memory-card">
+          <div className="kw-memory-card__head">
+            <div><span className="kw-memory-type">AI SCREENING · {review.ai_privacy_screening.model}</span>
+              <h3>{review.ai_privacy_screening.status}</h3></div>
+            <Badge tone={review.ai_privacy_screening.status === "ai_screened_clear" ? "warning" : "danger"}>Advisory only</Badge>
+          </div>
+          <p>{review.ai_privacy_screening.summary}</p>
+          <p className="kx-muted">AI screening is not privacy approval. Human privacy status remains {review.privacy_screening.status}.</p>
+          {review.ai_privacy_screening.findings.map((finding, index) => {
+            const memory = review.memories.find(item => item.id === finding.memory_id);
+            return <p key={index}>
+              <strong>{finding.severity.toUpperCase()} · {finding.category} · {finding.memory_id}</strong>
+              {" — "}{finding.rationale}
+              {memory ? " Evidence: " + memory.content.slice(finding.start, finding.end) : ""}
+            </p>;
+          })}
+        </div>}
         <details className="kw-conflict-card">
           <summary>Inspect all {review.memories.length} copied memory records and their source paths</summary>
           <div className="kw-memory-list">

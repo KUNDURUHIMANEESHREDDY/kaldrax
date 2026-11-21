@@ -963,13 +963,17 @@ fn benchmark_review_update(
     note: Option<String>,
     approval: Option<String>,
     privacy_confirmation: Option<String>,
+    confirm_provider_data_egress: bool,
 ) -> Result<Value, String> {
     let root = validate_engine_path(&engine_path)?;
     if reviewer.trim().is_empty() {
         return Err("Reviewer identity is required.".to_string());
     }
-    if !["query", "dataset-approval", "privacy-approval", "auto-approve-proposals"].contains(&action.as_str()) {
+    if !["query", "dataset-approval", "privacy-approval", "auto-approve-proposals", "model-review"].contains(&action.as_str()) {
         return Err("Unsupported benchmark review action.".to_string());
+    }
+    if action == "model-review" && !confirm_provider_data_egress {
+        return Err("Model review requires explicit confirmation that benchmark content will be sent to the configured provider.".to_string());
     }
     let mut args = vec![
         "memory".to_string(),
@@ -1009,6 +1013,9 @@ fn benchmark_review_update(
     }
     if let Some(value) = privacy_confirmation {
         args.extend(["--privacy-confirmation".to_string(), value]);
+    }
+    if action == "model-review" && confirm_provider_data_egress {
+        args.push("--confirm-provider-data-egress".to_string());
     }
     cli_json(&root, &python_executable, &args, &[])
 }
