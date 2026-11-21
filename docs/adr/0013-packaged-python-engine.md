@@ -44,7 +44,11 @@ References:
 
 - Build the frozen CLI from a clean Windows x64 CI runner with Python 3.13.17 and PyInstaller 6.22.3 pinned.
 - Run `--help`, the offline demo with isolated SQLite/report paths, and the deterministic evaluator benchmark from the frozen directory; the benchmark invocation also proves the evaluator fixture was packaged.
-- Confirm packaged data files are readable and writable state is redirected to the app-data location.
+- Record the build toolchain used by the CI prototype.
+
+## Release verification still required
+
+- Confirm writable state is redirected to the OS app-data location before launching the packaged runtime from the installed application.
 - Build MSI and NSIS installers, install on a clean Windows runner without Python/Git, and verify first launch, offline demo, memory, reports, upgrade, and uninstall data-retention semantics.
 - Verify no API key is needed for installation, first launch, offline demo, or deterministic operations.
-- Record the actual build size, startup measurement, hashes, and test evidence. Source-level configuration alone is not acceptance.
+- Record actual build size, startup measurements, hashes, and test evidence. Source-level configuration alone is not acceptance.

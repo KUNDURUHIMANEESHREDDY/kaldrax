@@ -113,6 +113,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force -Path build/windows | Out-Null
           python --version | Out-File -FilePath build/windows/toolchain.txt
           python -m pip freeze | Out-File -FilePath build/windows/pip-freeze.txt
 

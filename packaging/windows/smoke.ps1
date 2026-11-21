@@ -1,7 +1,11 @@
 param(
-  [string]$DistributionDirectory = (Join-Path (Split-Path -Parent $PSScriptRoot) '../../build/windows/kaldrax-engine')
+  [string]$DistributionDirectory = ''
 )
 $ErrorActionPreference = 'Stop'
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+if ([string]::IsNullOrWhiteSpace($DistributionDirectory)) {
+  $DistributionDirectory = Join-Path $repoRoot 'build/windows/kaldrax-engine'
+}
 $executable = Join-Path $DistributionDirectory 'kaldrax-engine.exe'
 if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
   throw "Frozen engine executable not found: $executable"
@@ -12,7 +16,9 @@ if ($LASTEXITCODE -ne 0 -or $help -notmatch 'KALDRAX engineering harness') {
   throw "Frozen CLI help check failed (exit $LASTEXITCODE): $help"
 }
 
-$smokeRoot = Join-Path $env:RUNNER_TEMP 'kaldrax-frozen-engine-smoke'
+$tempRoot = $env:RUNNER_TEMP
+if ([string]::IsNullOrWhiteSpace($tempRoot)) { $tempRoot = [System.IO.Path]::GetTempPath() }
+$smokeRoot = Join-Path $tempRoot 'kaldrax-frozen-engine-smoke'
 if (Test-Path -LiteralPath $smokeRoot) {
   Remove-Item -LiteralPath $smokeRoot -Recurse -Force
 }
