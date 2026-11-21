@@ -50,7 +50,7 @@ def _save_session(path: Path, value: dict[str, Any]) -> None:
 
 
 def _valid_expected(value: Any) -> bool:
-    return isinstance(value, list) and all(
+    return isinstance(value, list) and bool(value) and all(
         isinstance(item, dict)
         and isinstance(item.get("match_terms"), list)
         and bool(item["match_terms"])

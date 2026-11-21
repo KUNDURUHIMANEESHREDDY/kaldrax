@@ -243,3 +243,10 @@ def test_structured_quality_review_rejects_invalid_labels(tmp_path):
             kind="extraction", case_id="e1", decision="modify",
             expected_claims=[{"match_terms": [" "]}], session_path=session,
         )
+
+    with pytest.raises(ValueError, match="non-empty list"):
+        update_quality_review(
+            contradiction, extraction, reviewer="r", action="case",
+            kind="extraction", case_id="e1", decision="modify",
+            expected_claims=[], session_path=session,
+        )
