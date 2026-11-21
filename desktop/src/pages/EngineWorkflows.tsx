@@ -181,7 +181,7 @@ function BenchmarkReviewPanel({
   const runModelReview = () => {
     if (!review || (modelReviewPendingCount === 0 && review.ai_privacy_screening)) return;
     const confirmed = window.confirm(
-      "KALDRAX will send every copied memory's content, summary, source path and all pending retrieval queries to the configured model endpoint for review. The provider may process or retain this data under its own terms. Do not continue unless this transfer is permitted. Model decisions are exploratory only; this does not approve the dataset or privacy scope."
+      "KALDRAX will send copied memory content, summaries, categories, the declared privacy scope, and pending retrieval queries to the configured model endpoint. Source paths are not sent. The provider may process or retain this data under its own terms. Do not continue unless this transfer is permitted. Model decisions are exploratory only; this does not approve the dataset or privacy scope."
     );
     if (!confirmed) return;
     void update({

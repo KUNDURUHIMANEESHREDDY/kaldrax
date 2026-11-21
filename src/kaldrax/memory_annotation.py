@@ -567,7 +567,6 @@ def run_ai_annotation_review(
                 "category": item.get("category", "uncategorized"),
                 "content": item["content"],
                 "summary": item.get("summary", ""),
-                "source": item.get("source") or {},
             }
             for item in dataset["memories"]
         ],

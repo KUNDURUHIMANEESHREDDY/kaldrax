@@ -314,7 +314,7 @@ kaldrax memory benchmark-review-update \
   --confirm-provider-data-egress
 ```
 
-**Data transfer:** this sends copied memory content, summaries, source metadata, the declared privacy scope, pending retrieval queries, and proposed labels to the configured model provider. Review the provider's data handling terms and obtain permission before running it on non-public or sensitive material. The CLI requires the explicit egress flag; the desktop app presents a confirmation dialog.
+**Data transfer:** this sends copied memory content, summaries, categories, the declared privacy scope, pending retrieval queries, and proposed labels to the configured model provider. Source paths are not sent. Review the provider's data handling terms and obtain permission before running it on non-public or sensitive material. The CLI requires the explicit egress flag; the desktop app presents a confirmation dialog.
 
 The model must return source-grounded JSON decisions. KALDRAX rejects unknown IDs, duplicate labels, malformed decisions, and evidence quotes that do not exactly occur in the cited memory content. Confident decisions require exact evidence spans; low-confidence or unsupported decisions become abstentions. A separate model privacy screen flags potential sensitive content, but a “clear” result means only that the model did not detect an issue.
 
