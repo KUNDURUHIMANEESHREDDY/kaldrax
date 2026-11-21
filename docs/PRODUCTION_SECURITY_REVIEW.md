@@ -1,7 +1,7 @@
 # Production Security Review — Desktop Packaging and Local State
 
 **Review scope:** Windows frozen-engine packaging, Tauri runtime selection, desktop application-data isolation and legacy-state migration.  
-**Review status:** Focused source review; not a full application penetration test or compliance certification. The app-data migration and Windows frozen-engine prototype have passing CI evidence. The new Tauri resource integration and installer build/smoke checks are pending the CI run for this commit.  
+**Review status:** Focused source review; not a full application penetration test or compliance certification. The app-data migration and Windows frozen-engine prototype have passing CI evidence. The first Tauri integration run failed during native Rust compilation because a benchmark action string was reused after being moved into CLI arguments. This compile failure was corrected; installer build and installed-resource smoke remain unverified until the rerun completes.  
 **Date:** 2026-11-20
 
 ## Assets and trust boundaries
@@ -16,7 +16,7 @@
 
 | Surface | Control | Verification evidence |
 |---|---|---|
-| Packaged engine selection | Rust resolves the executable through Tauri's resource resolver and compares the canonical root against the resource root before accepting a packaged runtime path. | Rust unit test for bundled executable command construction is included; the new Windows installer smoke step is pending CI execution. |
+| Packaged engine selection | Rust resolves the executable through Tauri's resource resolver and compares the canonical root against the resource root before accepting a packaged runtime path. | Rust unit test for bundled executable command construction is included. The initial native test build exposed a compile error in an adjacent benchmark-review command; fixed in the follow-up commit. Installer smoke remains pending. |
 | Process execution | Rust launches the packaged executable directly with an argument vector; it does not construct a shell command or expose a webview shell permission. | Native bridge implementation; packaged-engine unit test is included and pending CI execution. |
 | Developer mode | The Python source checkout must contain the expected project manifest and CLI entry point. The interpreter is operator-configured. | Existing engine validation plus desktop source-mode workflow. |
 | Writable-state separation | Tauri obtains the OS application-data directory and sets `KALDRAX_DATA_DIR` for engine child processes. | Python and Tauri source changes; CI test coverage for CLI data-root routing. |

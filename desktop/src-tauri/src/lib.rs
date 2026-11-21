@@ -551,7 +551,7 @@ fn start_offline_demo(
     if project_id.trim().is_empty() {
         return Err("Project ID must not be empty.".to_string());
     }
-    let root = validate_engine_path(&app, &engine_path)?;
+    let _root = validate_engine_path(&app, &engine_path)?;
     let artifacts = report_directory(&app)?;
     let args = vec![
         "demo".to_string(),
@@ -591,7 +591,7 @@ fn start_task_run(
     request: TaskRunRequest,
     manager: State<'_, OperationManager>,
 ) -> Result<OperationSnapshot, String> {
-    let root = validate_engine_path(&app, &request.engine_path)?;
+    let _root = validate_engine_path(&app, &request.engine_path)?;
     if request.objective.trim().is_empty() {
         return Err("Objective is required.".to_string());
     }
@@ -682,7 +682,7 @@ fn start_team_run(
     request: TeamRunRequest,
     manager: State<'_, OperationManager>,
 ) -> Result<OperationSnapshot, String> {
-    let root = validate_engine_path(&app, &request.engine_path)?;
+    let _root = validate_engine_path(&app, &request.engine_path)?;
     if request.objective.trim().is_empty()
         || request.project_id.trim().is_empty()
         || request.agent_namespace.trim().is_empty()
@@ -837,7 +837,7 @@ fn start_sandbox_run(
     pids_limit: u16,
     manager: State<'_, OperationManager>,
 ) -> Result<OperationSnapshot, String> {
-    let root = validate_engine_path(&app, &engine_path)?;
+    let _root = validate_engine_path(&app, &engine_path)?;
     if !(1..=120).contains(&timeout_seconds)
         || !(64..=1024).contains(&memory_mb)
         || !(0.25..=2.0).contains(&cpu_count)
@@ -1002,7 +1002,7 @@ fn list_runs(app: AppHandle, engine_path: String) -> Result<Vec<Value>, String> 
 
 #[tauri::command]
 fn list_team_runs(app: AppHandle, engine_path: String) -> Result<Vec<Value>, String> {
-    let root = validate_engine_path(&app, &engine_path)?;
+    let _root = validate_engine_path(&app, &engine_path)?;
     let directory = report_directory(&app)?;
     if !directory.exists() {
         return Ok(Vec::new());
@@ -1108,7 +1108,8 @@ fn benchmark_review_update(
     if !["query", "dataset-approval", "privacy-approval", "auto-approve-proposals", "model-review"].contains(&action.as_str()) {
         return Err("Unsupported benchmark review action.".to_string());
     }
-    if action == "model-review" && !confirm_provider_data_egress {
+    let is_model_review = action == "model-review";
+    if is_model_review && !confirm_provider_data_egress {
         return Err("Model review requires explicit confirmation that benchmark content will be sent to the configured provider.".to_string());
     }
     let mut args = vec![
@@ -1150,7 +1151,7 @@ fn benchmark_review_update(
     if let Some(value) = privacy_confirmation {
         args.extend(["--privacy-confirmation".to_string(), value]);
     }
-    if action == "model-review" && confirm_provider_data_egress {
+    if is_model_review && confirm_provider_data_egress {
         args.push("--confirm-provider-data-egress".to_string());
     }
     cli_json(&app, &root, &python_executable, &args, &[])

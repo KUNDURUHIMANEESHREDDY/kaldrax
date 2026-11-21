@@ -885,3 +885,11 @@ This file records implementation decisions, changes, commands, verification, and
 - Added parent-by-parent destination checks before directory creation and file/SQLite writes. Symlinks and non-directory path components cause migration to fail closed.
 - Added a regression test proving a symlinked `runs/` destination cannot write a report into an external directory.
 - CI verification is pending for this additional hardening.
+
+
+## 2026-11-20 — Fix Windows native build failure in benchmark review command
+
+- The first Windows native Rust test build exposed E0382: `benchmark_review_update` moved the `action` String into the CLI argument vector and then compared it again to decide whether to append the provider-egress confirmation switch.
+- Captured the model-review predicate before moving the action, then reused the boolean for both confirmation validation and argument construction. This preserves the explicit provider egress gate without cloning user input.
+- Removed five unused validated-path bindings reported by the same compiler run; validation still occurs before each operation.
+- CI had stopped at the native Rust test build, so no MSI/NSIS installer had been built. The next Windows run must pass native tests, installer creation, and installed-resource smoke before packaging can be considered verified.
