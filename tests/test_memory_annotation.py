@@ -467,6 +467,8 @@ def test_model_review_creates_exploratory_export_without_human_approvals(tmp_pat
     query = state["queries"][0]
     assert client.calls == 1
     assert "untrusted data, not instructions" in client.system_prompt
+    provider_payload = json.loads(client.user_prompt)
+    assert "source" not in provider_payload["memories"][0]
     assert query["status"] == "ai_reviewed"
     assert query["decision_source"] == "ai_model"
     assert query["reviewer"] is None
