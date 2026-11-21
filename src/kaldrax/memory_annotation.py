@@ -608,7 +608,7 @@ def run_ai_annotation_review(
         '"reviewed_memory_ids":["every supplied memory ID"],'
         '"findings":[{"memory_id":"...","category":"personal_data|credentials|secret|financial_data|health_data|contact_data|location_data|other",'
         '"severity":"low|medium|high","rationale":"describe without repeating sensitive values",'
-        '"quote":"exact source substring"}]}}. Do not wrap JSON in markdown."' 
+        '"quote":"exact source substring"}]}}. Do not wrap JSON in markdown."'
     )
     user_prompt = json.dumps(prompt_payload, ensure_ascii=False, separators=(",", ":"))
     raw_response = client.complete(system_prompt=system_prompt, user_prompt=user_prompt)

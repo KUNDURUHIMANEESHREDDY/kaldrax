@@ -812,4 +812,4 @@ This file records implementation decisions, changes, commands, verification, and
 - AI decisions include confidence, rationale, exact source quotes, offsets, source digest, model, timestamp, and policy. Unknown IDs and fabricated quotes are rejected. Low confidence becomes an explicit abstention.
 - AI review and AI privacy screening are advisory. They produce a separate exploratory export and do not satisfy human query review, dataset approval, privacy approval, or validated export requirements.
 - Added CLI and unit coverage for egress confirmation, model selection, evidence grounding, abstention, privacy flags, tampering, and human approval separation.
-- Verification is pending CI on the resulting commit.
+- Final verification: GitHub Actions run `44872551345` passed Python 3.11, Python 3.13, desktop Oxlint, and the desktop production build. The optional live provider smoke test and v0.6 release-threshold job were skipped.
